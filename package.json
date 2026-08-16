@@ -7,13 +7,14 @@
         "indexer"
     ],
     "scripts": {
-        "build": "bun run --filter @coshi190/junoswap-sdk build",
+        "build": "bun run --filter @coshi190/junoswap-sdk build && bun run --filter @coshi190/junoswap-cli build",
         "typecheck": "bun run --filter '*' typecheck",
         "test": "bun run --filter '*' test",
         "format": "prettier --write .",
         "format:check": "prettier --check ."
     },
     "devDependencies": {
+        "@coshi190/junoswap-cli": "workspace:*",
         "@types/bun": "^1.3.14",
         "prettier": "^3.4.0",
         "typescript": "^5.8.0"

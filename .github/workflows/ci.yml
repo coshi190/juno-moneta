@@ -48,6 +48,23 @@ jobs:
             - name: Build
               run: bun run --filter @coshi190/junoswap-sdk build
 
+    cli:
+        name: CLI
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            - uses: actions/checkout@v4
+            - uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: 1.x
+            - run: bun install --frozen-lockfile
+            - name: Build SDK
+              run: bun run --filter @coshi190/junoswap-sdk build
+            - name: Typecheck
+              run: bun run --filter @coshi190/junoswap-cli typecheck
+            - name: Build
+              run: bun run --filter @coshi190/junoswap-cli build
+
     indexer:
         name: Indexer
         runs-on: ubuntu-latest

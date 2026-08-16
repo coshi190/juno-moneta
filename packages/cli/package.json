@@ -1,0 +1,30 @@
+{
+    "name": "@coshi190/junoswap-cli",
+    "version": "0.1.0",
+    "description": "1:1 command line surface over the SDK config module",
+    "private": true,
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/coshi190/junoswap-core.git",
+        "directory": "packages/cli"
+    },
+    "type": "module",
+    "bin": {
+        "junoswap": "./dist/cli.js"
+    },
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/cli.js",
+        "typecheck": "tsc --noEmit"
+    },
+    "dependencies": {
+        "@coshi190/junoswap-sdk": "workspace:*"
+    },
+    "devDependencies": {
+        "@types/node": "^22.10.0",
+        "typescript": "^5.8.0"
+    }
+}
