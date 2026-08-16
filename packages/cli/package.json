@@ -1,7 +1,7 @@
 {
     "name": "@coshi190/junoswap-cli",
     "version": "0.1.0",
-    "description": "1:1 command line surface over the SDK config module",
+    "description": "1:1 command line surface over the SDK",
     "private": true,
     "license": "MIT",
     "repository": {

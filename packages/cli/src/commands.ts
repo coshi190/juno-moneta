@@ -11,6 +11,8 @@ import {
     STABLECOIN_ADDRESSES,
     V3_STAKER_START_BLOCKS,
     WRAPPED_NATIVE_ADDRESSES,
+    createPonderClient,
+    fetchUserStats,
     getAggRouterAddress,
     getBondingCurveAddress,
     getDefaultDexForChain,
@@ -30,7 +32,9 @@ import {
 } from '@coshi190/junoswap-sdk'
 import {
     optionalProtocolType,
+    parseAddressList,
     parseChainId,
+    parsePonderUrl,
     parseProtocolType,
     resolveProtocolConfig,
 } from './args.js'
@@ -39,6 +43,8 @@ export interface CommandArgs {
     chainId?: string | undefined
     dexId?: string | undefined
     protocolType?: string | undefined
+    users?: string | undefined
+    ponderUrl?: string | undefined
 }
 
 export interface Command {
@@ -51,6 +57,7 @@ export interface Command {
 const CHAINS = 'chains'
 const DEX = 'dex-config'
 const DEPLOYMENTS = 'deployments'
+const PONDER = 'ponder'
 
 const CHAIN_FLAG = '--chainId <id|slug>'
 const CHAIN_DEX_FLAGS = `${CHAIN_FLAG} [--dexId <dex>]`
@@ -209,4 +216,18 @@ export const COMMANDS: Record<string, Command> = {
         'Lowercased bonding curve address per chain id',
         BONDING_CURVE_ADDRESS_BY_CHAIN
     ),
+
+    fetchUserStats: {
+        group: PONDER,
+        flags: `${CHAIN_FLAG} --users <addr,addr> [--ponderUrl <url>]`,
+        describe: 'Aggregate trade volume and counts per user from the indexer',
+        run: (args) => {
+            const chainId = parseChainId(args.chainId)
+            const users = parseAddressList(args.users, 'users')
+            return fetchUserStats(createPonderClient(parsePonderUrl(args.ponderUrl)), {
+                chainId,
+                users,
+            })
+        },
+    },
 }

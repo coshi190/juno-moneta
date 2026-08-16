@@ -9,11 +9,13 @@ const OPTIONS = {
     chainId: { type: 'string' },
     dexId: { type: 'string' },
     protocolType: { type: 'string' },
+    users: { type: 'string' },
+    ponderUrl: { type: 'string' },
     raw: { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h', default: false },
 } as const
 
-function main(): number {
+async function main(): Promise<number> {
     let parsed: ReturnType<typeof parseArgs<{ options: typeof OPTIONS; allowPositionals: true }>>
     try {
         parsed = parseArgs({ options: OPTIONS, allowPositionals: true, strict: true })
@@ -51,7 +53,7 @@ function main(): number {
     }
 
     try {
-        process.stdout.write(`${format(command.run(values), values.raw)}\n`)
+        process.stdout.write(`${format(await command.run(values), values.raw)}\n`)
         return 0
     } catch (error) {
         if (error instanceof UsageError) {
@@ -62,4 +64,12 @@ function main(): number {
     }
 }
 
-process.exitCode = main()
+main().then(
+    (code) => {
+        process.exitCode = code
+    },
+    (error) => {
+        process.stderr.write(`${(error as Error).message}\n`)
+        process.exitCode = 1
+    }
+)

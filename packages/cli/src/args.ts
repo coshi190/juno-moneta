@@ -12,6 +12,33 @@ export class UsageError extends Error {}
 
 export const CHAIN_SLUGS = Object.keys(CHAIN_IDS)
 
+const ADDRESS = /^0x[0-9a-fA-F]{40}$/
+
+export function parseAddressList(value: string | undefined, flag: string): string[] {
+    if (value === undefined) throw new UsageError(`missing required flag --${flag}`)
+    const items = value
+        .split(',')
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0)
+    if (items.length === 0) throw new UsageError(`--${flag} requires at least one address`)
+    for (const item of items) {
+        if (!ADDRESS.test(item)) {
+            throw new UsageError(`invalid address "${item}" (expected 0x + 40 hex chars)`)
+        }
+    }
+    return items.map((item) => item.toLowerCase())
+}
+
+export function parsePonderUrl(value: string | undefined): string {
+    const url = value ?? process.env.JUNOSWAP_PONDER_URL
+    if (!url) {
+        throw new UsageError(
+            'missing indexer endpoint (pass --ponderUrl or set JUNOSWAP_PONDER_URL)'
+        )
+    }
+    return url
+}
+
 export function parseChainId(value: string | undefined): number {
     if (value === undefined) throw new UsageError('missing required flag --chainId')
     if (/^\d+$/.test(value)) return Number(value)
