@@ -23,12 +23,9 @@ export interface RoutePriceImpactParams {
     chainId: number
     protocol: ProtocolType
     dexId?: DEXType
-    /** Full route including endpoints; a single hop is `[tokenIn, tokenOut]`. */
     path: Address[]
-    /** V3 multi-hop fee tiers; length must be path.length - 1. Omit for V2. */
     fees?: number[]
     amountIn: bigint
-    /** The route's already-known output for `amountIn`. */
     fullAmountOut: bigint
 }
 
@@ -39,10 +36,6 @@ function extractAmountOut(protocol: ProtocolType, data: unknown): bigint | undef
     return out && out > 0n ? out : undefined
 }
 
-/**
- * Single-route price impact: quotes the same route at 0.1% of `amountIn` as a
- * spot-price proxy, then compares `fullAmountOut` against it.
- */
 export async function getRoutePriceImpact(
     client: ReadClient,
     { chainId, protocol, dexId, path, fees, amountIn, fullAmountOut }: RoutePriceImpactParams

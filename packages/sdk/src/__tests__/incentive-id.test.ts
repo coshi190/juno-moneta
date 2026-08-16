@@ -2,14 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { computeIncentiveId } from '../mining/incentive-id.js'
 import type { IncentiveKey } from '../mining/types.js'
 
-/**
- * Golden vector: the live kubTestnet (25925) incentive. Verified against the deployed staker at
- * 0xe445e132E9D4d0863E0BE079faf716A97250f37E — `incentives(id)` returns a non-zero struct
- * (numberOfStakes 3) for this id, which is what pins the encoding as flat-not-tuple.
- *
- * A wrong derivation fails silently everywhere else in the stack: reads just return a zero struct
- * and the farms list renders empty, so this test is the only thing that catches it.
- */
 const TESTNET_KEY: IncentiveKey = {
     rewardToken: '0x23352915164527e0AB53Ca5519aec5188aa224A2',
     pool: '0x81182579f4271B910bF108913Be78F0D9C44AaBa',

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { zeroAddress, type Address, type PublicClient } from 'viem'
-import { CHAIN_IDS, ProtocolType, getV3Config } from '../configs/dex-config.js'
-import { WRAPPED_NATIVE_ADDRESSES } from '../configs/token-addresses.js'
+import { CHAIN_IDS, WRAPPED_NATIVE_ADDRESSES } from '../configs/chains.js'
+import { ProtocolType, getV3Config } from '../configs/dex-config.js'
 import { NATIVE_TOKEN_ADDRESS } from '../dex/native.js'
 import type { ContractCall } from '../dex/plan-swap.js'
 import type { ReadResult } from '../dex/multicall.js'
@@ -27,7 +27,6 @@ const KKUB = WRAPPED_NATIVE_ADDRESSES[CHAIN_IDS.bitkub]!
 const ok = (result: unknown): ReadResult => ({ status: 'success', result })
 const fail = (message: string): ReadResult => ({ status: 'failure', error: new Error(message) })
 
-/** Records the calls handed to each batched read, and replays canned results per phase. */
 function stubClient(phases: ReadResult[][]) {
     const batches: ContractCall[][] = []
     const client = {
@@ -41,7 +40,6 @@ function stubClient(phases: ReadResult[][]) {
     return { client, batches }
 }
 
-/** A chain with no multicall3: every multicall throws and viem falls back to eth_call. */
 function fallbackClient(phases: ReadResult[][]) {
     const flat = phases.flat()
     let cursor = 0
@@ -123,7 +121,6 @@ describe('dex/v3-pools', () => {
         })
 
         it('drops ids with no config for the protocol on that chain', () => {
-            // pancakeswap is BSC-only, so it has nothing to offer on bitkub.
             expect(
                 resolveDexIds(CHAIN_IDS.bitkub, ProtocolType.V3, ['junoswap', 'pancakeswap'])
             ).toEqual(['junoswap'])
@@ -152,7 +149,6 @@ describe('dex/v3-pools', () => {
         })
 
         it('skips a pair that collapses to one token once resolved', () => {
-            // native -> KKUB is a wrap, not a pool.
             expect(
                 buildPoolCandidates({
                     chainId: CHAIN_IDS.bitkub,
@@ -235,7 +231,6 @@ describe('dex/v3-quote', () => {
     })
 
     describe('getV3Quotes', () => {
-        // junoswap on bitkub runs four tiers; two of them have a pool here.
         const phases: ReadResult[][] = [
             [ok(zeroAddress), ok(POOL_1), ok(POOL_2), ok(zeroAddress)],
             [ok(100n), ok(900n)],
@@ -271,7 +266,6 @@ describe('dex/v3-quote', () => {
             })
             const outcome = result.direct.get('junoswap')
 
-            // POOL_2 holds 900n against POOL_1's 100n, and sits on the 3000 tier.
             const quoteArgs = batches[2]?.[0]?.args[0] as { fee: number }
             expect(quoteArgs.fee).toBe(3000)
             expect(outcome?.fee).toBe(3000)
@@ -315,7 +309,6 @@ describe('dex/v3-quote', () => {
         })
 
         it('produces the same answer on a chain with no multicall3', async () => {
-            // bitkub is exactly this chain, so it is the production path — not an edge case.
             const result = await getV3Quotes(fallbackClient(phases), {
                 chainId: CHAIN_IDS.bitkub,
                 dexId: 'junoswap',

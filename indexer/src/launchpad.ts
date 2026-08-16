@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
 import { formatEther, zeroAddress } from 'viem'
@@ -47,8 +46,6 @@ function calculateVolume(isBuy: boolean, amountIn: bigint, amountOut: bigint): b
     return isBuy ? amountIn : amountOut
 }
 
-// Reserve-based price BEFORE the swap, used as the candle open for the first trade in a bucket
-// (mirrors the client's calculatePreSwapPrice). reserveIn/Out are post-swap; back out the trade.
 function calculatePreSwapPrice(
     isBuy: boolean,
     reserveIn: bigint,
@@ -149,8 +146,6 @@ async function handleSwap({ event, context }: HandlerArgs, chainId: number) {
     const marketCap = calculateMarketCapFromReserves(isBuy, BigInt(reserveIn), BigInt(reserveOut))
     const volume = calculateVolume(isBuy, amountIn, amountOut)
 
-    // Fold into the token's bonding-curve native-price candles (source 'bc'), with the pre-swap
-    // price as the bucket open — the client stitches these with the 'v3' series at graduation.
     const preSwapPrice = calculatePreSwapPrice(
         isBuy,
         BigInt(reserveIn),
@@ -175,10 +170,8 @@ async function handleSwap({ event, context }: HandlerArgs, chainId: number) {
     const nativePriceRecord = await context.db.find(schema.nativeUsdPrice, { chainId })
     const nativeUsd = nativePriceRecord ? parseFloat(nativePriceRecord.price) : 0
     const rawPriceUsd = nativeUsd > 0 && price > 0 ? price * nativeUsd : 0
-    // Store 0 ("no price") rather than a garbage USD price.
     const priceUsd = sanitizeUsdPrice(rawPriceUsd, MAX_TOKEN_USD_PRICE) ?? 0
 
-    // Launch tokens are always 18-decimal; buy pays native (amountIn), sell receives native (amountOut).
     await recordUserSwap(
         context,
         chainId,
@@ -190,7 +183,7 @@ async function handleSwap({ event, context }: HandlerArgs, chainId: number) {
         18,
         nativeUsd,
         timestamp,
-        'junoswap' // the bonding curve is Junoswap's own venue; its swapEvent has no protocol column
+        'junoswap'
     )
 
     const existingSnapshot = await context.db.find(schema.tokenSnapshot, {

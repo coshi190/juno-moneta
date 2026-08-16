@@ -9,4 +9,5 @@ contracts/broadcast
 indexer/.ponder
 indexer/generated
 .DS_Store
-.claude
+.claude/*
+!.claude/skills/

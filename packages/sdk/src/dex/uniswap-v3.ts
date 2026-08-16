@@ -1,7 +1,6 @@
 import { encodeFunctionData, concat, pad, toHex, type Address, type Hex } from 'viem'
 import { UNISWAP_V3_SWAP_ROUTER_ABI } from '../abis/index.js'
 
-/** Recipient sentinel meaning "the router itself" — used to hold funds mid-multicall. */
 export const ADDRESS_THIS: Address = '0x0000000000000000000000000000000000000002'
 
 export interface V3ExactInputSingleParams {
@@ -21,7 +20,6 @@ export interface V3ExactInputParams {
     amountOutMinimum: bigint
 }
 
-/** Packs [token, fee, token, fee, token...] into the tightly-encoded V3 path bytes. */
 export function encodeV3Path(tokens: Address[], fees: number[]): Hex {
     if (tokens.length < 2) throw new Error('Path must have at least 2 tokens')
     if (fees.length !== tokens.length - 1) throw new Error('Fees length must be tokens.length - 1')

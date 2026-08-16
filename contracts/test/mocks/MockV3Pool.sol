@@ -4,8 +4,6 @@ pragma solidity 0.8.19;
 import "../../src/interfaces/v3-core/IUniswapV3Pool.sol";
 
 contract MockV3Pool is IUniswapV3Pool {
-    // Mirror Uniswap V3 TickMath bounds so initialize() rejects out-of-range prices (incl. 0)
-    // exactly as a real pool does — otherwise a zero/invalid sqrtPriceX96 is silently accepted.
     uint160 internal constant MIN_SQRT_RATIO = 4295128739;
     uint160 internal constant MAX_SQRT_RATIO = 1461446703485210103287273052203988822378723970342;
 
@@ -22,7 +20,6 @@ contract MockV3Pool is IUniswapV3Pool {
         initialized = true;
     }
 
-    // IUniswapV3PoolState
     function slot0()
         external
         view
@@ -76,17 +73,7 @@ contract MockV3Pool is IUniswapV3Pool {
         return 0;
     }
 
-    function positions(bytes32)
-        external
-        pure
-        returns (
-            uint128,
-            uint256,
-            uint256,
-            uint128,
-            uint128
-        )
-    {
+    function positions(bytes32) external pure returns (uint128, uint256, uint256, uint128, uint128) {
         return (0, 0, 0, 0, 0);
     }
 
@@ -103,7 +90,6 @@ contract MockV3Pool is IUniswapV3Pool {
         return (0, 0, 0, false);
     }
 
-    // IUniswapV3PoolImmutables
     function factory() external pure returns (address) {
         return address(0);
     }
@@ -128,7 +114,6 @@ contract MockV3Pool is IUniswapV3Pool {
         return 0;
     }
 
-    // IUniswapV3PoolDerivedState
     function observe(uint32[] calldata)
         external
         pure
@@ -142,29 +127,16 @@ contract MockV3Pool is IUniswapV3Pool {
     function snapshotCumulativesInside(int24, int24)
         external
         pure
-        returns (
-            int56 tickCumulativeInside,
-            uint160 secondsPerLiquidityInsideX128,
-            uint32 secondsInside
-        )
+        returns (int56 tickCumulativeInside, uint160 secondsPerLiquidityInsideX128, uint32 secondsInside)
     {
         return (0, 0, 0);
     }
 
-    // IUniswapV3PoolActions
-    function mint(address, int24, int24, uint128, bytes calldata)
-        external
-        pure
-        returns (uint256, uint256)
-    {
+    function mint(address, int24, int24, uint128, bytes calldata) external pure returns (uint256, uint256) {
         return (0, 0);
     }
 
-    function collect(address, int24, int24, uint128, uint128)
-        external
-        pure
-        returns (uint128, uint128)
-    {
+    function collect(address, int24, int24, uint128, uint128) external pure returns (uint128, uint128) {
         return (0, 0);
     }
 
@@ -172,11 +144,7 @@ contract MockV3Pool is IUniswapV3Pool {
         return (0, 0);
     }
 
-    function swap(address, bool, int256, uint160, bytes calldata)
-        external
-        pure
-        returns (int256, int256)
-    {
+    function swap(address, bool, int256, uint160, bytes calldata) external pure returns (int256, int256) {
         return (0, 0);
     }
 
@@ -184,14 +152,9 @@ contract MockV3Pool is IUniswapV3Pool {
 
     function increaseObservationCardinalityNext(uint16) external pure {}
 
-    // IUniswapV3PoolOwnerActions
     function setFeeProtocol(uint8, uint8) external pure {}
 
-    function collectProtocol(address, uint128, uint128)
-        external
-        pure
-        returns (uint128, uint128)
-    {
+    function collectProtocol(address, uint128, uint128) external pure returns (uint128, uint128) {
         return (0, 0);
     }
 }

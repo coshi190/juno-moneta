@@ -1,6 +1,3 @@
-// Generated from contracts/src by `bun run codegen`. Do not edit by hand.
-// Source artifact: IWETH9.sol
-
 export const WETH9_ABI = [
     {
         type: 'function',

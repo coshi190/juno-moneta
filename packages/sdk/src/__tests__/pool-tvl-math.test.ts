@@ -32,7 +32,6 @@ function balances(entries: Array<[string, PoolBalances]>): Map<string, PoolBalan
 
 describe('computeTvlUsd', () => {
     it('converts with native as token1', () => {
-        // bal0 (5) priced at 1 native each via sqrtP=Q96, plus bal1 (3 native) = 8 native * $2 = 16
         expect(computeTvlUsd(5n * E18, 3n * E18, Q96, false, true, 2)).toBeCloseTo(16)
     })
 
@@ -51,7 +50,6 @@ describe('computeTvlUsd', () => {
 
 describe('computeTvlFromPrices', () => {
     it('scales each leg by its decimals then prices', () => {
-        // 1_000_000 @ 6 decimals = 1 unit * $2, plus 0.5e18 @ 18 decimals = 0.5 * $10
         expect(computeTvlFromPrices(1_000_000n, 6, 5n * 10n ** 17n, 18, 2, 10)).toBeCloseTo(7)
     })
 })
@@ -79,7 +77,6 @@ describe('computePoolTvlUsd', () => {
             priceMap: new Map(),
         })
 
-        // nativeUsdPrice = 1 (sqrtP=Q96). token0 native: bal0 + bal1-in-native (5 @ sqrtP=Q96) = 7 * $1.
         expect(result['0xa']).toBeCloseTo(7)
     })
 
@@ -101,7 +98,6 @@ describe('computePoolTvlUsd', () => {
             ]),
         })
 
-        // 1 * $2 + 5 * $3 = 17
         expect(result['0xb']).toBeCloseTo(17)
     })
 
@@ -143,7 +139,6 @@ describe('computePoolTvlUsd', () => {
     })
 
     it('falls back to native-token units when no native/usd price is available', () => {
-        // No native/usd pool present, so nativeUsdPrice is null.
         const poolD = meta({
             address: '0xd',
             token0: { address: NATIVE, decimals: 18 },
@@ -159,7 +154,6 @@ describe('computePoolTvlUsd', () => {
             priceMap: new Map(),
         })
 
-        // token0 native, sqrtP=Q96 → TVL in native terms = bal0 (4) + bal1-in-native (2) = 6 (not USD)
         expect(result['0xd']).toBeCloseTo(6)
     })
 })
@@ -170,12 +164,10 @@ describe('priceFromSqrtPriceX96', () => {
     })
 
     it('prices token0 in token1 as (sqrtP/Q96)^2', () => {
-        // sqrtP = 2*Q96 → price = 4 token1 per token0
         expect(priceFromSqrtPriceX96(2n * Q96, 18, 18)).toBeCloseTo(4)
     })
 
     it('adjusts for differing decimals', () => {
-        // Same raw ratio 1, but token0 has 6 decimals vs token1 18 → ×10^(6-18)
         expect(priceFromSqrtPriceX96(Q96, 6, 18)).toBeCloseTo(1e-12)
     })
 

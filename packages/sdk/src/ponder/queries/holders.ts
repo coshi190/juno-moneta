@@ -2,10 +2,7 @@ import type { PonderClient } from '../client.js'
 import type { TokenHolder, TokenSnapshot } from '../entities.js'
 import { sel, type Items, type Row } from './internal.js'
 
-const BALANCE_FIELDS = [
-    'tokenAddr',
-    'balance',
-] as const satisfies readonly (keyof TokenHolder)[]
+const BALANCE_FIELDS = ['tokenAddr', 'balance'] as const satisfies readonly (keyof TokenHolder)[]
 
 const LEADERBOARD_FIELDS = [
     'address',
@@ -16,12 +13,6 @@ const LEADERBOARD_FIELDS = [
 export type HolderBalance = Row<TokenHolder, typeof BALANCE_FIELDS>
 export type LeaderboardHolder = Row<TokenHolder, typeof LEADERBOARD_FIELDS>
 
-/**
- * A token's holder addresses plus its holder count.
- *
- * Only addresses are returned: balances are stored as text and can't be sorted server-side, so
- * callers re-read balanceOf on-chain to rank them.
- */
 export async function fetchTokenHolders(
     client: PonderClient,
     { tokenAddr, limit = 200 }: { tokenAddr: string; limit?: number }
@@ -46,7 +37,6 @@ export async function fetchTokenHolders(
     }
 }
 
-/** Every token balance held by one address. */
 export async function fetchHolderBalances(
     client: PonderClient,
     { address, limit = 100 }: { address: string; limit?: number }
@@ -62,7 +52,6 @@ export async function fetchHolderBalances(
     return data.tokenHolders.items
 }
 
-/** All holder rows, for the leaderboard's PnL/holdings pass. */
 export async function fetchAllTokenHolders(
     client: PonderClient,
     { limit = 5000 }: { limit?: number } = {}

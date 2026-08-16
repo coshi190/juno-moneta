@@ -1,16 +1,9 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
 import { computeIncentiveId } from '@coshi190/junoswap-sdk'
 import { upsertToken } from './v3-pools.js'
 import { readV3PoolImmutables } from './erc20-read.js'
 
-/**
- * An incentive's pool is normally already in v3Pool from PoolCreated. When it isn't — a pool
- * created before this chain's configured start block, or one from a protocol we don't index —
- * backfill the row from the pool's immutables so the frontend's join always resolves. Skipped
- * silently if the read fails; the incentive row is still written either way.
- */
 async function ensurePool(
     context: any,
     chainId: number,
@@ -48,8 +41,6 @@ async function handleIncentiveCreated(context: any, chainId: number, event: any)
     const timestamp = Number(event.block.timestamp)
     const block = Number(event.block.number)
 
-    // The id must be derived from the checksum-agnostic raw values the event carried: keccak of
-    // the five key fields. Lowercasing for storage happens after, and only for storage.
     const incentiveId = computeIncentiveId({
         rewardToken,
         pool,
@@ -94,11 +85,6 @@ async function handleIncentiveEnded(context: any, chainId: number, event: any) {
     })
 }
 
-/**
- * Last-write-wins on the deposit's owner. Unlike the incentive handlers this must upsert rather
- * than insert-or-ignore: the staker re-emits DepositTransferred for the same tokenId on every
- * transfer and again on withdraw (newOwner = 0), and each one supersedes the last.
- */
 async function handleDepositTransferred(context: any, chainId: number, event: any) {
     const { tokenId, newOwner } = event.args
     const owner = newOwner.toLowerCase()

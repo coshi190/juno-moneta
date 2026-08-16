@@ -1,30 +1,15 @@
-/**
- * Historical native→USD price lookup, shared by the frontend (net-worth history, portfolio) and the
- * indexer's windowed leaderboard route. `makePriceAt` turns a sorted snapshot series into a
- * step-function `priceAt(timestamp)`; `sanitizePricePoints` drops zero/non-finite and gross-outlier
- * points before it is built.
- */
-
 export interface NativePricePoint {
     timestamp: number
     price: number
 }
 
-/**
- * Upper bounds for a "plausible" USD price. A low-liquidity V3 pool swapping near a tick boundary can
- * make `computePriceFromSqrtPriceX96` return ~2^128 (≈3.4e38); left unchecked that poisons cost basis
- * and unrealized PnL into impossible figures. No L1 native token is anywhere near 1e6, and no real
- * token's unit price is near 1e12, so these bands reject the garbage without clipping real values.
- */
 export const MAX_NATIVE_USD_PRICE = 1e6
 export const MAX_TOKEN_USD_PRICE = 1e12
 
-/** Return `value` if it's a finite, positive, in-band price; otherwise null ("no usable price"). */
 export function sanitizeUsdPrice(value: number, maxPrice: number): number | null {
     return Number.isFinite(value) && value > 0 && value <= maxPrice ? value : null
 }
 
-/** Keep finite positive prices within 100x of the median, discarding obvious bad snapshots. */
 export function sanitizePricePoints<T extends { price: number }>(points: readonly T[]): T[] {
     const finite = points.filter((p) => Number.isFinite(p.price) && p.price > 0)
     if (finite.length === 0) return []
@@ -33,11 +18,6 @@ export function sanitizePricePoints<T extends { price: number }>(points: readonl
     return finite.filter((p) => p.price <= median * 100 && p.price >= median / 100)
 }
 
-/**
- * Build a step-function that returns the last known native→USD price at or before a timestamp.
- * `points` must be sorted ascending by timestamp. Timestamps before the first point clamp to it;
- * an empty series returns `fallbackPrice` (or 0).
- */
 export function makePriceAt(
     points: NativePricePoint[],
     fallbackPrice: number | null

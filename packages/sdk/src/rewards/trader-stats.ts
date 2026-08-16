@@ -8,15 +8,8 @@ import {
     type PnlSwapEvent,
 } from '../pnl/index.js'
 
-/**
- * The indexer folds swaps incrementally, but the leaderboard's time-windowed periods (24h/7d/30d)
- * can't be answered from a cumulative fold, so that path re-folds raw in-window swaps on top of the
- * same primitives, valuing each swap at the native→USD rate returned by `priceAt(timestamp)`.
- */
-
 export interface LeaderboardSwapEvent extends PnlSwapEvent {
     sender: string
-    /** Venue id, for the points split. Omitted is treated as Junoswap's own venue. */
     protocol?: string
 }
 
@@ -32,13 +25,6 @@ export interface AddressTraderStats {
     sellCount: number
 }
 
-/**
- * Per-address trader stats for a time window: fold each trader's in-window swaps and value the
- * resulting in-window net position at the current token price. Used by the indexer's windowed
- * `/leaderboard` branch, where the cost basis resets at the window boundary (the all-time branch
- * uses the persisted cumulative folds instead). `priceAt` supplies the native→USD rate at each
- * swap's timestamp; `currentPriceByToken` is the latest token USD price for unrealized PnL.
- */
 export function computeWindowedTraderStats(
     events: LeaderboardSwapEvent[],
     priceAt: (timestamp: number) => number,
@@ -92,7 +78,7 @@ export function computeWindowedTraderStats(
                 )
             }
             foldsByToken.set(token, fold)
-            balanceByToken.set(token, fold.position) // value the in-window position
+            balanceByToken.set(token, fold.position)
         }
 
         const { totals } = finalizePortfolioPnl(foldsByToken, balanceByToken, currentPriceByToken)

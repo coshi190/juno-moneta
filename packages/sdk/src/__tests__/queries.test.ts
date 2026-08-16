@@ -3,15 +3,6 @@ import { parse, type DocumentNode, type OperationDefinitionNode, type FieldNode 
 import type { PonderClient, PonderPageInfo } from '../ponder/client'
 import * as q from '../ponder/queries'
 
-/**
- * Every fetcher is driven against a stub client that captures the query + variables it sent.
- *
- * The selected *field names* are already guaranteed by the compiler (each query builds its
- * selection set from a `satisfies readonly (keyof Entity)[]` array, so a column the indexer
- * doesn't have is a type error). What these tests cover is what types can't: that the GraphQL
- * parses, that the right root field is hit, and that filter values travel as variables.
- */
-
 interface Captured {
     query: string
     variables?: Record<string, unknown>
@@ -19,7 +10,7 @@ interface Captured {
 
 function stubClient(response: unknown, captured: Captured[] = []): PonderClient {
     const client: PonderClient = {
-        request: async <T,>(query: string, variables?: Record<string, unknown>) => {
+        request: async <T>(query: string, variables?: Record<string, unknown>) => {
             captured.push({ query, variables })
             return response as T
         },
@@ -35,7 +26,6 @@ function stubClient(response: unknown, captured: Captured[] = []): PonderClient 
     return client
 }
 
-/** Root field names of an operation, e.g. ['launchTokens', 'tokenSnapshots']. */
 function rootFields(doc: DocumentNode): string[] {
     const op = doc.definitions.find(
         (d): d is OperationDefinitionNode => d.kind === 'OperationDefinition'
@@ -45,7 +35,7 @@ function rootFields(doc: DocumentNode): string[] {
         .map((s) => s.name.value)
 }
 
-const page = <T,>(items: T[]) => ({ items, pageInfo: { hasNextPage: false, endCursor: null } })
+const page = <T>(items: T[]) => ({ items, pageInfo: { hasNextPage: false, endCursor: null } })
 
 describe('every query is valid GraphQL and hits the expected root field', () => {
     it('launchpad', async () => {
@@ -147,7 +137,6 @@ describe('filters travel as GraphQL variables, never interpolated into the query
             sender: '0xme',
             timestamp_gte: 100,
         })
-        // the address list must be a variable, not spliced into the query text
         expect(cap[1]!.variables!.where).toEqual({ chainId: 96, txFrom_in: ['0xa', '0xb'] })
         expect(cap[1]!.query).not.toContain('0xa')
     })
@@ -163,7 +152,6 @@ describe('filters travel as GraphQL variables, never interpolated into the query
         const cap: Captured[] = []
         const client = stubClient({ launchTokens: page([]) }, cap)
         await q.fetchGraduatedTokens(client, { chainId: 96 })
-        // used to fetch every token and filter isGraduated === 1 in the browser
         expect(cap[0]!.query).toContain('isGraduated: 1')
     })
 
@@ -191,9 +179,8 @@ describe('fetchGraduatedPool', () => {
         const cap: Captured[] = []
         let call = 0
         const client: PonderClient = {
-            request: async <T,>(query: string, variables?: Record<string, unknown>) => {
+            request: async <T>(query: string, variables?: Record<string, unknown>) => {
                 cap.push({ query, variables })
-                // the pool only exists with wrappedNative as token0
                 const hit = variables!.token0 === '0xwnative'
                 return { v3Pools: { items: hit ? [{ address: '0xpool' }] : [] } } as T
             },
@@ -222,12 +209,28 @@ describe('fetchGraduatedPool', () => {
 
 describe('empty address lists short-circuit instead of querying', () => {
     it.each([
-        ['fetchCreatorSnapshots', () => q.fetchCreatorSnapshots(stubClient({}), { chainId: 96, tokenAddrs: [] })],
-        ['fetchTokenSnapshotsByAddresses', () => q.fetchTokenSnapshotsByAddresses(stubClient({}), { tokenAddrs: [] })],
-        ['fetchLaunchTokensByAddresses', () => q.fetchLaunchTokensByAddresses(stubClient({}), { tokenAddrs: [] })],
-        ['fetchV3PoolDayVolumes', () => q.fetchV3PoolDayVolumes(stubClient({}), { chainId: 96, poolAddresses: [], since: 0 })],
+        [
+            'fetchCreatorSnapshots',
+            () => q.fetchCreatorSnapshots(stubClient({}), { chainId: 96, tokenAddrs: [] }),
+        ],
+        [
+            'fetchTokenSnapshotsByAddresses',
+            () => q.fetchTokenSnapshotsByAddresses(stubClient({}), { tokenAddrs: [] }),
+        ],
+        [
+            'fetchLaunchTokensByAddresses',
+            () => q.fetchLaunchTokensByAddresses(stubClient({}), { tokenAddrs: [] }),
+        ],
+        [
+            'fetchV3PoolDayVolumes',
+            () =>
+                q.fetchV3PoolDayVolumes(stubClient({}), {
+                    chainId: 96,
+                    poolAddresses: [],
+                    since: 0,
+                }),
+        ],
     ])('%s', async (_name, run) => {
-        // the stub would throw on a real request (empty response), so returning [] proves no call
         await expect(run()).resolves.toEqual([])
     })
 })

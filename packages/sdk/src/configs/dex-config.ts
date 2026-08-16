@@ -1,14 +1,6 @@
 import type { Address } from 'viem'
-import { DEX_REGISTRY_DATA } from './dex-config.data.js'
-
-export const CHAIN_IDS = {
-    kubTestnet: 25925,
-    bitkub: 96,
-    jbc: 8899,
-    bsc: 56,
-    base: 8453,
-    worldchain: 480,
-} as const
+import { byChainId, CHAIN_IDS } from './chains.js'
+import dexRegistry from './data/dex-registry.json' with { type: 'json' }
 
 export type DEXType = 'junoswap' | 'uniswap' | 'pancakeswap' | string
 
@@ -36,7 +28,7 @@ export interface V3Config extends BaseProtocolConfig {
     quoter: Address
     swapRouter: Address
     positionManager?: Address
-    staker?: Address // V3 Staker contract for LP mining
+    staker?: Address
     feeTiers?: number[]
     defaultFeeTier?: number
 }
@@ -50,7 +42,6 @@ export interface DEXConfiguration {
     protocols: Record<number, Partial<Record<ProtocolType, ProtocolConfig>>>
 }
 
-/** Shape of dex-config.data.ts before chain slugs are resolved to numeric ids. */
 export interface RawDexRegistry {
     [dexId: string]: {
         defaultProtocol: string
@@ -60,20 +51,17 @@ export interface RawDexRegistry {
 }
 
 export const FEE_TIERS = {
-    STABLE: 100, // 0.01%
-    LOW: 500, // 0.05%
-    MEDIUM: 3000, // 0.3% (standard)
-    HIGH: 10000, // 1%
+    STABLE: 100,
+    LOW: 500,
+    MEDIUM: 3000,
+    HIGH: 10000,
 } as const
 
 export const DEFAULT_FEE_TIER = FEE_TIERS.MEDIUM
 
 const DEX_CONFIGS_REGISTRY = Object.fromEntries(
-    Object.entries(DEX_REGISTRY_DATA as RawDexRegistry).map(([dexId, dex]) => {
-        const protocols: DEXConfiguration['protocols'] = {}
-        for (const [slug, byProtocol] of Object.entries(dex.protocols)) {
-            const chainId = CHAIN_IDS[slug as keyof typeof CHAIN_IDS]
-            if (chainId === undefined) continue
+    Object.entries(dexRegistry as RawDexRegistry).map(([dexId, dex]) => {
+        const protocols = byChainId(dex.protocols, (byProtocol, chainId) => {
             const entry: Partial<Record<ProtocolType, ProtocolConfig>> = {}
             for (const [proto, cfg] of Object.entries(byProtocol)) {
                 entry[proto as ProtocolType] = {
@@ -82,8 +70,8 @@ const DEX_CONFIGS_REGISTRY = Object.fromEntries(
                     chainId,
                 } as ProtocolConfig
             }
-            protocols[chainId] = entry
-        }
+            return entry
+        })
         return [
             dexId,
             {
@@ -164,10 +152,6 @@ export function getProtocolSpender(config: ProtocolConfig): Address | undefined 
     }
 }
 
-/**
- * pancakeswap on BSC, uniswap on Worldchain/Base (real Uniswap V3),
- * junoswap elsewhere (forked/custom deployments).
- */
 export function getDefaultDexForChain(chainId: number): DEXType {
     if (chainId === CHAIN_IDS.bsc) return 'pancakeswap'
     if (chainId === CHAIN_IDS.worldchain || chainId === CHAIN_IDS.base) return 'uniswap'

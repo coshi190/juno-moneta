@@ -1,6 +1,5 @@
 const Q96 = 2n ** 96n
 
-/** Integer square root by Newton's method — bigint has no native sqrt. */
 export function bigIntSqrt(n: bigint): bigint {
     if (n < 0n) throw new Error('square root of negative')
     if (n < 2n) return n
@@ -23,7 +22,6 @@ function bitLength(n: bigint): bigint {
     return len
 }
 
-/** Liquidity a given amount of token0 provides across a price range. */
 export function getLiquidityForAmount0(
     sqrtPriceAX96: bigint,
     sqrtPriceBX96: bigint,
@@ -36,7 +34,6 @@ export function getLiquidityForAmount0(
     return (amount0 * intermediate) / (sqrtPriceBX96 - sqrtPriceAX96)
 }
 
-/** Liquidity a given amount of token1 provides across a price range. */
 export function getLiquidityForAmount1(
     sqrtPriceAX96: bigint,
     sqrtPriceBX96: bigint,
@@ -48,7 +45,6 @@ export function getLiquidityForAmount1(
     return (amount1 * Q96) / (sqrtPriceBX96 - sqrtPriceAX96)
 }
 
-/** Amount of token0 locked by `liquidity` across a price range. */
 export function getAmount0ForLiquidity(
     sqrtPriceAX96: bigint,
     sqrtPriceBX96: bigint,
@@ -60,7 +56,6 @@ export function getAmount0ForLiquidity(
     return (liquidity * Q96 * (sqrtPriceBX96 - sqrtPriceAX96)) / sqrtPriceBX96 / sqrtPriceAX96
 }
 
-/** Amount of token1 locked by `liquidity` across a price range. */
 export function getAmount1ForLiquidity(
     sqrtPriceAX96: bigint,
     sqrtPriceBX96: bigint,
@@ -72,12 +67,6 @@ export function getAmount1ForLiquidity(
     return (liquidity * (sqrtPriceBX96 - sqrtPriceAX96)) / Q96
 }
 
-/**
- * Token amounts a position holds, given the pool's current price.
- *
- * Below the range the position is entirely token0, above it entirely token1, and in range it
- * straddles both — which is why an in-range position's composition drifts as the price moves.
- */
 export function getAmountsForLiquidity(
     sqrtPriceX96: bigint,
     sqrtPriceAX96: bigint,
@@ -106,11 +95,6 @@ export function getAmountsForLiquidity(
     }
 }
 
-/**
- * The token1 deposit that pairs with `amount0` for a position at the current price.
- *
- * Returns 0 outside the range, where the position is single-sided and the other leg is unused.
- */
 export function calculateAmount1FromAmount0(
     sqrtPriceX96: bigint,
     sqrtPriceLowerX96: bigint,
@@ -133,7 +117,6 @@ export function calculateAmount1FromAmount0(
     }
 }
 
-/** Mirror of {@link calculateAmount1FromAmount0} for the opposite input leg. */
 export function calculateAmount0FromAmount1(
     sqrtPriceX96: bigint,
     sqrtPriceLowerX96: bigint,
@@ -156,7 +139,6 @@ export function calculateAmount0FromAmount1(
     }
 }
 
-/** Slippage floors passed as `amount0Min`/`amount1Min` to the position manager. */
 export function calculateMinAmounts(
     amount0: bigint,
     amount1: bigint,
@@ -169,7 +151,6 @@ export function calculateMinAmounts(
     }
 }
 
-/** Unix-seconds deadline `deadlineMinutes` from now, for position manager calls. */
 export function calculateDeadline(deadlineMinutes: number): bigint {
     return BigInt(Math.floor(Date.now() / 1000) + deadlineMinutes * 60)
 }

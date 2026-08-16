@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { Address, PublicClient } from 'viem'
-import { CHAIN_IDS, ProtocolType } from '../configs/dex-config.js'
+import { CHAIN_IDS } from '../configs/chains.js'
+import { ProtocolType } from '../configs/dex-config.js'
 import type { ContractCall } from '../dex/plan-swap.js'
 import type { ReadResult } from '../dex/multicall.js'
 import { poolKey } from '../dex/v3-pools.js'
@@ -14,8 +15,6 @@ import {
 
 const CHAIN = CHAIN_IDS.jbc
 
-// jbc has exactly one V2 DEX and one V3 DEX, so a hop has 5 quotable options:
-// jibswap V2, then junoswap V3 at fee tiers 100 / 500 / 3000 / 10000, in that order.
 const JIBSWAP_FACTORY = '0x4BBdA880C5A0cDcEc6510f0450c6C8bC5773D499' as Address
 const JIBSWAP_ROUTER = '0x766F8C9321704DC228D43271AF9b7aAB0E529D38' as Address
 const JUNOSWAP_FACTORY = '0x5835f123bDF137864263bf204Cf4450aAD1Ba3a7' as Address
@@ -28,22 +27,18 @@ const CONNECTOR_B = '0x4444444444444444444444444444444444444444' as Address
 const CONNECTOR_C = '0x5555555555555555555555555555555555555555' as Address
 
 const fail = (): ReadResult => ({ status: 'failure', error: new Error('reverted') })
-/** getAmountsOut returns the whole path's amounts; only the last one is the output. */
 const v2Out = (amount: bigint): ReadResult => ({ status: 'success', result: [0n, amount] })
-/** quoteExactInputSingle returns (amountOut, sqrtPriceX96After, ticksCrossed, gasEstimate). */
 const v3Out = (amount: bigint): ReadResult => ({
     status: 'success',
     result: [amount, 0n, 0, 0n],
 })
 
-/** One hop's five results, in candidateHopOptions order. */
 function hopResults(v2: ReadResult, v3: [ReadResult, ReadResult, ReadResult, ReadResult]) {
     return [v2, ...v3]
 }
 
 const allFail = () => hopResults(fail(), [fail(), fail(), fail(), fail()])
 
-/** V2 passes the amount positionally; V3 wraps it in the quoteExactInputSingle struct. */
 function callAmountIn(call: ContractCall): bigint {
     const first = call.args[0]
     return typeof first === 'bigint' ? first : (first as { amountIn: bigint }).amountIn
@@ -62,7 +57,10 @@ function stubClient(phases: ReadResult[][]) {
     return { client, batches }
 }
 
-const quote = (client: PublicClient, overrides: Partial<Parameters<typeof getCrossDexQuote>[1]> = {}) =>
+const quote = (
+    client: PublicClient,
+    overrides: Partial<Parameters<typeof getCrossDexQuote>[1]> = {}
+) =>
     getCrossDexQuote(client, {
         chainId: CHAIN,
         tokenIn: TOKEN_IN,
@@ -134,8 +132,8 @@ describe('dex/cross-dex-routing', () => {
             const inToC = candidateHopOptions(TOKEN_IN, CONNECTOR_A, CHAIN)
             const cToOut = candidateHopOptions(CONNECTOR_A, TOKEN_OUT, CHAIN)
             const leg = buildCrossDexLeg(
-                { option: inToC[0]!, output: 500n }, // jibswap V2
-                { option: cToOut[3]!, output: 480n } // junoswap V3 fee 3000
+                { option: inToC[0]!, output: 500n },
+                { option: cToOut[3]!, output: 480n }
             )
 
             expect(leg.predictedOut).toBe(480n)
@@ -153,15 +151,11 @@ describe('dex/cross-dex-routing', () => {
         it('picks the best hop pair across connectors, not just per connector', async () => {
             const { client, batches } = stubClient([
                 [
-                    // connector A: jibswap V2 wins with 100
                     ...hopResults(v2Out(100n), [fail(), fail(), fail(), fail()]),
-                    // connector B: junoswap fee 500 wins with 200
                     ...hopResults(fail(), [v3Out(90n), v3Out(200n), fail(), fail()]),
                 ],
                 [
-                    // from A: junoswap fee 3000 pays 5000 — the overall winner
                     ...hopResults(v2Out(1000n), [fail(), fail(), v3Out(5000n), fail()]),
-                    // from B: jibswap pays only 4000, despite B's better first hop
                     ...hopResults(v2Out(4000n), [fail(), fail(), fail(), fail()]),
                 ],
             ])
@@ -169,7 +163,6 @@ describe('dex/cross-dex-routing', () => {
             const leg = await quote(client)
 
             expect(leg?.predictedOut).toBe(5000n)
-            // A cross-DEX route: bought the connector on jibswap, sold it on junoswap.
             expect(leg?.hops.map((h) => h.dexId)).toEqual(['jibswap', 'junoswap'])
             expect(leg?.hops[0]!.tokenOut).toBe(CONNECTOR_A)
             expect(leg?.hops[1]!.fee).toBe(3000)
@@ -190,9 +183,7 @@ describe('dex/cross-dex-routing', () => {
 
             await quote(client)
 
-            // Every round-1 call quotes the user's amount...
             expect(batches[0]!.every((c) => callAmountIn(c) === 1000n)).toBe(true)
-            // ...and each round-2 group quotes its own connector's round-1 output.
             expect(batches[1]!.slice(0, OPTIONS_PER_HOP).map(callAmountIn)).toEqual(
                 Array(OPTIONS_PER_HOP).fill(100n)
             )
@@ -203,10 +194,7 @@ describe('dex/cross-dex-routing', () => {
 
         it('drops a connector that failed round one from round two entirely', async () => {
             const { client, batches } = stubClient([
-                [
-                    ...allFail(),
-                    ...hopResults(v2Out(200n), [fail(), fail(), fail(), fail()]),
-                ],
+                [...allFail(), ...hopResults(v2Out(200n), [fail(), fail(), fail(), fail()])],
                 [...hopResults(v2Out(4000n), [fail(), fail(), fail(), fail()])],
             ])
 
@@ -226,10 +214,7 @@ describe('dex/cross-dex-routing', () => {
 
         it('returns null when no second hop quotes', async () => {
             const { client } = stubClient([
-                [
-                    ...hopResults(v2Out(100n), [fail(), fail(), fail(), fail()]),
-                    ...allFail(),
-                ],
+                [...hopResults(v2Out(100n), [fail(), fail(), fail(), fail()]), ...allFail()],
                 [...allFail()],
             ])
 

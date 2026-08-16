@@ -2,7 +2,6 @@ import type { PonderClient } from '../client.js'
 import type { SwapEvent, TokenCandle, V3SwapEvent } from '../entities.js'
 import { sel, type Items, type Page, type Row } from './internal.js'
 
-/** Bonding-curve price series: price is derived from the reserves on each swap. */
 const BC_HISTORY_FIELDS = [
     'timestamp',
     'isBuy',
@@ -13,10 +12,6 @@ const BC_HISTORY_FIELDS = [
     'sender',
 ] as const satisfies readonly (keyof SwapEvent)[]
 
-/**
- * V3 price series. Superset of what the two chart hooks each selected — useSwapPairChart didn't
- * need txFrom/tokenIsToken0, but sharing one query beats maintaining two near-identical ones.
- */
 const V3_HISTORY_FIELDS = [
     'timestamp',
     'amount0',
@@ -62,12 +57,14 @@ export type BondingCurvePricePoint = Row<SwapEvent, typeof BC_PRICE_POINT_FIELDS
 export type V3PricePoint = Row<V3SwapEvent, typeof V3_PRICE_POINT_FIELDS>
 export type PoolPricePoint = Row<V3SwapEvent, typeof POOL_POINT_FIELDS>
 
-/** Full bonding-curve trade history for a token, oldest first. */
 export function fetchBondingCurveHistory(
     client: PonderClient,
     { tokenAddr }: { tokenAddr: string }
 ): Promise<BondingCurveHistoryPoint[]> {
-    return client.fetchAllPages<{ swapEvents: Page<BondingCurveHistoryPoint> }, BondingCurveHistoryPoint>(
+    return client.fetchAllPages<
+        { swapEvents: Page<BondingCurveHistoryPoint> },
+        BondingCurveHistoryPoint
+    >(
         `query BondingCurveHistory($tokenAddr: String!, $after: String) {
             swapEvents(
                 where: { tokenAddr: $tokenAddr }
@@ -85,7 +82,6 @@ export function fetchBondingCurveHistory(
     )
 }
 
-/** Full V3 trade history for a token, oldest first. */
 export function fetchV3History(
     client: PonderClient,
     { tokenAddr, chainId }: { tokenAddr: string; chainId: number }
@@ -108,11 +104,6 @@ export function fetchV3History(
     )
 }
 
-/**
- * Pre-aggregated native-price OHLC candles for a token at one timeframe, oldest first. `source`
- * selects the bonding-curve ('bc') or graduated V3 ('v3') series; `duration` is the bucket size in
- * seconds. Empty until the indexer has re-synced the candle tables — callers fall back to raw history.
- */
 export function fetchTokenCandles(
     client: PonderClient,
     {
@@ -150,7 +141,6 @@ export function fetchTokenCandles(
     )
 }
 
-/** Bonding-curve prices since a cutoff — for net-worth reconstruction. */
 export async function fetchBondingCurvePricesSince(
     client: PonderClient,
     { tokenAddr, since }: { tokenAddr: string; since: number }
@@ -187,7 +177,6 @@ export async function fetchV3PricesSince(
     return data.v3SwapEvents.items
 }
 
-/** A pool's price series since a cutoff, oldest first. */
 export function fetchPoolPriceHistory(
     client: PonderClient,
     { poolAddress, chainId, since }: { poolAddress: string; chainId: number; since: number }
@@ -210,7 +199,6 @@ export function fetchPoolPriceHistory(
     )
 }
 
-/** The last price at or before a cutoff — anchors a chart whose window starts mid-history. */
 export async function fetchPoolPriceAnchor(
     client: PonderClient,
     { poolAddress, chainId, before }: { poolAddress: string; chainId: number; before: number }

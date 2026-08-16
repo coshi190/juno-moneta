@@ -3,13 +3,8 @@ import { deriveNativeUsdPrice, type PoolVolumeMeta } from './pool-volume-math.js
 
 const Q96 = 2n ** 96n
 
-/**
- * Minimal pool shape the TVL math needs — identical to {@link PoolVolumeMeta}, re-exported here for
- * convenience. `V3PoolData` (frontend) satisfies it structurally.
- */
 export type PoolTvlMeta = PoolVolumeMeta
 
-/** Current on-chain token balance of a pool for each of its two tokens. */
 export interface PoolBalances {
     balance0: bigint
     balance1: bigint
@@ -19,11 +14,6 @@ function isAddr(a: string, b: string | undefined): boolean {
     return !!b && a.toLowerCase() === b.toLowerCase()
 }
 
-/**
- * Price of one whole token0 denominated in token1, derived from a pool's sqrtPriceX96. Decimals
- * adjust the raw ratio to human units; the reciprocal gives token0 per token1. Returns 0 for an
- * uninitialised pool (sqrtPriceX96 <= 0). Canonical helper shared by the TVL/dashboard/chart paths.
- */
 export function priceFromSqrtPriceX96(
     sqrtPriceX96: bigint,
     token0Decimals: number,
@@ -31,11 +21,10 @@ export function priceFromSqrtPriceX96(
 ): number {
     if (sqrtPriceX96 <= 0n) return 0
     const SCALE = 10n ** 18n
-    const rawX = (sqrtPriceX96 * sqrtPriceX96 * SCALE) / (Q96 * Q96) // (token1/token0) × 1e18, raw
+    const rawX = (sqrtPriceX96 * sqrtPriceX96 * SCALE) / (Q96 * Q96)
     return (Number(rawX) / 1e18) * 10 ** (token0Decimals - token1Decimals)
 }
 
-/** Prices both token balances directly from a USD price map (non-native pools). */
 export function computeTvlFromPrices(
     balance0: bigint,
     decimals0: number,
@@ -49,11 +38,6 @@ export function computeTvlFromPrices(
     return human0 * price0 + human1 * price1
 }
 
-/**
- * Converts a native-leg pool's token balances into USD via the pool's own sqrtPriceX96 (converting
- * the non-native leg into native terms) and the native/USD price. Returns null when the pool is
- * unpriceable (no price yet, or neither leg is native) — TVL callers treat null as "unknown".
- */
 export function computeTvlUsd(
     balance0: bigint,
     balance1: bigint,
@@ -78,18 +62,6 @@ export function computeTvlUsd(
     return tvlNative * nativeUsdPrice
 }
 
-/**
- * Computes each pool's TVL in USD from its current token balances.
- *
- * Three pricing strategies, in priority order per pool:
- *  1. native leg + a real native/USD price → USD via {@link computeTvlUsd}.
- *  2. native leg but no native/USD price (and sqrtPriceX96 > 0) → TVL expressed in native-token units
- *     (not USD — an intentional fallback, mixed units).
- *  3. no native leg → priced directly from `priceMap` via {@link computeTvlFromPrices}.
- *
- * `balances` is keyed by lowercased pool address so callers aren't coupled to a positional read array.
- * Pools with no entry in `balances`, or that stay unpriceable, are simply absent from the result.
- */
 export function computePoolTvlUsd(params: {
     pools: PoolTvlMeta[]
     balances: Map<string, PoolBalances>

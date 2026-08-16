@@ -1,11 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.19;
 
-// FIDELITY NOTE: these invariants run against cooperative mocks of Uniswap V3, not the real
-// contracts. They prove the curve's OWN accounting — solvency, token backing, monotonic K, and
-// post-graduation cleanup — not that a real V3 mint consumes the seeded amounts. End-to-end V3
-// behavior would need a fork test (see the audit plan's optional item).
-
 import "forge-std/Test.sol";
 import "../src/BondingCurveJunoswap.sol";
 import "../src/ERC20Token.sol";
@@ -13,10 +8,6 @@ import "./mocks/MockV3Factory.sol";
 import "./mocks/MockV3Pool.sol";
 import "./mocks/MockPositionManager.sol";
 
-// Drives randomized create/buy/sell/graduate across a few actors and tokens. Every pump call is
-// wrapped in try/catch so legitimately-reverting paths (over-selling, not-yet-graduatable) are
-// explored without aborting the run. The only cross-call property checked here is K-monotonicity,
-// recorded into a ghost flag (NOT asserted inline) so it is never masked by fail_on_revert = false.
 contract BondingCurveHandler is Test {
     BondingCurveJunoswap public pump;
     uint256 public constant INITIAL_NATIVE = 0.05 ether;
@@ -45,7 +36,6 @@ contract BondingCurveHandler is Test {
         return actors[seed % actors.length];
     }
 
-    // K = (virtualAmount + native) * token; a constant-product curve with fees only grows it.
     function _k(address t) internal view returns (uint256) {
         (uint256 nat, uint256 tok) = pump.pumpReserve(t);
         return (VIRTUAL_AMOUNT + nat) * tok;
@@ -55,9 +45,7 @@ contract BondingCurveHandler is Test {
         address a = _actor(actorSeed);
         if (a.balance < CREATE_FEE + INITIAL_NATIVE) return;
         vm.prank(a);
-        try pump.createToken{value: CREATE_FEE + INITIAL_NATIVE}("T", "T", "", "", "", "", "")
-            returns (address t)
-        {
+        try pump.createToken{value: CREATE_FEE + INITIAL_NATIVE}("T", "T", "", "", "", "", "") returns (address t) {
             tokens.push(t);
         } catch {}
     }
@@ -100,7 +88,7 @@ contract BondingCurveHandler is Test {
         address t = tokens[tokenSeed % tokens.length];
         if (pump.isGraduate(t)) return;
         (uint256 nat, uint256 tok) = pump.pumpReserve(t);
-        if (tok * GRADUATION_AMOUNT > nat * INITIALTOKEN) return; // not yet at cap
+        if (tok * GRADUATION_AMOUNT > nat * INITIALTOKEN) return;
         try pump.graduate(t) returns (bool) {} catch {}
     }
 
@@ -122,7 +110,6 @@ contract BondingCurveInvariantTest is Test {
 
     address public wrappedNative = address(0xFFfFfFffFFfffFFfFFfFFFFFffFFFffffFfFFFfF);
 
-    // feeCollector == this contract; it receives create/trade fees and graduation sweeps.
     receive() external payable {}
 
     function setUp() public {
@@ -147,8 +134,6 @@ contract BondingCurveInvariantTest is Test {
         targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
     }
 
-    // CORE SAFETY NET: the contract must always hold enough real native to cover every live token's
-    // native reserve. virtualAmount is NOT real ETH, so no trade sequence may make it extractable.
     function invariant_NativeSolvency() public {
         uint256 owed;
         uint256 n = handler.tokenCount();
@@ -161,7 +146,6 @@ contract BondingCurveInvariantTest is Test {
         assertGe(address(pump).balance, owed);
     }
 
-    // The contract must hold at least the token reserve it owes each live token.
     function invariant_TokenBacking() public {
         uint256 n = handler.tokenCount();
         for (uint256 i; i < n; i++) {
@@ -172,7 +156,6 @@ contract BondingCurveInvariantTest is Test {
         }
     }
 
-    // Graduation zeroes both reserves so trading can never resume on a graduated token.
     function invariant_GraduatedReservesZero() public {
         uint256 n = handler.tokenCount();
         for (uint256 i; i < n; i++) {
@@ -184,7 +167,6 @@ contract BondingCurveInvariantTest is Test {
         }
     }
 
-    // K = (virtual + native) * token must never decrease across a buy or sell (fees only grow it).
     function invariant_CurveKNeverDecreases() public {
         assertFalse(handler.kViolated());
     }

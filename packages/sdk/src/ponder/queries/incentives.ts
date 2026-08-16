@@ -16,14 +16,6 @@ const INCENTIVE_FIELDS = [
 
 export type IncentiveRow = Row<Incentive, typeof INCENTIVE_FIELDS>
 
-/**
- * Every LP mining incentive the staker has emitted on a chain. Replaces the hardcoded
- * KNOWN_INCENTIVES map the frontend used to ship — incentives created on-chain by anyone now
- * show up without a redeploy.
- *
- * Returns the immutable key only. The live struct (totalRewardUnclaimed, numberOfStakes) is still
- * an on-chain read, and isActive/isEnded are derived from startTime/endTime at render time.
- */
 export async function fetchIncentives(
     client: PonderClient,
     { chainId, limit = 200 }: { chainId: number; limit?: number }

@@ -17,16 +17,10 @@ import type { ReadResult } from './multicall.js'
 
 export const ALL_FEE_TIERS: number[] = Object.values(FEE_TIERS)
 
-/**
- * A DEX only runs the tiers its factory enabled — PancakeSwap V3 on BSC runs 2500 and
- * has no 3000 — so probing the four canonical tiers blindly both misses real pools and
- * wastes calls on ones that cannot exist.
- */
 export function getFeeTiers(config: V3Config | undefined): number[] {
     return config?.feeTiers?.length ? config.feeTiers : ALL_FEE_TIERS
 }
 
-/** Stable identity for a pool, order-independent in the token pair. */
 export function poolKey(factory: Address, tokenA: Address, tokenB: Address, fee: number): string {
     const a = tokenA.toLowerCase()
     const b = tokenB.toLowerCase()
@@ -34,7 +28,6 @@ export function poolKey(factory: Address, tokenA: Address, tokenB: Address, fee:
     return `${factory.toLowerCase()}:${token0}:${token1}:${fee}`
 }
 
-/** Every DEX on the chain speaking `protocol`, or just the requested ones that do. */
 export function resolveDexIds(
     chainId: number,
     protocol: ProtocolType,
@@ -55,7 +48,6 @@ export interface V3PoolCandidate {
     factory: Address
     quoter: Address
     fee: number
-    /** Already resolved through getSwapAddress — safe to hand to a factory. */
     tokenIn: Address
     tokenOut: Address
 }
@@ -67,7 +59,6 @@ export interface BuildPoolCandidatesInput {
     tokenOut: Address
 }
 
-/** The cross product of the requested DEXes and the fee tiers each one actually runs. */
 export function buildPoolCandidates({
     chainId,
     dexIds,
@@ -122,7 +113,6 @@ export interface ResolvedPool {
     pool: Address
 }
 
-/** A pool that exists and holds liquidity. Distinct from the indexer's V3Pool entity. */
 export interface DiscoveredV3Pool {
     dexId: DEXType
     pool: Address
@@ -130,10 +120,6 @@ export interface DiscoveredV3Pool {
     liquidity: bigint
 }
 
-/**
- * Folds a getPool batch, dropping tiers with no pool. The survivors are what the
- * liquidity batch is built from, so their order defines that batch's indices.
- */
 export function resolvePoolAddresses(
     candidates: readonly V3PoolCandidate[],
     results: readonly ReadResult[]
@@ -153,10 +139,6 @@ export function resolvePoolAddresses(
     return resolved
 }
 
-/**
- * Deepest pool wins, per DEX. `liquidityResults` must be index-aligned with `resolved`
- * — i.e. built by buildLiquidityCalls from the same array.
- */
 export function pickBestPools(
     resolved: readonly ResolvedPool[],
     liquidityResults: readonly ReadResult[]

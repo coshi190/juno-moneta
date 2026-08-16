@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import schema from 'ponder:schema'
 import { formatEther } from 'viem'
 import {
@@ -10,15 +9,6 @@ import {
     type PnlFold,
 } from '@coshi190/junoswap-sdk'
 
-/**
- * Fold one native-denominated swap into a user's cumulative PnL (`userTokenPnl`) and leaderboard
- * counters (`userStat`). Called from every swap handler once the swap has been resolved to its
- * native/token legs. `amountInWei`/`amountOutWei` follow the leg convention in
- * `@coshi190/junoswap-sdk`'s `ParsedSwap`: native-in/token-out on a buy, token-in/native-out on a
- * sell. `decimals` is the token leg's real decimals so `position` stays in human units. `protocol`
- * is the venue id (`'junoswap'`, a V2 dex id, `'kublerx'`, …); it splits the folded volume so points
- * can be served without re-scanning raw swaps.
- */
 export async function recordUserSwap(
     context: any,
     chainId: number,
@@ -35,10 +25,8 @@ export async function recordUserSwap(
     const t = tokenAddr.toLowerCase()
     const u = user.toLowerCase()
 
-    // A garbage native price (edge pool) must never enter a cost pool; treat it as 0 (no USD basis).
     const safeNativeUsd = sanitizeUsdPrice(nativeUsd, MAX_NATIVE_USD_PRICE) ?? 0
 
-    // --- average-cost PnL fold ---
     const pnlId = `${chainId}-${t}-${u}`
     const existing = await context.db.find(schema.userTokenPnl, { id: pnlId })
     const prev: PnlFold = existing
@@ -79,7 +67,6 @@ export async function recordUserSwap(
             .onConflictDoNothing()
     }
 
-    // --- leaderboard counters ---
     const volumeNative = parseFloat(formatEther(BigInt(isBuy ? amountInWei : amountOutWei)))
     const isJuno = isJunoswapProtocol(protocol)
     const junoVolumeNative = isJuno ? volumeNative : 0

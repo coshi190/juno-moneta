@@ -13,10 +13,8 @@ import { parseQuoteAmountOut } from './split-routing.js'
 import { batchRead, type ReadClient } from './multicall.js'
 import type { ContractCall } from './plan-swap.js'
 
-/** How many intermediary tokens to try. Each one costs a quote per DEX per fee tier. */
 export const MAX_CROSS_CONNECTORS = 3
 
-/** One quotable way to get from `tokenIn` to `tokenOut`: a specific DEX, and for V3 a fee tier. */
 export interface HopOption {
     dexId: DEXType
     protocol: ProtocolType
@@ -27,10 +25,6 @@ export interface HopOption {
     fee?: number
 }
 
-/**
- * A resolved hop of a cross-DEX route. Structurally the shape the aggregator router
- * encoder consumes; kept as its own type so the SDK stays free of frontend domain types.
- */
 export interface CrossDexHop {
     dexId: DEXType
     protocol: ProtocolType
@@ -46,7 +40,6 @@ export interface CrossDexLeg {
     poolKeys: string[]
 }
 
-/** Every DEX (and for V3, every fee tier) that could quote this hop. */
 export function candidateHopOptions(
     tokenInW: Address,
     tokenOutW: Address,
@@ -126,10 +119,6 @@ export function buildCrossDexLeg(
     }
 }
 
-/**
- * Intermediary tokens worth routing through: neither endpoint, deduped, most-liquid
- * first (callers pass them in priority order), capped so the quote batch stays small.
- */
 export function selectConnectors(
     tokenInW: Address,
     tokenOutW: Address,
@@ -148,18 +137,12 @@ export function selectConnectors(
     return out
 }
 
-/** One connector's options, plus where its results start in the batch. */
 interface OptionBatch<T> {
     context: T
     options: HopOption[]
     start: number
 }
 
-/**
- * Builds one quote call per option and records where each group lands in the flat batch,
- * so results can be mapped back afterwards. Options the DEX can't quote on this chain are
- * dropped rather than throwing — one misconfigured DEX shouldn't sink the whole route.
- */
 function buildRound<T>(
     groups: readonly { context: T; options: HopOption[]; amountIn: bigint }[],
     chainId: number
@@ -195,19 +178,10 @@ export interface CrossDexQuoteParams {
     tokenIn: Address
     tokenOut: Address
     amountIn: bigint
-    /** Candidate intermediary tokens in priority order; app-owned config. */
     connectors: readonly Address[]
     maxConnectors?: number
 }
 
-/**
- * Best two-hop route whose hops may sit on different DEXes — buy the connector on
- * whichever venue is cheapest, sell it on whichever pays most.
- *
- * Two batched rounds: quote `tokenIn -> connector` across every DEX and fee tier and keep
- * the winner per connector, then quote each winner's output onward to `tokenOut` and keep
- * the single best pair. Returns null when no pair of hops quotes successfully.
- */
 export async function getCrossDexQuote(
     client: ReadClient,
     params: CrossDexQuoteParams
@@ -254,7 +228,10 @@ export async function getCrossDexQuote(
 
     const results2 = await batchRead(client, round2.calls)
 
-    type Pair = { hop1: { option: HopOption; output: bigint }; hop2: { option: HopOption; output: bigint } }
+    type Pair = {
+        hop1: { option: HopOption; output: bigint }
+        hop2: { option: HopOption; output: bigint }
+    }
     let best: Pair | null = null
     for (const { context: hop1, options, start } of round2.batches) {
         const outs = options.map((o, i) => parseQuoteAmountOut(o.protocol, results2[start + i]))

@@ -8,7 +8,6 @@ import { resolveDexIds } from './v3-pools.js'
 import type { QuoteResult } from './v3-quote.js'
 import { getV2Routes, type V2RouteQuote } from './v2-routes.js'
 
-/** V2's getAmountsOut returns the whole path's amounts — the last one is what settles. */
 export function fromAmountsOut(amounts: readonly bigint[], gasEstimate = 150000n): QuoteResult {
     return {
         amountOut: amounts[amounts.length - 1] ?? 0n,
@@ -20,23 +19,16 @@ export function fromAmountsOut(amounts: readonly bigint[], gasEstimate = 150000n
 
 export interface V2QuoteParams {
     chainId: number
-    /** Raw token address; the native sentinel is resolved for you. */
     tokenIn: Address
     tokenOut: Address
     amountIn: bigint
-    /** Omit to quote every V2 DEX on the chain. */
     dexId?: DEXType | DEXType[]
-    /** Intermediary tokens to route multi-hop through. Omit/empty for direct quotes only. */
     connectors?: Address[]
-    /** Max path length for multi-hop enumeration. Defaults to MAX_HOPS. */
     maxHops?: number
-    /** Cap on multi-hop quote calls. Defaults to MAX_ROUTE_QUOTES. */
     maxRouteQuotes?: number
-    /** Set false to skip single-hop discovery for multi-hop-only callers. Defaults true. */
     includeDirect?: boolean
 }
 
-/** The unified V2 answer: direct quote per DEX (where a pair exists), plus every viable route. */
 export interface V2QuoteResult {
     direct: Map<DEXType, V2QuoteOutcome>
     routes: V2RouteQuote[]
@@ -49,12 +41,6 @@ export interface V2QuoteOutcome {
     error: Error | null
 }
 
-/**
- * Finds the pair per DEX: one batched getPair. Unlike V3 there are no fee tiers to choose
- * between, so existence is the whole question — no liquidity read needed.
- *
- * Independent of amountIn, so callers can cache it far longer than a quote.
- */
 export async function discoverV2Pairs(
     client: ReadClient,
     params: Omit<V2QuoteParams, 'amountIn'>
@@ -92,7 +78,6 @@ export async function discoverV2Pairs(
     return pairs
 }
 
-/** Quotes `amountIn` against pairs already discovered — one batched read. */
 export async function quoteV2Pairs(
     client: ReadClient,
     params: Omit<V2QuoteParams, 'dexId'>,
@@ -101,9 +86,14 @@ export async function quoteV2Pairs(
     const { chainId, tokenIn, tokenOut, amountIn } = params
 
     const entries = [...pairs.entries()].flatMap(([dexId, pair]) => {
-        const call = buildQuoteCall({ protocol: ProtocolType.V2, chainId, dexId, tokenIn, tokenOut, amountIn })
-        // Only undefined when the DEX has no V2 config on the chain, which discovery
-        // already ruled out. Guarded anyway so a config change can't desync the indices.
+        const call = buildQuoteCall({
+            protocol: ProtocolType.V2,
+            chainId,
+            dexId,
+            tokenIn,
+            tokenOut,
+            amountIn,
+        })
         return call ? [{ dexId, pair, call }] : []
     })
 
@@ -148,11 +138,10 @@ async function getDirectQuotes(
     return quoteV2Pairs(client, params, pairs)
 }
 
-/**
- * Unified V2 quoting. Single-hop discovery + quoting per DEX (two batched reads), and — when
- * `connectors` are given — multi-hop route discovery + quoting, run concurrently.
- */
-export async function getV2Quotes(client: ReadClient, params: V2QuoteParams): Promise<V2QuoteResult> {
+export async function getV2Quotes(
+    client: ReadClient,
+    params: V2QuoteParams
+): Promise<V2QuoteResult> {
     const { connectors, includeDirect = true } = params
 
     const [direct, routes] = await Promise.all([

@@ -1,6 +1,3 @@
-// Generated from contracts/src by `bun run codegen`. Do not edit by hand.
-// Source artifact: INonfungiblePositionManager.sol
-
 export const NONFUNGIBLE_POSITION_MANAGER_ABI = [
     {
         type: 'function',

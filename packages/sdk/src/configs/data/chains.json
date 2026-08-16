@@ -1,0 +1,26 @@
+{
+    "ids": {
+        "kubTestnet": 25925,
+        "bitkub": 96,
+        "jbc": 8899,
+        "bsc": 56,
+        "base": 8453,
+        "worldchain": 480
+    },
+    "wrappedNative": {
+        "kubTestnet": "0x700d3ba307e1256e509ed3e45d6f9dff441d6907",
+        "bitkub": "0x67ebd850304c70d983b2d1b93ea79c7cd6c3f6b5",
+        "jbc": "0xc4b7c87510675167643e3de6eeed4d2c06a9e747",
+        "worldchain": "0x4200000000000000000000000000000000000006",
+        "base": "0x4200000000000000000000000000000000000006",
+        "bsc": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c"
+    },
+    "stablecoins": {
+        "kubTestnet": ["0x70138f1b88bee73dd2cb06f24146f964dde6144e"],
+        "bitkub": ["0x7d984c24d2499d840eb3b7016077164e15e5faa6"],
+        "jbc": [
+            "0x24599b658b57f91e7643f4f154b16bcd2884f9ac",
+            "0xfd8ef75c1cb00a594d02df48addc27414bd07f8a"
+        ]
+    }
+}

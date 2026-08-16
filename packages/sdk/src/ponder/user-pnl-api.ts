@@ -1,14 +1,6 @@
 import type { TokenPnl, PortfolioPnlTotals } from '../pnl/index.js'
 
-/**
- * REST clients for the indexer's finalize routes (`/user-pnl`, `/leaderboard`). Unlike the rest of
- * this module these are plain `fetch` calls, not GraphQL through `PonderClient`, because the routes
- * return finalized PnL that the browser only displays. `baseUrl` is the indexer origin
- * (`NEXT_PUBLIC_PONDER_URL`) without the `/graphql` suffix.
- */
-
 export interface UserPnlResponse {
-    /** Keyed by lowercased token address. */
     perToken: Record<string, TokenPnl>
     totals: PortfolioPnlTotals
 }
@@ -18,7 +10,6 @@ export interface LeaderboardTraderStat {
     pnlUsd: number
     pnlPercent: number
     volumeNative: number
-    /** Volume split by venue, and the points it scores — both branches of `/leaderboard` return these. */
     junoVolumeNative: number
     externalVolumeNative: number
     points: number

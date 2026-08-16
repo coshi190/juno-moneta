@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
 import {
@@ -120,8 +119,6 @@ async function recordV2SwapEvent(context: any, chainId: number, event: any, dex:
             .onConflictDoNothing()
     }
 
-    // Resolve the native leg and fold the swap into the trader's PnL. Non-native pairs (parse
-    // returns null) are still recorded above but contribute no native-denominated PnL.
     const wn = WRAPPED_NATIVE_ADDRESSES[chainId]
     const parsed = wn
         ? parseV2Swap(

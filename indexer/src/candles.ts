@@ -1,12 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import schema from 'ponder:schema'
 import { CANDLE_DURATIONS, foldCandle } from './candle-math.js'
 
-/**
- * Upsert a token's native-denominated OHLC candle across every timeframe. `source` ('v3' | 'bc')
- * keeps the graduated DEX series separate from the bonding-curve series so the client can stitch
- * them at graduation. No-ops on a non-positive price.
- */
 export async function foldTokenCandle(
     context: any,
     chainId: number,

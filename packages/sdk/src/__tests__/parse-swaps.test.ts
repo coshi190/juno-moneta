@@ -12,8 +12,8 @@ describe('parseV3Swap', () => {
             {
                 tokenAddr: TOKEN.toUpperCase(),
                 txFrom: '0xTrader',
-                amount0: ONE.toString(), // native in
-                amount1: (-5n).toString(), // token out
+                amount0: ONE.toString(),
+                amount1: (-5n).toString(),
                 token0Addr: WN,
                 token1Addr: TOKEN,
                 timestamp: 100,
@@ -22,26 +22,23 @@ describe('parseV3Swap', () => {
             WN
         )
         expect(p).toEqual({
-            tokenAddr: TOKEN, // lowercased
+            tokenAddr: TOKEN,
             sender: '0xTrader',
             isBuy: true,
-            amountIn: ONE.toString(), // native paid
-            amountOut: '5', // tokens received
+            amountIn: ONE.toString(),
+            amountOut: '5',
             timestamp: 100,
             protocol: 'junoswap',
         })
     })
 
     it('resolves the native leg against wrapped native, not token sort order', () => {
-        // External pool with the token sorted to token0 and native to token1 — the case
-        // where the indexer's tokenIsToken0 flag would mis-read the amounts. This is a
-        // sell: token flows into the pool, native flows out.
         const p = parseV3Swap(
             {
                 tokenAddr: TOKEN,
                 txFrom: '0xTrader',
-                amount0: '7', // token in
-                amount1: (-2n * ONE).toString(), // native out
+                amount0: '7',
+                amount1: (-2n * ONE).toString(),
                 token0Addr: TOKEN,
                 token1Addr: WN,
                 timestamp: 200,
@@ -51,8 +48,8 @@ describe('parseV3Swap', () => {
         )
         expect(p).toMatchObject({
             isBuy: false,
-            amountIn: '7', // tokens sold
-            amountOut: (2n * ONE).toString(), // native received
+            amountIn: '7',
+            amountOut: (2n * ONE).toString(),
             protocol: 'kublerx',
         })
     })

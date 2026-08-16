@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { zeroAddress, type Address, type PublicClient } from 'viem'
-import { CHAIN_IDS } from '../configs/dex-config.js'
+import { CHAIN_IDS } from '../configs/chains.js'
 import type { ContractCall } from '../dex/plan-swap.js'
 import type { ReadResult } from '../dex/multicall.js'
 import { poolKey } from '../dex/v3-pools.js'
@@ -135,7 +135,7 @@ describe('dex/v3-routes', () => {
 
         it('drops a candidate when any leg has no pool on any tier', () => {
             const c = candidate([IN, C1, OUT], [500, 3000])
-            const existing = new Set([poolKey(factory, IN, C1, 3000)]) // second leg missing
+            const existing = new Set([poolKey(factory, IN, C1, 3000)])
             expect(buildRouteMetas([c], existing)).toEqual([])
         })
 
@@ -146,15 +146,12 @@ describe('dex/v3-routes', () => {
                 everyLeg.add(poolKey(factory, IN, C1, fee))
                 everyLeg.add(poolKey(factory, C1, OUT, fee))
             }
-            // 3 × 3 = 9 combos available, capped to 4.
             expect(buildRouteMetas([c], everyLeg, 4)).toHaveLength(4)
         })
     })
 
     describe('getV3Routes', () => {
         it('discovers legs then quotes the surviving path, mapping the array-shaped tuple', async () => {
-            // junoswap on bitkub runs four tiers over a single [IN, C1, OUT] path: two legs × four
-            // tiers = eight getPool reads. Leg 1 lives on 3000, leg 2 on 500.
             const phases: ReadResult[][] = [
                 [
                     ok(zeroAddress),
@@ -201,7 +198,7 @@ describe('dex/v3-routes', () => {
                 [
                     ok(zeroAddress),
                     ok(zeroAddress),
-                    ok(POOL_1), // only leg 1 exists
+                    ok(POOL_1),
                     ok(zeroAddress),
                     ok(zeroAddress),
                     ok(zeroAddress),

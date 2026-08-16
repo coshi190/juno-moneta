@@ -9,8 +9,6 @@ contract MockPositionManager is INonfungiblePositionManager {
     INonfungiblePositionManager.MintParams public lastMintParams;
     uint256 public mintCallCount;
 
-    // Test knobs to simulate a partial fill so the curve's refund/sweep logic can be exercised.
-    // Defaults (partialFill == false) consume everything desired, matching prior full-fill behavior.
     address public wrappedNative;
     bool public partialFill;
     uint256 public nativeUsed;
@@ -30,29 +28,18 @@ contract MockPositionManager is INonfungiblePositionManager {
     function mint(INonfungiblePositionManager.MintParams calldata params)
         external
         payable
-        returns (
-            uint256 tokenId,
-            uint128 liquidity,
-            uint256 amount0,
-            uint256 amount1
-        )
+        returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
     {
         lastMintParams = params;
         mintCallCount++;
 
         bool token0IsNative = params.token0 == wrappedNative;
-        uint256 usedNative = partialFill
-            ? nativeUsed
-            : (token0IsNative ? params.amount0Desired : params.amount1Desired);
-        uint256 usedToken = partialFill
-            ? tokenUsed
-            : (token0IsNative ? params.amount1Desired : params.amount0Desired);
+        uint256 usedNative = partialFill ? nativeUsed : (token0IsNative ? params.amount0Desired : params.amount1Desired);
+        uint256 usedToken = partialFill ? tokenUsed : (token0IsNative ? params.amount1Desired : params.amount0Desired);
 
-        // Pull only the launch-token side like the real manager; the WETH side is funded by msg.value.
         address launchToken = token0IsNative ? params.token1 : params.token0;
         IERC20(launchToken).transferFrom(msg.sender, address(this), usedToken);
 
-        // Native the position didn't consume becomes refundable via refundETH().
         ethToRefund = msg.value - usedNative;
 
         amount0 = token0IsNative ? usedNative : usedToken;
@@ -60,7 +47,6 @@ contract MockPositionManager is INonfungiblePositionManager {
         return (1, 0, amount0, amount1);
     }
 
-    // INonfungiblePositionManager
     function positions(uint256)
         external
         pure
@@ -85,11 +71,7 @@ contract MockPositionManager is INonfungiblePositionManager {
     function increaseLiquidity(IncreaseLiquidityParams calldata)
         external
         payable
-        returns (
-            uint128 liquidity,
-            uint256 amount0,
-            uint256 amount1
-        )
+        returns (uint128 liquidity, uint256 amount0, uint256 amount1)
     {
         return (0, 0, 0);
     }
@@ -102,41 +84,29 @@ contract MockPositionManager is INonfungiblePositionManager {
         return (0, 0);
     }
 
-    function collect(CollectParams calldata)
-        external
-        payable
-        returns (uint256 amount0, uint256 amount1)
-    {
+    function collect(CollectParams calldata) external payable returns (uint256 amount0, uint256 amount1) {
         return (0, 0);
     }
 
     function burn(uint256) external payable {}
 
-    // IPoolInitializer
-    function createAndInitializePoolIfNecessary(
-        address,
-        address,
-        uint24,
-        uint160
-    ) external payable returns (address) {
+    function createAndInitializePoolIfNecessary(address, address, uint24, uint160) external payable returns (address) {
         return address(0);
     }
 
-    // IPeripheryPayments
     function unwrapWETH9(uint256, address) external payable {}
 
     function refundETH() external payable {
         uint256 amt = ethToRefund;
         ethToRefund = 0;
         if (amt > 0) {
-            (bool ok, ) = msg.sender.call{value: amt}("");
+            (bool ok,) = msg.sender.call{value: amt}("");
             require(ok, "refund failed");
         }
     }
 
     function sweepToken(address, uint256, address) external payable {}
 
-    // IPeripheryImmutableState
     function factory() external pure returns (address) {
         return address(0);
     }
@@ -145,7 +115,6 @@ contract MockPositionManager is INonfungiblePositionManager {
         return address(0);
     }
 
-    // IERC721Metadata
     function name() external pure returns (string memory) {
         return "";
     }
@@ -158,7 +127,6 @@ contract MockPositionManager is INonfungiblePositionManager {
         return "";
     }
 
-    // IERC721Enumerable
     function totalSupply() external pure returns (uint256) {
         return 0;
     }
@@ -171,7 +139,6 @@ contract MockPositionManager is INonfungiblePositionManager {
         return 0;
     }
 
-    // IERC721
     function balanceOf(address) external pure returns (uint256) {
         return 0;
     }
@@ -198,12 +165,10 @@ contract MockPositionManager is INonfungiblePositionManager {
 
     function safeTransferFrom(address, address, uint256, bytes calldata) external pure {}
 
-    // IERC165
     function supportsInterface(bytes4) external pure returns (bool) {
         return false;
     }
 
-    // IMulticall
     function multicall(bytes[] calldata data) external payable returns (bytes[] memory results) {
         results = new bytes[](data.length);
         for (uint256 i = 0; i < data.length; i++) {

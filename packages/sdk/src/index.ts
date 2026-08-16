@@ -1,8 +1,7 @@
 export * from './abis/index.js'
 export * from './configs/deployments.js'
-export * from './configs/token-addresses.js'
+export { CHAIN_IDS, WRAPPED_NATIVE_ADDRESSES, STABLECOIN_ADDRESSES } from './configs/chains.js'
 export {
-    CHAIN_IDS,
     ProtocolType,
     FEE_TIERS,
     DEFAULT_FEE_TIER,

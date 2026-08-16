@@ -1,4 +1,3 @@
-// Hand-written: no Solidity source for this contract in contracts/src (we only call it).
 export const UNISWAP_V3_QUOTER_V2_ABI = [
     {
         type: 'function',

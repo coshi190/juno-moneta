@@ -31,7 +31,6 @@ export type NativeUsdPricePoint = Row<NativeUsdPriceSnapshot, typeof SNAPSHOT_PO
 export type V3TokenPrice = Row<V3TokenSnapshot, typeof V3_TOKEN_PRICE_FIELDS>
 export type TokenPrice = Row<TokenSnapshot, typeof TOKEN_PRICE_FIELDS>
 
-/** Current native-token price in USD, or null if the indexer has none for this chain. */
 export async function fetchNativeUsdPrice(
     client: PonderClient,
     { chainId }: { chainId: number }
@@ -52,12 +51,14 @@ export async function fetchNativeUsdPrice(
     return Number.isFinite(price) ? price : null
 }
 
-/** Full native/USD price history, paged through by cursor. */
 export async function fetchNativeUsdPriceSnapshots(
     client: PonderClient,
     { chainId }: { chainId: number }
 ): Promise<NativeUsdPricePoint[]> {
-    return client.fetchAllPages<{ nativeUsdPriceSnapshots: Page<NativeUsdPricePoint> }, NativeUsdPricePoint>(
+    return client.fetchAllPages<
+        { nativeUsdPriceSnapshots: Page<NativeUsdPricePoint> },
+        NativeUsdPricePoint
+    >(
         `query NativeUsdPriceSnapshots($chainId: Int!, $after: String) {
             nativeUsdPriceSnapshots(
                 where: { chainId: $chainId }
@@ -75,7 +76,6 @@ export async function fetchNativeUsdPriceSnapshots(
     )
 }
 
-/** USD prices for every V3-traded token on a chain. */
 export async function fetchV3TokenSnapshots(
     client: PonderClient,
     { chainId, limit = 500 }: { chainId: number; limit?: number }
@@ -91,7 +91,6 @@ export async function fetchV3TokenSnapshots(
     return data.v3TokenSnapshots.items
 }
 
-/** USD prices for specific bonding-curve tokens. */
 export async function fetchTokenSnapshotsByAddresses(
     client: PonderClient,
     { tokenAddrs, limit = 500 }: { tokenAddrs: string[]; limit?: number }

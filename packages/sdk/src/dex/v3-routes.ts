@@ -9,17 +9,12 @@ import type { ContractCall } from './plan-swap.js'
 import type { QuoteResult } from './v3-quote.js'
 
 export const MAX_HOPS = 3
-/** Beyond a couple of connectors the 3-hop cross product explodes, so only the top few pair up. */
 export const MAX_DEEP_CONNECTORS = 3
-/** Ceiling on quote calls per request — the fee cross product can grow fast on deep paths. */
 export const MAX_ROUTE_QUOTES = 80
 
-/** One quoted multi-hop path. `path`/`fees` are ready to hand straight to a swap. */
 export interface V3RouteQuote {
     dexId: DEXType
-    /** Resolved swap addresses, endpoints included. */
     path: Address[]
-    /** Length === path.length - 1. */
     fees: number[]
     quote: QuoteResult
 }
@@ -29,18 +24,12 @@ export interface V3RouteParams {
     tokenIn: Address
     tokenOut: Address
     amountIn: bigint
-    /** Intermediary tokens to route through. */
     connectors: Address[]
-    /** Omit to enumerate every V3 DEX on the chain. */
     dexId?: DEXType | DEXType[]
     maxHops?: number
     maxRouteQuotes?: number
 }
 
-/**
- * Every candidate path: 2-hop through each connector, plus 3-hop pairs from the deepest
- * connectors. Endpoints are left unresolved so the caller can resolve the native sentinel.
- */
 export function enumerateHopPaths(
     tokenIn: Address,
     tokenOut: Address,
@@ -69,7 +58,6 @@ export function enumerateHopPaths(
     return paths
 }
 
-/** Every combination of one fee tier per leg. */
 export function crossProduct(perLeg: number[][]): number[][] {
     return perLeg.reduce<number[][]>(
         (acc, fees) => acc.flatMap((combo) => fees.map((f) => [...combo, f])),
@@ -81,11 +69,9 @@ export interface V3RouteCandidate {
     dexId: DEXType
     factory: Address
     feeTiers: number[]
-    /** Resolved swap addresses, endpoints included. */
     tokens: Address[]
 }
 
-/** The cross product of the requested DEXes and every enumerated path, with native resolved. */
 export function buildRouteCandidates(
     params: Omit<V3RouteParams, 'amountIn' | 'maxRouteQuotes'>
 ): V3RouteCandidate[] {
@@ -120,7 +106,6 @@ interface LegQuery {
     key: string
 }
 
-/** getPool calls for every distinct (factory, leg, fee), deduped so shared legs read once. */
 function collectLegQueries(candidates: readonly V3RouteCandidate[]): LegQuery[] {
     const seen = new Map<string, LegQuery>()
     for (const c of candidates) {
@@ -150,10 +135,6 @@ interface RouteMeta {
     fees: number[]
 }
 
-/**
- * Keeps only fee combos whose every leg has a live pool, capping the total. `existing` is the
- * set of poolKeys that resolved to a real address in the discovery batch.
- */
 export function buildRouteMetas(
     candidates: readonly V3RouteCandidate[],
     existing: ReadonlySet<string>,
@@ -183,10 +164,6 @@ export function buildRouteMetas(
     return metas
 }
 
-/**
- * Discovery and quoting for every multi-hop path through the given connectors: one batched
- * getPool over every (leg, tier), then one batched quote over the surviving fee combos.
- */
 export async function getV3Routes(
     client: ReadClient,
     params: V3RouteParams
@@ -225,7 +202,6 @@ export async function getV3Routes(
             path: candidate.tokens,
             fees,
         })
-        // Undefined only when the DEX has no V3 config, which candidate building already ruled out.
         return call ? [{ meta, call }] : []
     })
 
@@ -237,8 +213,6 @@ export async function getV3Routes(
     const routes: V3RouteQuote[] = []
     quoteResults.forEach((result, index) => {
         if (result?.status !== 'success') return
-        // quoteExactInput returns (amountOut, sqrtPriceX96AfterList[], ticksCrossedList[], gas) —
-        // the middle fields are per-leg arrays, so only amountOut and gas are scalars.
         const [amountOut, , , gasEstimate] = result.result as [bigint, bigint[], number[], bigint]
         if (!amountOut || amountOut === 0n) return
 

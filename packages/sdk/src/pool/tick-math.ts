@@ -1,21 +1,11 @@
 const Q96 = 2n ** 96n
 
-/** Lowest tick a Uniswap V3 pool can represent (price ≈ 2^-128). */
 export const MIN_TICK = -887272
 
-/** Highest tick a Uniswap V3 pool can represent (price ≈ 2^128). */
 export const MAX_TICK = 887272
 
-/** sqrtPriceX96 at {@link MIN_TICK} — the floor the contracts enforce on any initialised pool. */
 export const MIN_SQRT_RATIO = 4295128739n
 
-/**
- * Port of Uniswap V3's `TickMath.getSqrtRatioAtTick`.
- *
- * Computes 1.0001^(tick/2) in Q96 by multiplying precomputed Q128 constants for each set bit of
- * |tick| — the same binary decomposition the Solidity library uses, so results match the contract
- * bit for bit. Positive ticks invert the ratio at the end; the final shift rounds up.
- */
 export function tickToSqrtPriceX96(tick: number): bigint {
     const absTick = Math.abs(tick)
     let ratio: bigint
@@ -53,13 +43,6 @@ export function tickToSqrtPriceX96(tick: number): bigint {
     return sqrtPriceX96
 }
 
-/**
- * Port of Uniswap V3's `TickMath.getTickAtSqrtRatio` — the inverse of {@link tickToSqrtPriceX96}.
- *
- * Finds the most significant bit to get the integer part of log2, then refines the fraction over 14
- * squaring rounds. The two candidate ticks bracket the rounding error, so the final comparison
- * picks whichever actually satisfies the input.
- */
 export function sqrtPriceX96ToTick(sqrtPriceX96: bigint): number {
     const ratio = sqrtPriceX96 << 32n
 
@@ -97,15 +80,10 @@ export function sqrtPriceX96ToTick(sqrtPriceX96: bigint): number {
         msb += 1n
     }
 
-    // Normalise to Q127 before refining. Sub-128 msb values must shift *left*; collapsing both
-    // cases into one right-shift (or pre-squaring here) throws the log2 fraction off by whole
-    // octaves and was silently returning ~2x ticks before this moved into the SDK.
     r = msb >= 128n ? ratio >> (msb - 127n) : ratio << (127n - msb)
 
     let log2 = (msb - 128n) << 64n
 
-    // One round deeper than the Solidity original: with our round-up in tickToSqrtPriceX96, the
-    // extra bit is what makes the two exact inverses across the whole tick range.
     for (let i = 63n; i >= 50n; i--) {
         r = (r * r) >> 127n
         const f = r >> 128n
@@ -124,13 +102,6 @@ export function sqrtPriceX96ToTick(sqrtPriceX96: bigint): number {
     return tickToSqrtPriceX96(tickHigh) <= sqrtPriceX96 ? tickHigh : tickLow
 }
 
-/**
- * Nearest tick at or below `price` (token1 per token0, in human units).
- *
- * Uses float logs rather than the bit-exact ladder above: callers are turning user-typed prices into
- * ticks, which get snapped to tick spacing anyway, so the last-ulp error is irrelevant. Clamps to
- * the representable range; non-positive prices collapse to {@link MIN_TICK}.
- */
 export function priceToTick(price: string, decimals0: number, decimals1: number): number {
     const priceNum = parseFloat(price)
     if (priceNum <= 0) return MIN_TICK
@@ -141,12 +112,6 @@ export function priceToTick(price: string, decimals0: number, decimals1: number)
     return Math.max(MIN_TICK, Math.min(MAX_TICK, tick))
 }
 
-/**
- * Human price → sqrtPriceX96, for seeding a pool's initial price.
- *
- * Non-positive prices return {@link MIN_SQRT_RATIO} rather than 0, because `initialize(0)` reverts —
- * and a silent truncation to zero here is exactly how a past graduation bug shipped.
- */
 export function priceToSqrtPriceX96(price: string, decimals0: number, decimals1: number): bigint {
     const priceNum = parseFloat(price)
     if (priceNum <= 0) return MIN_SQRT_RATIO
@@ -158,7 +123,6 @@ export function priceToSqrtPriceX96(price: string, decimals0: number, decimals1:
     return sqrtPriceX96
 }
 
-/** Snaps a tick to the pool's tick spacing, staying inside the representable range. */
 export function nearestUsableTick(tick: number, tickSpacing: number): number {
     const rounded = Math.round(tick / tickSpacing) * tickSpacing
     if (rounded < MIN_TICK) return MIN_TICK + (tickSpacing - (MIN_TICK % tickSpacing))
@@ -166,12 +130,10 @@ export function nearestUsableTick(tick: number, tickSpacing: number): number {
     return rounded
 }
 
-/** Whether a position is earning fees. Upper bound is exclusive, matching the pool's own accounting. */
 export function isInRange(currentTick: number, tickLower: number, tickUpper: number): boolean {
     return currentTick >= tickLower && currentTick < tickUpper
 }
 
-/** Canonical Uniswap token ordering — token0 is the numerically smaller address. */
 export function sortTokens<T extends { address: string }>(tokenA: T, tokenB: T): [T, T] {
     const addressA = tokenA.address.toLowerCase()
     const addressB = tokenB.address.toLowerCase()

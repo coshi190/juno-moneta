@@ -35,9 +35,10 @@ describe('tickToSqrtPriceX96', () => {
 
 describe('sqrtPriceX96ToTick', () => {
     it('round-trips exactly at representative ticks', () => {
-        // Collect every mismatch rather than asserting inside the loop — a bare expect() here
-        // aborts on the first failure and hides how wide the damage is.
-        const ticks = [-887272, -400000, -200000, -100000, -5000, -1000, -1, 0, 1, 1000, 5000, 100000, 200000, 400000, 887271] // prettier-ignore
+        const ticks = [
+            -887272, -400000, -200000, -100000, -5000, -1000, -1, 0, 1, 1000, 5000, 100000, 200000,
+            400000, 887271,
+        ]
         const mismatches = ticks.filter((t) => sqrtPriceX96ToTick(tickToSqrtPriceX96(t)) !== t)
         expect(mismatches).toEqual([])
     })
@@ -50,11 +51,6 @@ describe('sqrtPriceX96ToTick', () => {
         expect(mismatches).toEqual([])
     })
 
-    /**
-     * Regression guard. A normalisation bug here (missing the `msb < 128` left-shift) returned
-     * roughly double the true tick — tick 1000 came back as 1999 — while still passing a
-     * tick-0-only test, because 0 is the one input the broken path got right.
-     */
     it('does not double the tick for small positive inputs', () => {
         expect(sqrtPriceX96ToTick(tickToSqrtPriceX96(1000))).toBe(1000)
         expect(sqrtPriceX96ToTick(tickToSqrtPriceX96(-1))).toBe(-1)
@@ -82,7 +78,6 @@ describe('priceToTick', () => {
 
 describe('priceToSqrtPriceX96', () => {
     it('returns MIN_SQRT_RATIO rather than 0 for non-positive input', () => {
-        // initialize(0) reverts on-chain, so this floor is load-bearing, not cosmetic.
         expect(priceToSqrtPriceX96('0', 18, 18)).toBe(MIN_SQRT_RATIO)
         expect(priceToSqrtPriceX96('-1', 18, 18)).toBe(MIN_SQRT_RATIO)
     })
@@ -95,11 +90,6 @@ describe('priceToSqrtPriceX96', () => {
     })
 })
 
-/**
- * Guards the consolidation itself: the frontend used to derive price with float division
- * (`Number(sqrtPriceX96) / Number(Q96)`) while the SDK used exact bigint math. Both are kept in
- * agreement here so replacing the former with the latter cannot silently move displayed prices.
- */
 describe('priceFromSqrtPriceX96 vs the legacy float formula', () => {
     function legacyFloatPrice(sqrtPriceX96: bigint, decimals0: number, decimals1: number): number {
         const sqrtPrice = Number(sqrtPriceX96) / Number(Q96)

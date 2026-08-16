@@ -8,14 +8,6 @@ import type {
 } from '../entities.js'
 import { sel, type CountedItems, type Items, type Page, type Row } from './internal.js'
 
-/**
- * Filters are built as objects and passed as a GraphQL `$where` variable. The frontend used to
- * interpolate them straight into the query text — including splicing address arrays into
- * `sender_in: [...]` — which is both injectable and unparameterised.
- */
-
-// --- selections -------------------------------------------------------------
-
 const BC_SWAP_FIELDS = [
     'tokenAddr',
     'sender',
@@ -143,9 +135,6 @@ export type TransferActivity = Row<TransferEvent, typeof TRANSFER_FIELDS>
 export type BondingCurveSwapDetail = Row<SwapEvent, typeof BC_DETAIL_FIELDS>
 export type V3SwapDetail = Row<V3SwapEvent, typeof V3_DETAIL_FIELDS>
 
-// --- bulk swap history (leaderboard / points) -------------------------------
-
-/** Who and since-when to scope a swap scan by. `senders` maps to a `_in` filter. */
 export interface SwapScanFilter {
     chainId: number
     sender?: string
@@ -153,7 +142,6 @@ export interface SwapScanFilter {
     since?: number
 }
 
-/** The sender column differs by source: bonding curve records `sender`, the DEX tables `txFrom`. */
 function scanWhere(filter: SwapScanFilter, senderField: 'sender' | 'txFrom') {
     const where: Record<string, unknown> = { chainId: filter.chainId }
     if (filter.sender) where[senderField] = filter.sender
@@ -221,8 +209,6 @@ export function fetchV2Swaps(client: PonderClient, filter: SwapScanFilter): Prom
         (r) => r.v2SwapEvents
     )
 }
-
-// --- user activity feed -----------------------------------------------------
 
 export interface ActivityArgs {
     chainId: number
@@ -307,7 +293,6 @@ export async function fetchUserAggSwaps(
     return data.aggSwapEvents.items
 }
 
-/** Transfers in either direction for an address. */
 export async function fetchUserTransfers(
     client: PonderClient,
     { chainId, sender, limit }: Omit<ActivityArgs, 'after'>
@@ -328,8 +313,6 @@ export async function fetchUserTransfers(
     return data.transferEvents.items
 }
 
-// --- a single token's trade feed (offset paged, with a total) ----------------
-
 export interface TokenSwapPageArgs {
     tokenAddr: string
     chainId: number
@@ -339,7 +322,13 @@ export interface TokenSwapPageArgs {
 
 export async function fetchTokenBondingCurveSwaps(
     client: PonderClient,
-    { tokenAddr, limit, offset, isBuy, sender }: Omit<TokenSwapPageArgs, 'chainId'> & {
+    {
+        tokenAddr,
+        limit,
+        offset,
+        isBuy,
+        sender,
+    }: Omit<TokenSwapPageArgs, 'chainId'> & {
         isBuy?: number
         sender?: string
     }

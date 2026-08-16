@@ -1,6 +1,3 @@
-// Generated from contracts/src by `bun run codegen`. Do not edit by hand.
-// Source artifact: AggRouterJunoswap.sol
-
 export const AGG_ROUTER_JUNOSWAP_ABI = [
     {
         type: 'fallback',

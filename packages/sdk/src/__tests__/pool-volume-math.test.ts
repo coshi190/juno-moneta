@@ -68,7 +68,7 @@ describe('deriveNativeUsdPrice', () => {
                 address: '0xa',
                 token0: { address: NATIVE, decimals: 18 },
                 token1: { address: USD, decimals: 18 },
-                sqrtPriceX96: 2n ** 128n, // far outside any real tick range
+                sqrtPriceX96: 2n ** 128n,
             }),
         ]
         expect(deriveNativeUsdPrice(pools, NATIVE, USD)).toBeNull()
@@ -99,7 +99,6 @@ describe('deriveNativeUsdPrice', () => {
 
 describe('computeVolumeUsd', () => {
     it('converts with native as token1', () => {
-        // vol0 (5) priced at 1 native each via sqrtP=Q96, plus vol1 (3 native) = 8 native * $2 = 16
         expect(computeVolumeUsd(5n * E18, 3n * E18, Q96, false, true, 2)).toBeCloseTo(16)
     })
 
@@ -119,17 +118,15 @@ describe('computeVolumeUsd', () => {
 
 describe('computeVolumeFromPrices', () => {
     it('scales each leg by its decimals then prices', () => {
-        // 1_000_000 @ 6 decimals = 1 unit * $2, plus 0.5e18 @ 18 decimals = 0.5 * $10
         expect(computeVolumeFromPrices(1_000_000n, 6, 5n * 10n ** 17n, 18, 2, 10)).toBeCloseTo(7)
     })
 })
 
 describe('computePoolVolumesUsd', () => {
-    // nowSeconds inside day 100; boundaries: today=100d, yesterday=99d, thirtyDaysAgo=70d
     const DAY = 86400
     const nowSeconds = 100 * DAY + 500
     const todayStart = 100 * DAY
-    const in30dOnly = 96 * DAY // >= 70d but < 99d
+    const in30dOnly = 96 * DAY
 
     it('buckets 1d vs 30d and prices a native pool in USD', () => {
         const nativeUsdPool = meta({
@@ -167,7 +164,6 @@ describe('computePoolVolumesUsd', () => {
             nowSeconds,
         })
 
-        // nativeUsdPrice = 1 (sqrtP=Q96). poolA volume is native-terms token0.
         expect(result['0xa']!.volume1d).toBeCloseTo(2)
         expect(result['0xa']!.volume30d).toBeCloseTo(5)
     })
@@ -199,7 +195,6 @@ describe('computePoolVolumesUsd', () => {
             nowSeconds,
         })
 
-        // 1 * $2 + 5 * $3 = 17
         expect(result['0xb']!.volume1d).toBeCloseTo(17)
         expect(result['0xb']!.volume30d).toBeCloseTo(17)
     })
@@ -227,7 +222,6 @@ describe('computePoolVolumesUsd', () => {
     })
 
     it('falls back to native-token units when no native/usd price is available', () => {
-        // No native/usd pool present, so nativeUsdPrice is null.
         const poolD = meta({
             address: '0xd',
             token0: { address: NATIVE, decimals: 18 },
@@ -251,7 +245,6 @@ describe('computePoolVolumesUsd', () => {
             nowSeconds,
         })
 
-        // token0 is native, sqrtP=Q96 → volume in native terms = 4 (not USD-scaled)
         expect(result['0xd']!.volume1d).toBeCloseTo(4)
         expect(result['0xd']!.volume30d).toBeCloseTo(4)
     })

@@ -15,10 +15,6 @@ export interface ReferralRewardsResult {
     referees: ReferredTrader[]
 }
 
-/**
- * A referrer's referees and their folded stats — the price-independent half of the rewards calc.
- * `stats` comes straight from the indexer's `userStat` fold, so no raw swap scan is involved.
- */
 export interface ReferralData {
     referees: string[]
     stats: UserStatRow[]
@@ -26,11 +22,6 @@ export interface ReferralData {
 
 const EMPTY_DATA: ReferralData = { referees: [], stats: [] }
 
-/**
- * Turns a referrer's referees and their folded stats into ranked reward figures: each referee's
- * points and USD volume, plus the 10% referral cut of their combined points. A referee with no
- * folded row simply hasn't traded, and scores zero.
- */
 export function computeReferralRewards(
     referees: string[],
     stats: UserStatRow[],
@@ -59,11 +50,6 @@ export interface ReferralDataArgs {
     referrer: string
 }
 
-/**
- * Fetches a referrer's referees and their folded stats — the network half, kept separate from
- * pricing so callers can cache it and re-run {@link computeReferralRewards} as the price
- * moves. Two bounded queries regardless of how much the referees have traded.
- */
 export async function fetchReferralData(
     client: PonderClient,
     { chainId, referrer }: ReferralDataArgs
@@ -75,7 +61,6 @@ export async function fetchReferralData(
     return { referees, stats }
 }
 
-/** Convenience one-shot: {@link fetchReferralData} then {@link computeReferralRewards}. */
 export async function fetchReferralRewards(
     client: PonderClient,
     { chainId, referrer, nativeUsdPrice }: ReferralDataArgs & { nativeUsdPrice: number | null }

@@ -1,6 +1,3 @@
-// Generated from contracts/src by `bun run codegen`. Do not edit by hand.
-// Source artifact: BondingCurveJunoswap.sol
-
 export const BONDING_CURVE_JUNOSWAP_ABI = [
     {
         type: 'receive',

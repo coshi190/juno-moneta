@@ -24,7 +24,6 @@ import {
     encodeV3Path,
 } from './uniswap-v3.js'
 
-/** A single contract call, shaped to spread straight into viem/wagmi. */
 export interface ContractCall {
     address: Address
     abi: Abi
@@ -38,7 +37,6 @@ export type SwapKind = 'swap' | 'wrap' | 'unwrap'
 export interface SwapPlan {
     kind: SwapKind
     call: ContractCall
-    /** Wrap/unwrap go straight to WETH9, which has no room for a referral suffix. */
     taggable: boolean
 }
 
@@ -51,25 +49,15 @@ export interface PlanSwapInput {
     amountIn: bigint
     amountOutMin: bigint
     recipient: Address
-    /** Unix seconds. V2 only — the V3 router in use takes no deadline. */
     deadline: number
-    /** Full multi-hop route including endpoints. Defaults to [tokenIn, tokenOut]. */
     path?: Address[]
-    /** V3 multi-hop fee tiers; length must be path.length - 1. */
     fees?: number[]
-    /** V3 single-hop fee tier. */
     fee?: number
-    /** Force the unwrap leg even on chains where it is normally skipped. */
     forceUnwrapNative?: boolean
 }
 
 export class SwapPlanError extends Error {}
 
-/**
- * Resolves a swap intent into the exact transaction to send: picks the router
- * function from the native-ness of each side, handles native<->wrapped as a WETH9
- * deposit/withdraw, and appends the V3 unwrap leg via multicall where needed.
- */
 export function planSwap(input: PlanSwapInput): SwapPlan {
     const { chainId, tokenIn, tokenOut, amountIn } = input
 
@@ -119,7 +107,11 @@ function planV2Swap(input: PlanSwapInput): SwapPlan {
     const unwrapOut = isNativeToken(tokenOut) && !skipsUnwrap(input)
     const deadlineArg = BigInt(deadline)
 
-    const call = (functionName: string, args: readonly unknown[], value?: bigint): ContractCall => ({
+    const call = (
+        functionName: string,
+        args: readonly unknown[],
+        value?: bigint
+    ): ContractCall => ({
         address: config.router,
         abi: UNISWAP_V2_ROUTER_ABI as Abi,
         functionName,
@@ -164,8 +156,6 @@ function planV3Swap(input: PlanSwapInput): SwapPlan {
     const value = isNativeToken(tokenIn) ? amountIn : undefined
     const fee = input.fee ?? config.defaultFeeTier ?? DEFAULT_FEE_TIER
 
-    // On the unwrap path the router must hold the output before withdrawing it, so the
-    // swap pays ADDRESS_THIS and a second call in the same multicall forwards native on.
     const swapRecipient = unwrapOut ? ADDRESS_THIS : recipient
     const base = { address: config.swapRouter, abi: UNISWAP_V3_SWAP_ROUTER_ABI as Abi, value }
 
@@ -207,7 +197,6 @@ function skipsUnwrap(input: PlanSwapInput): boolean {
     return !input.forceUnwrapNative && shouldSkipUnwrap(input.chainId)
 }
 
-/** Encodes the plan's call and appends the Junoswap referral tag. */
 export function encodeSwapCalldata(plan: SwapPlan, referrer: Address): Hex {
     const data = encodeFunctionData({
         abi: plan.call.abi,

@@ -13,7 +13,6 @@ import {
 } from './v3-pools.js'
 import { getV3Routes, type V3RouteQuote } from './v3-routes.js'
 
-/** The quoter's answer, plus the synthesized equivalent for a wrap/unwrap. */
 export interface QuoteResult {
     amountOut: bigint
     sqrtPriceX96After: bigint
@@ -21,7 +20,6 @@ export interface QuoteResult {
     gasEstimate: bigint
 }
 
-/** Wrapping is 1:1 — there is no pool and no price, only a WETH9 deposit/withdraw. */
 export function wrapQuoteResult(amountIn: bigint, operation: 'wrap' | 'unwrap'): QuoteResult {
     return {
         amountOut: amountIn,
@@ -44,23 +42,16 @@ export function fromQuoterV2(
 
 export interface V3QuoteParams {
     chainId: number
-    /** Raw token address; the native sentinel is resolved for you. */
     tokenIn: Address
     tokenOut: Address
     amountIn: bigint
-    /** Omit to quote every V3 DEX on the chain. */
     dexId?: DEXType | DEXType[]
-    /** Intermediary tokens to route multi-hop through. Omit/empty for direct quotes only. */
     connectors?: Address[]
-    /** Max path length for multi-hop enumeration. Defaults to MAX_HOPS. */
     maxHops?: number
-    /** Cap on multi-hop quote calls. Defaults to MAX_ROUTE_QUOTES. */
     maxRouteQuotes?: number
-    /** Set false to skip single-hop discovery for multi-hop-only callers. Defaults true. */
     includeDirect?: boolean
 }
 
-/** The unified V3 answer: best single-hop pool per DEX, plus every viable multi-hop route. */
 export interface V3QuoteResult {
     direct: Map<DEXType, V3QuoteOutcome>
     routes: V3RouteQuote[]
@@ -74,12 +65,6 @@ export interface V3QuoteOutcome {
     error: Error | null
 }
 
-/**
- * Finds the deepest pool per DEX: one batched getPool across every (dex, fee tier)
- * pair, then one batched liquidity read over the pools that exist.
- *
- * Independent of amountIn, so callers can cache it far longer than a quote.
- */
 export async function discoverV3Pools(
     client: ReadClient,
     params: Omit<V3QuoteParams, 'amountIn'>
@@ -102,7 +87,6 @@ export async function discoverV3Pools(
     return pickBestPools(resolved, liquidityResults)
 }
 
-/** Quotes `amountIn` against pools already discovered — one batched read. */
 export async function quoteV3Pools(
     client: ReadClient,
     params: Omit<V3QuoteParams, 'dexId'>,
@@ -120,8 +104,6 @@ export async function quoteV3Pools(
             amountIn,
             fee: pool.fee,
         })
-        // Only undefined when the DEX has no V3 config on the chain, which discovery
-        // already ruled out. Guarded anyway so a config change can't desync the indices.
         return call ? [{ dexId, pool, call }] : []
     })
 
@@ -168,10 +150,6 @@ async function getDirectQuotes(
     return quoteV3Pools(client, params, pools)
 }
 
-/**
- * Unified V3 quoting. Single-hop discovery + quoting per DEX (three batched reads), and — when
- * `connectors` are given — multi-hop route discovery + quoting, run concurrently.
- */
 export async function getV3Quotes(
     client: ReadClient,
     params: V3QuoteParams

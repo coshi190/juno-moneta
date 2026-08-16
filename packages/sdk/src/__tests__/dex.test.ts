@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import type { Address, Hex } from 'viem'
 import { decodeFunctionData } from 'viem'
-import { CHAIN_IDS, ProtocolType } from '../configs/dex-config.js'
-import { WRAPPED_NATIVE_ADDRESSES } from '../configs/token-addresses.js'
+import { CHAIN_IDS, WRAPPED_NATIVE_ADDRESSES } from '../configs/chains.js'
+import { ProtocolType } from '../configs/dex-config.js'
 import { UNISWAP_V3_SWAP_ROUTER_ABI } from '../abis/index.js'
 import {
     NATIVE_TOKEN_ADDRESS,
@@ -25,7 +25,6 @@ const DEADLINE = 1_800_000_000
 const KKUB = WRAPPED_NATIVE_ADDRESSES[CHAIN_IDS.bitkub]!
 const WJBC = WRAPPED_NATIVE_ADDRESSES[CHAIN_IDS.jbc]!
 const WETH_BASE = WRAPPED_NATIVE_ADDRESSES[CHAIN_IDS.base]!
-/** jibswap deploys its own wrapper, which is NOT the canonical WJBC. */
 const JIBSWAP_WNATIVE = '0x99999999990FC47611b74827486218f3398A4abD' as Address
 
 function base(overrides: Partial<PlanSwapInput> = {}): PlanSwapInput {
@@ -44,8 +43,6 @@ function base(overrides: Partial<PlanSwapInput> = {}): PlanSwapInput {
 }
 
 describe('WRAPPED_NATIVE_ADDRESSES', () => {
-    // A missing entry makes getSwapAddress return the native sentinel, which the
-    // router accepts as a path token and then reverts on. Guard every chain.
     it.each(Object.entries(CHAIN_IDS))('covers %s (%i)', (_slug, chainId) => {
         expect(WRAPPED_NATIVE_ADDRESSES[chainId]).toMatch(/^0x[0-9a-f]{40}$/)
         expect(isNativeToken(WRAPPED_NATIVE_ADDRESSES[chainId]!)).toBe(false)
@@ -138,7 +135,6 @@ describe('planSwap — V2', () => {
         const plan = planSwap(base({ tokenIn: NATIVE }))
         expect(plan.call.functionName).toBe('swapExactETHForTokens')
         expect(plan.call.value).toBe(1000n)
-        // amountIn is carried by value, not by the args tuple.
         expect(plan.call.args).toEqual([900n, [JIBSWAP_WNATIVE, TOKEN_B], USER, BigInt(DEADLINE)])
     })
 
@@ -188,9 +184,7 @@ describe('planSwap — V2', () => {
 
 function decodeMulticall(plan: { call: { args: readonly unknown[] } }) {
     const [calls] = plan.call.args as [Hex[]]
-    return calls.map((data) =>
-        decodeFunctionData({ abi: UNISWAP_V3_SWAP_ROUTER_ABI, data })
-    )
+    return calls.map((data) => decodeFunctionData({ abi: UNISWAP_V3_SWAP_ROUTER_ABI, data }))
 }
 
 describe('planSwap — V3', () => {
@@ -230,7 +224,6 @@ describe('planSwap — V3', () => {
 
         const [swap, unwrap] = decodeMulticall(plan)
         expect(swap!.functionName).toBe('exactInputSingle')
-        // The swap must pay the router, or unwrapWETH9 has nothing to withdraw.
         expect(swap!.args?.[0]).toMatchObject({
             recipient: '0x0000000000000000000000000000000000000002',
         })
@@ -256,7 +249,9 @@ describe('planSwap — V3', () => {
     })
 
     it('multi-hop to native unwraps via multicall', () => {
-        const plan = planSwap(v3({ tokenOut: NATIVE, path: [TOKEN_A, TOKEN_B, NATIVE], fees: [500, 3000] }))
+        const plan = planSwap(
+            v3({ tokenOut: NATIVE, path: [TOKEN_A, TOKEN_B, NATIVE], fees: [500, 3000] })
+        )
         expect(plan.call.functionName).toBe('multicall')
         const [swap, unwrap] = decodeMulticall(plan)
         expect(swap!.functionName).toBe('exactInput')

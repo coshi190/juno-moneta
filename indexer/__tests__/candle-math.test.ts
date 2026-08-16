@@ -8,7 +8,6 @@ describe('foldCandle', () => {
     })
 
     it('opens a new bucket at the pre-swap price when given (bonding curve)', () => {
-        // open = pre-swap 90, trade price 100 → high/low span both.
         const c = foldCandle(null, 100, 5, 90)
         expect(c).toEqual({ open: 90, high: 100, low: 90, close: 100, volume: 5 })
     })

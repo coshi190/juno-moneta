@@ -17,8 +17,6 @@ const POSITION_FIELDS = [
 
 export type V3PositionRow = Row<V3Position, typeof POSITION_FIELDS>
 
-/** Every V3 position an address currently owns on a chain. Replaces the on-chain
- * balanceOf → tokenOfOwnerByIndex → positions RPC waterfall. */
 export async function fetchUserPositions(
     client: PonderClient,
     { chainId, owner, limit = 500 }: { chainId: number; owner: string; limit?: number }
@@ -34,8 +32,6 @@ export async function fetchUserPositions(
     return data.v3Positions.items
 }
 
-/** Positions by explicit tokenId (row id is `${chainId}-${tokenId}`). Used for staked NFTs
- * held by the staker contract and for single-position detail lookups. */
 export async function fetchPositionsByTokenIds(
     client: PonderClient,
     { chainId, tokenIds, limit = 500 }: { chainId: number; tokenIds: bigint[]; limit?: number }

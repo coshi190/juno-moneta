@@ -1,8 +1,3 @@
-// Hand-written: no Solidity source for this contract in contracts/src (we only call it).
-/**
- * Uniswap V2 Router02 ABI
- * Used for swaps and quote calculations
- */
 export const UNISWAP_V2_ROUTER_ABI = [
     {
         type: 'function',
@@ -24,7 +19,6 @@ export const UNISWAP_V2_ROUTER_ABI = [
         ],
         outputs: [{ name: 'amounts', type: 'uint256[]' }],
     },
-    // Token -> Token swap
     {
         type: 'function',
         name: 'swapExactTokensForTokens',
@@ -38,7 +32,6 @@ export const UNISWAP_V2_ROUTER_ABI = [
         ],
         outputs: [{ name: 'amounts', type: 'uint256[]' }],
     },
-    // Native -> Token swap (payable)
     {
         type: 'function',
         name: 'swapExactETHForTokens',
@@ -51,7 +44,6 @@ export const UNISWAP_V2_ROUTER_ABI = [
         ],
         outputs: [{ name: 'amounts', type: 'uint256[]' }],
     },
-    // Token -> Native swap
     {
         type: 'function',
         name: 'swapExactTokensForETH',

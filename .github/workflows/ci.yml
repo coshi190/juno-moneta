@@ -36,25 +36,10 @@ jobs:
         timeout-minutes: 10
         steps:
             - uses: actions/checkout@v4
-              with:
-                  submodules: recursive
-            - uses: foundry-rs/foundry-toolchain@v1
             - uses: oven-sh/setup-bun@v2
               with:
                   bun-version: 1.x
             - run: bun install --frozen-lockfile
-
-            # The ABIs are generated from the contracts. If regenerating them produces a diff,
-            # a .sol change landed without the SDK being rebuilt — the exact drift this repo exists
-            # to prevent.
-            - name: Build contracts
-              run: forge build
-              working-directory: contracts
-            - name: Codegen is up to date
-              run: |
-                  bun run codegen
-                  git diff --exit-code packages/sdk/src/abis packages/sdk/src/ponder/entities.ts \
-                    || (echo "::error::Generated code is stale — run 'forge build && bun run codegen' and commit." && exit 1)
 
             - name: Typecheck
               run: bun run --filter @coshi190/junoswap-sdk typecheck

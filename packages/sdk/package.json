@@ -1,6 +1,6 @@
 {
     "name": "@coshi190/junoswap-sdk",
-    "version": "0.18.0",
+    "version": "0.19.0",
     "description": "Chain-facing primitives",
     "license": "MIT",
     "repository": {
@@ -17,7 +17,9 @@
             "default": "./dist/index.js"
         }
     },
-    "files": ["dist"],
+    "files": [
+        "dist"
+    ],
     "sideEffects": false,
     "scripts": {
         "build": "rm -rf dist && tsc -p tsconfig.build.json",
@@ -38,6 +40,7 @@
         "vitest": "^2.1.0"
     },
     "publishConfig": {
-        "access": "public"
+        "access": "public",
+        "registry": "https://registry.npmjs.org"
     }
 }

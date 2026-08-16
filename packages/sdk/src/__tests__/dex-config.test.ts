@@ -21,7 +21,6 @@ describe('dex-config', () => {
 
         it('returns undefined for DEX without V3 on chain', async () => {
             const { getV3Config } = await getModule()
-            // jibswap has V2 on JBC, not V3
             expect(getV3Config(8899, 'jibswap')).toBeUndefined()
         })
     })

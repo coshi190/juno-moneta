@@ -1,6 +1,3 @@
-// Generated from contracts/src by `bun run codegen`. Do not edit by hand.
-// Source artifact: ERC20Token.sol
-
 export const ERC20_TOKEN_ABI = [
     {
         type: 'function',

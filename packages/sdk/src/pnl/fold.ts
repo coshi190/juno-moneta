@@ -1,19 +1,5 @@
 import { formatEther, formatUnits } from 'viem'
 
-/**
- * Average-cost PnL accounting, shared by the indexer (which folds swaps at index time and finalizes
- * in its API routes) and any consumer that wants the same math. Split into two phases:
- *
- *   fold      — walk a user's swaps for one token into a running position + USD cost pool. The native
- *               leg is always 18-decimal (`formatEther`); the token leg uses the token's real decimals
- *               so `position` lands in the same human units as an on-chain balance.
- *   finalize  — value the remaining position at a current price to get cost basis + unrealized PnL.
- *
- * This used to live entirely client-side in the frontend's `computePortfolioPnl`; the fold now runs
- * incrementally in the indexer's swap handlers and the finalize in its `/user-pnl` / `/leaderboard`
- * routes, so the browser just displays the result.
- */
-
 export interface TokenPnl {
     costBasisUsd: number
     totalInvestedUsd: number
@@ -31,10 +17,6 @@ export interface PortfolioPnlTotals {
     totalPnlPercent: number
 }
 
-/**
- * The history-derived state for one (user, token). `position` is in human token units; the USD
- * fields are plain doubles. This is exactly what the indexer persists per row.
- */
 export interface PnlFold {
     position: number
     costPoolUsd: number
@@ -49,17 +31,13 @@ export const EMPTY_FOLD: PnlFold = {
     totalInvestedUsd: 0,
 }
 
-/** One swap normalised to native/token legs, with the native→USD rate at trade time. */
 export interface FoldSwapInput {
     isBuy: boolean
-    /** wei; native leg on a buy, token leg on a sell. */
     amountIn: string
-    /** wei; token leg on a buy, native leg on a sell. */
     amountOut: string
     nativeUsd: number
 }
 
-/** Fold one swap into a running state, returning a new fold (does not mutate the input). */
 export function applyFoldEvent(fold: PnlFold, e: FoldSwapInput, decimals: number): PnlFold {
     const next: PnlFold = { ...fold }
     if (e.isBuy) {
@@ -83,7 +61,6 @@ export function applyFoldEvent(fold: PnlFold, e: FoldSwapInput, decimals: number
     return next
 }
 
-/** Value the remaining position at `currentPrice` (USD, or null when unknown) into a full `TokenPnl`. */
 export function finalizeTokenPnl(
     fold: PnlFold,
     currentBalance: number,
@@ -105,7 +82,6 @@ export function finalizeTokenPnl(
     }
 }
 
-/** Finalize a whole portfolio: per-token PnL plus rolled-up totals. */
 export function finalizePortfolioPnl(
     foldsByToken: Map<string, PnlFold>,
     balanceByToken: Map<string, number>,
@@ -137,12 +113,6 @@ export function finalizePortfolioPnl(
     return { perToken, totals }
 }
 
-// --- batch engine (raw swaps + historical native price) ---------------------
-//
-// The indexer folds swaps incrementally, but a consumer holding raw swap history can rebuild the
-// same state in one pass on top of the primitives above, valuing each swap at the native→USD rate
-// returned by `priceAt(timestamp)`. `rewards/trader-stats.ts` does the same for time windows.
-
 export interface PnlSwapEvent {
     tokenAddr: string
     isBuy: boolean
@@ -151,7 +121,6 @@ export interface PnlSwapEvent {
     timestamp: number
 }
 
-/** Fold a user's raw swaps for every token, then finalize against current balances/prices. */
 export function computePortfolioPnl(
     events: PnlSwapEvent[],
     balanceByToken: Map<string, number>,

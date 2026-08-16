@@ -57,12 +57,7 @@ describe('getAmountsForLiquidity', () => {
 describe('calculateAmount1FromAmount0', () => {
     it('returns 0n for a zero input amount', () => {
         expect(
-            calculateAmount1FromAmount0(
-                tickToSqrtPriceX96(0),
-                sqrtPriceLower,
-                sqrtPriceUpper,
-                0n
-            )
+            calculateAmount1FromAmount0(tickToSqrtPriceX96(0), sqrtPriceLower, sqrtPriceUpper, 0n)
         ).toBe(0n)
     })
 
@@ -100,12 +95,7 @@ describe('calculateAmount1FromAmount0', () => {
 describe('calculateAmount0FromAmount1', () => {
     it('returns 0n for a zero input amount', () => {
         expect(
-            calculateAmount0FromAmount1(
-                tickToSqrtPriceX96(0),
-                sqrtPriceLower,
-                sqrtPriceUpper,
-                0n
-            )
+            calculateAmount0FromAmount1(tickToSqrtPriceX96(0), sqrtPriceLower, sqrtPriceUpper, 0n)
         ).toBe(0n)
     })
 

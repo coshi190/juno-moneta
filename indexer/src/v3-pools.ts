@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
 import { formatEther } from 'viem'
@@ -113,9 +112,6 @@ async function upsertPoolDayVolume(
     }
 }
 
-// Fold a signed reserve delta into a pool's running state and today's daily snapshot. Only pools
-// observed from creation (reserves start at 0) are tracked this way — see the Mint/Collect/Swap
-// wiring below. Reserves are clamped at 0 as a guard against any unmodelled inflow.
 export async function applyReserveDelta(
     context: any,
     chainId: number,
@@ -165,7 +161,6 @@ export async function applyReserveDelta(
         })
     }
 
-    // Daily snapshot: a level (last-write-wins for the day), not a sum.
     const dayTimestamp = getDayTimestamp(timestamp)
     const dayId = `${chainId}-${poolAddress}-${dayTimestamp}`
     const dayVals = {
@@ -185,8 +180,6 @@ export async function applyReserveDelta(
     }
 }
 
-// Shared Mint/Collect reserve handlers for junoswap V3 pools (registered with the full pool ABI).
-// Mint deposits tokens (delta +); Collect withdraws (delta -). Burn moves nothing (marks owed).
 async function handleV3Mint(context: any, chainId: number, event: any) {
     const { amount0, amount1 } = event.args
     await applyReserveDelta(
@@ -244,8 +237,6 @@ async function updateNativeUsdPrice(
     const stableDecimals = stableToken?.decimals ?? 18
     const price = computePriceFromSqrtPriceX96(sqrtPriceX96, nativeIsToken0, 18, stableDecimals)
 
-    // A low-liquidity / edge pool near a tick boundary can yield a garbage price (~2^128); reject it
-    // and keep the last good native price rather than poisoning every USD value derived at this block.
     if (sanitizeUsdPrice(price, MAX_NATIVE_USD_PRICE) === null) return
 
     await context.db
@@ -306,7 +297,6 @@ async function updateV3TokenSnapshot(
     const nativePrice = await context.db.find(schema.nativeUsdPrice, { chainId })
     const nativeUsd = nativePrice ? parseFloat(nativePrice.price) : 0
     const rawPriceUsd = nativeUsd > 0 ? priceNative * nativeUsd : 0
-    // Store 0 ("no price") rather than a garbage USD price from an edge pool.
     const priceUsd = sanitizeUsdPrice(rawPriceUsd, MAX_TOKEN_USD_PRICE) ?? 0
 
     const id = `${chainId}-${tokenAddr}`
@@ -401,8 +391,6 @@ export async function recordV3SwapEvent(
             .onConflictDoNothing()
     }
 
-    // Resolve the native leg and fold the swap into the trader's PnL. Non-native pools (parse
-    // returns null) are still recorded above but contribute no native-denominated PnL.
     const parsed = parseV3Swap(
         {
             tokenAddr,
@@ -436,9 +424,6 @@ export async function recordV3SwapEvent(
             parsed.protocol
         )
 
-        // Fold the swap into the token's native-price candles (source 'v3'). Price and volume are in
-        // native terms, matching the client's tokenNativeCandles: sqrtPrice → native price scaled by
-        // the token's decimals, and the native leg's absolute amount as volume.
         const priceNative = computePriceFromSqrtPriceX96(
             sqrtPriceX96,
             tokenIsToken0,
@@ -447,7 +432,15 @@ export async function recordV3SwapEvent(
         )
         const nativeAmount = tokenIsToken0 ? amount1 : amount0
         const volumeNative = Number(formatEther(nativeAmount < 0n ? -nativeAmount : nativeAmount))
-        await foldTokenCandle(context, chainId, parsed.tokenAddr, 'v3', timestamp, priceNative, volumeNative)
+        await foldTokenCandle(
+            context,
+            chainId,
+            parsed.tokenAddr,
+            'v3',
+            timestamp,
+            priceNative,
+            volumeNative
+        )
     }
 }
 
@@ -740,8 +733,6 @@ ponder.on('V3PoolJbc:Swap', async ({ event, context }) => {
     await recordV3SwapEvent(context, 8899, event, poolRecord, poolAddress, timestamp)
 })
 
-// Liquidity add/remove reserve tracking for junoswap V3 pools (Swap deltas are folded in the
-// swap handlers above). Together these keep v3PoolState reserves exact for pools born after start.
 ponder.on('V3Pool:Mint', ({ event, context }) => handleV3Mint(context, 25925, event))
 ponder.on('V3Pool:Collect', ({ event, context }) => handleV3Collect(context, 25925, event))
 ponder.on('V3PoolBitkub:Mint', ({ event, context }) => handleV3Mint(context, 96, event))

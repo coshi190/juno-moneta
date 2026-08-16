@@ -17,7 +17,7 @@ describe('price/history', () => {
             ],
             null
         )
-        expect(priceAt(5)).toBe(1) // before first point clamps to it
+        expect(priceAt(5)).toBe(1)
         expect(priceAt(10)).toBe(1)
         expect(priceAt(25)).toBe(2)
         expect(priceAt(30)).toBe(3)
@@ -32,10 +32,10 @@ describe('price/history', () => {
     it('sanitizePricePoints drops non-finite, non-positive, and gross outliers', () => {
         const points = [
             { timestamp: 1, price: 1 },
-            { timestamp: 2, price: 0 }, // dropped (non-positive)
+            { timestamp: 2, price: 0 },
             { timestamp: 3, price: 2 },
-            { timestamp: 4, price: Infinity }, // dropped (non-finite)
-            { timestamp: 5, price: 1e6 }, // dropped (>100x median)
+            { timestamp: 4, price: Infinity },
+            { timestamp: 5, price: 1e6 },
             { timestamp: 6, price: 3 },
             { timestamp: 7, price: 2 },
         ]
@@ -45,7 +45,6 @@ describe('price/history', () => {
     it('sanitizeUsdPrice accepts in-band prices and rejects garbage', () => {
         expect(sanitizeUsdPrice(2.5, MAX_NATIVE_USD_PRICE)).toBe(2.5)
         expect(sanitizeUsdPrice(69000, MAX_TOKEN_USD_PRICE)).toBe(69000)
-        // 2^128 garbage from an edge pool
         expect(sanitizeUsdPrice(3.402823669e38, MAX_NATIVE_USD_PRICE)).toBeNull()
         expect(sanitizeUsdPrice(3.402823669e38, MAX_TOKEN_USD_PRICE)).toBeNull()
         expect(sanitizeUsdPrice(Infinity, MAX_TOKEN_USD_PRICE)).toBeNull()

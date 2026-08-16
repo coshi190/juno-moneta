@@ -172,17 +172,17 @@ export const v3Pool = onchainTable('v3_pool', (t) => ({
 }))
 
 export const v3Position = onchainTable('v3_position', (t) => ({
-    id: t.text().primaryKey(), // `${chainId}-${tokenId}`
+    id: t.text().primaryKey(),
     chainId: t.integer().notNull(),
     tokenId: t.text().notNull(),
-    owner: t.text().notNull(), // lowercased; zero address once burned/transferred out
+    owner: t.text().notNull(),
     token0: t.text().notNull(),
     token1: t.text().notNull(),
     fee: t.integer().notNull(),
     tickLower: t.integer().notNull(),
     tickUpper: t.integer().notNull(),
-    liquidity: t.text().notNull().default('0'), // maintained via Increase/Decrease deltas
-    tokensOwed0: t.text().notNull().default('0'), // best-effort; UI uses a live collect() sim
+    liquidity: t.text().notNull().default('0'),
+    tokensOwed0: t.text().notNull().default('0'),
     tokensOwed1: t.text().notNull().default('0'),
     createdAtBlock: t.integer().notNull(),
     updatedAt: t.integer().notNull(),
@@ -199,11 +199,8 @@ export const v3PoolDayVolume = onchainTable('v3_pool_day_volume', (t) => ({
     updatedAt: t.integer().notNull(),
 }))
 
-// Running reserve + latest-state accumulator, one row per pool. `reserve0/1` are the pool
-// contract's token balances, reconstructed from Swap/Mint/Collect deltas (kub RPC isn't a full
-// archive node, so historical balanceOf can't be backfilled — reserves must be event-derived).
 export const v3PoolState = onchainTable('v3_pool_state', (t) => ({
-    id: t.text().primaryKey(), // `${chainId}-${poolAddress}`
+    id: t.text().primaryKey(),
     chainId: t.integer().notNull(),
     poolAddress: t.text().notNull(),
     reserve0: t.text().notNull().default('0'),
@@ -214,11 +211,8 @@ export const v3PoolState = onchainTable('v3_pool_state', (t) => ({
     updatedAt: t.integer().notNull(),
 }))
 
-// Daily liquidity-state snapshot — mirrors v3PoolDayVolume, but a level (last-write-wins for the
-// day) rather than a sum. `sqrtPriceX96` is the end-of-day price, for valuing native-leg pools and
-// deriving the token0/token1 pool price.
 export const v3PoolTvlDay = onchainTable('v3_pool_tvl_day', (t) => ({
-    id: t.text().primaryKey(), // `${chainId}-${poolAddress}-${dayTimestamp}`
+    id: t.text().primaryKey(),
     chainId: t.integer().notNull(),
     poolAddress: t.text().notNull(),
     dayTimestamp: t.integer().notNull(),
@@ -228,11 +222,8 @@ export const v3PoolTvlDay = onchainTable('v3_pool_tvl_day', (t) => ({
     updatedAt: t.integer().notNull(),
 }))
 
-// Per-token native-denominated OHLC candles, one row per (token, source, timeframe, bucket).
-// `source` separates the bonding-curve series (reserve price) from the graduated V3 series
-// (sqrtPrice) so the client can stitch them at graduation. Prices/volume are chart-precision doubles.
 export const tokenCandle = onchainTable('token_candle', (t) => ({
-    id: t.text().primaryKey(), // `${chainId}-${tokenAddr}-${source}-${duration}-${bucketTs}`
+    id: t.text().primaryKey(),
     chainId: t.integer().notNull(),
     tokenAddr: t.text().notNull(),
     source: t.text().notNull(),
@@ -271,39 +262,27 @@ export const v3TokenSnapshot = onchainTable('v3_token_snapshot', (t) => ({
     updatedAt: t.integer().notNull(),
 }))
 
-// LP mining incentives, discovered from the V3 staker's IncentiveCreated. Holds only the immutable
-// key plus its creation/refund amounts — the live struct (totalRewardUnclaimed, numberOfStakes)
-// stays an on-chain read, since the staker decrements it using accrual math we'd have to
-// reimplement against pool oracle state to reproduce here.
-//
-// isActive/isEnded are deliberately absent: they're clock-derived from startTime/endTime and
-// would freeze at index time as columns. Consumers compute them at render.
 export const incentive = onchainTable('incentive', (t) => ({
-    id: t.text().primaryKey(), // `${chainId}-${incentiveId}`
+    id: t.text().primaryKey(),
     chainId: t.integer().notNull(),
-    incentiveId: t.text().notNull(), // derived — IncentiveCreated doesn't emit it
+    incentiveId: t.text().notNull(),
     rewardToken: t.text().notNull(),
     pool: t.text().notNull(),
     startTime: t.integer().notNull(),
     endTime: t.integer().notNull(),
     refundee: t.text().notNull(),
-    reward: t.text().notNull(), // initial reward funded at creation
+    reward: t.text().notNull(),
     refunded: t.text().notNull().default('0'),
-    endedAt: t.integer(), // null until IncentiveEnded
+    endedAt: t.integer(),
     createdAtBlock: t.integer().notNull(),
     createdAtTimestamp: t.integer().notNull(),
 }))
 
-// V3 staker deposits, tracked from DepositTransferred. The staker emits it on deposit
-// (oldOwner = 0), on transfer between owners, and on withdraw (newOwner = 0), so a single
-// last-write-wins `owner` column carries the full state — a live deposit is any row whose owner
-// is not the zero address. numberOfStakes is deliberately absent: it's live struct state, read
-// on-chain alongside stakes().
 export const deposit = onchainTable('deposit', (t) => ({
-    id: t.text().primaryKey(), // `${chainId}-${tokenId}`
+    id: t.text().primaryKey(),
     chainId: t.integer().notNull(),
     tokenId: t.text().notNull(),
-    owner: t.text().notNull(), // lowercased; zero address once withdrawn
+    owner: t.text().notNull(),
     updatedAt: t.integer().notNull(),
 }))
 
@@ -315,13 +294,8 @@ export const referralBinding = onchainTable('referral_binding', (t) => ({
     chainId: t.integer().notNull(),
 }))
 
-// Average-cost PnL fold per (chain, token, user), accumulated in the swap handlers. `position` is in
-// human token units (formatUnits) so it lines up with a live balance; the USD fields are doubles.
-// doublePrecision (float8) matches JS `number` and the finalize step's `PnlFold` — float4/`real`
-// both loses precision and overflows (max ~3.4e38) on large cost pools. See
-// packages/sdk/src/pnl/fold.ts for the accounting model.
 export const userTokenPnl = onchainTable('user_token_pnl', (t) => ({
-    id: t.text().primaryKey(), // `${chainId}-${tokenAddr}-${user}`, all lowercased
+    id: t.text().primaryKey(),
     chainId: t.integer().notNull(),
     tokenAddr: t.text().notNull(),
     user: t.text().notNull(),
@@ -332,13 +306,8 @@ export const userTokenPnl = onchainTable('user_token_pnl', (t) => ({
     updatedAt: t.integer().notNull(),
 }))
 
-// Per (chain, user) leaderboard counters folded alongside the PnL. `volumeNative` is the summed
-// native leg of every swap; PnL for the leaderboard is derived by finalizing that user's
-// userTokenPnl rows at read time. The juno/external split feeds `computePoints` (Junoswap volume
-// scores 10x external) and is kept here so points never require re-scanning raw swaps;
-// `volumeNative` stays the sum of the two.
 export const userStat = onchainTable('user_stat', (t) => ({
-    id: t.text().primaryKey(), // `${chainId}-${user}`, lowercased
+    id: t.text().primaryKey(),
     chainId: t.integer().notNull(),
     user: t.text().notNull(),
     volumeNative: t.doublePrecision().notNull().default(0),

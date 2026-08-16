@@ -1,6 +1,5 @@
 import type { V2Swap, V3Swap } from './queries/swaps.js'
 
-/** A swap decoded to its native/token legs with buy/sell direction resolved. */
 export interface ParsedSwap {
     tokenAddr: string
     sender: string
@@ -22,7 +21,7 @@ export function parseV3Swap(e: V3Swap, wrappedNative: string): ParsedSwap | null
     else return null
     const nativeAmt = BigInt(nativeIsToken0 ? e.amount0 : e.amount1)
     const tokenAmt = BigInt(nativeIsToken0 ? e.amount1 : e.amount0)
-    const isBuy = tokenAmt < 0n // token leaves the pool => user receives it
+    const isBuy = tokenAmt < 0n
     return {
         tokenAddr: e.tokenAddr.toLowerCase(),
         sender: e.txFrom,
@@ -54,7 +53,7 @@ export function parseV2Swap(e: V2Swap, wrappedNative: string): ParsedSwap | null
     } else {
         return null
     }
-    const isBuy = nativeIn > 0n // native flows into the pool => user buys token
+    const isBuy = nativeIn > 0n
     return {
         tokenAddr,
         sender: e.txFrom,
@@ -65,4 +64,3 @@ export function parseV2Swap(e: V2Swap, wrappedNative: string): ParsedSwap | null
         protocol: e.protocol || 'unknown',
     }
 }
-

@@ -6,7 +6,6 @@ import type { UserStatRow } from '../ponder/queries/user-stats'
 describe('computeReferralRewards', () => {
     it('ranks referees by points, prices volume, and takes the 10% cut', () => {
         const stats: UserStatRow[] = [
-            // 0xbob: 5000 juno => 100 points; 0xamy: 5000 external => floor(5000/500) = 10
             {
                 user: '0xBOB',
                 volumeNative: 5000,
@@ -30,7 +29,7 @@ describe('computeReferralRewards', () => {
         expect(result.referees.map((r) => r.address)).toEqual(['0xbob', '0xamy'])
         expect(result.referees[0]).toMatchObject({ points: 100, volumeUsd: 10000 })
         expect(result.referees[1]).toMatchObject({ points: 10, volumeUsd: 10000 })
-        expect(result.referralPoints).toBe(11) // floor((100 + 10) * 0.1)
+        expect(result.referralPoints).toBe(11)
     })
 
     it('scores a referee with no folded row at zero', () => {
@@ -40,7 +39,6 @@ describe('computeReferralRewards', () => {
     })
 })
 
-/** Routes a Ponder list query to its fixture rows by matching the entity in the query text. */
 function stubClient(rows: { bindings: unknown[]; stats: unknown[] }): PonderClient {
     return {
         request: async () => ({}) as never,
@@ -86,9 +84,9 @@ describe('fetchReferralRewards', () => {
         expect(result.refereeCount).toBe(1)
         expect(result.referees[0]).toMatchObject({
             address: '0xref1',
-            points: 100, // floor(5000 / 50)
-            volumeUsd: 10000, // 5000 native * 2
+            points: 100,
+            volumeUsd: 10000,
         })
-        expect(result.referralPoints).toBe(10) // floor(100 * 0.1)
+        expect(result.referralPoints).toBe(10)
     })
 })

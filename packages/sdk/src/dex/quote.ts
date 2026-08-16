@@ -18,18 +18,11 @@ export interface QuoteCallInput {
     tokenIn: Address
     tokenOut: Address
     amountIn: bigint
-    /** Full multi-hop route including endpoints. Defaults to [tokenIn, tokenOut]. */
     path?: Address[]
-    /** V3 multi-hop fee tiers; length must be path.length - 1. */
     fees?: number[]
-    /** V3 single-hop fee tier. */
     fee?: number
 }
 
-/**
- * The read call that quotes `amountIn`. Returns undefined when the DEX has no config
- * for the chain, so callers can gate their query on it rather than guessing.
- */
 export function buildQuoteCall(input: QuoteCallInput): ContractCall | undefined {
     const { protocol, chainId, dexId, tokenIn, tokenOut, amountIn } = input
 

@@ -2,10 +2,7 @@ import type { PonderClient } from '../client.js'
 import type { ReferralBinding } from '../entities.js'
 import { sel, type Page, type Row } from './internal.js'
 
-const BINDING_FIELDS = [
-    'referee',
-    'referrer',
-] as const satisfies readonly (keyof ReferralBinding)[]
+const BINDING_FIELDS = ['referee', 'referrer'] as const satisfies readonly (keyof ReferralBinding)[]
 
 export type Binding = Row<ReferralBinding, typeof BINDING_FIELDS>
 
@@ -27,7 +24,6 @@ export function fetchAllReferralBindings(client: PonderClient): Promise<Binding[
     )
 }
 
-/** Everyone a given address referred. */
 export function fetchReferralBindings(
     client: PonderClient,
     { referrer }: { referrer: string }

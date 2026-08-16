@@ -10,10 +10,8 @@ import type { ContractCall } from './plan-swap.js'
 import type { QuoteResult } from './v3-quote.js'
 import { fromAmountsOut } from './v2-quote.js'
 
-/** One quoted multi-hop path. `path` is ready to hand straight to a swap. */
 export interface V2RouteQuote {
     dexId: DEXType
-    /** Resolved swap addresses, endpoints included. */
     path: Address[]
     quote: QuoteResult
 }
@@ -23,15 +21,12 @@ export interface V2RouteParams {
     tokenIn: Address
     tokenOut: Address
     amountIn: bigint
-    /** Intermediary tokens to route through. */
     connectors: Address[]
-    /** Omit to enumerate every V2 DEX on the chain. */
     dexId?: DEXType | DEXType[]
     maxHops?: number
     maxRouteQuotes?: number
 }
 
-/** Stable identity for a pair, order-independent. Unlike V3's poolKey, there is no fee tier. */
 export function pairKey(factory: Address, tokenA: Address, tokenB: Address): string {
     const a = tokenA.toLowerCase()
     const b = tokenB.toLowerCase()
@@ -42,11 +37,9 @@ export function pairKey(factory: Address, tokenA: Address, tokenB: Address): str
 export interface V2RouteCandidate {
     dexId: DEXType
     factory: Address
-    /** Resolved swap addresses, endpoints included. */
     tokens: Address[]
 }
 
-/** The cross product of the requested DEXes and every enumerated path, with native resolved. */
 export function buildV2RouteCandidates(
     params: Omit<V2RouteParams, 'amountIn' | 'maxRouteQuotes'>
 ): V2RouteCandidate[] {
@@ -80,7 +73,6 @@ interface LegQuery {
     key: string
 }
 
-/** getPair calls for every distinct (factory, leg), deduped so shared legs read once. */
 function collectLegQueries(candidates: readonly V2RouteCandidate[]): LegQuery[] {
     const seen = new Map<string, LegQuery>()
     for (const c of candidates) {
@@ -103,11 +95,6 @@ function collectLegQueries(candidates: readonly V2RouteCandidate[]): LegQuery[] 
     return [...seen.values()]
 }
 
-/**
- * Keeps only candidates whose every leg has a live pair, capping the total. `existing` is
- * the set of pairKeys that resolved to a real address in the discovery batch. Unlike V3
- * there is no fee cross product — a candidate either survives whole or is dropped.
- */
 export function buildViableRoutes(
     candidates: readonly V2RouteCandidate[],
     existing: ReadonlySet<string>,
@@ -130,11 +117,10 @@ export function buildViableRoutes(
     return viable
 }
 
-/**
- * Discovery and quoting for every multi-hop path through the given connectors: one batched
- * getPair over every leg, then one batched quote over the surviving candidates.
- */
-export async function getV2Routes(client: ReadClient, params: V2RouteParams): Promise<V2RouteQuote[]> {
+export async function getV2Routes(
+    client: ReadClient,
+    params: V2RouteParams
+): Promise<V2RouteQuote[]> {
     const { chainId, amountIn, maxRouteQuotes = MAX_ROUTE_QUOTES } = params
 
     const candidates = buildV2RouteCandidates(params)
@@ -167,7 +153,6 @@ export async function getV2Routes(client: ReadClient, params: V2RouteParams): Pr
             amountIn,
             path: candidate.tokens,
         })
-        // Undefined only when the DEX has no V2 config, which candidate building already ruled out.
         return call ? [{ candidate, call }] : []
     })
 

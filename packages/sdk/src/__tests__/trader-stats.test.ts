@@ -31,15 +31,14 @@ describe('rewards/trader-stats', () => {
 
     it('computeWindowedTraderStats folds in-window swaps, values the net position, isolates addresses', () => {
         const events: LeaderboardSwapEvent[] = [
-            lb(bEvent(100, 10, 1), ALICE), // buy 100 for 10 KUB * $2 = $20, avg $0.2
-            lb(sEvent(50, 8, 2), ALICE), // sell 50 for 8 KUB * $2 = $16; realized $16 - $10 = $6
+            lb(bEvent(100, 10, 1), ALICE),
+            lb(sEvent(50, 8, 2), ALICE),
             lb(bEvent(200, 30, 1), BOB),
         ]
-        const prices = new Map([[TOKEN, 0.3]]) // remaining 50 @ $0.3 = $15, basis $10 -> unrealized $5
+        const prices = new Map([[TOKEN, 0.3]])
         const stats = computeWindowedTraderStats(events, flatRate, prices)
 
-        // Balance comes from the in-window net position (100 - 50 = 50), not any passed-in balance.
-        expect(stats.get(ALICE)!.pnlUsd).toBeCloseTo(11) // realized $6 + unrealized $5
+        expect(stats.get(ALICE)!.pnlUsd).toBeCloseTo(11)
         expect(stats.get(ALICE)!.volumeNative).toBeCloseTo(18)
         expect(stats.get(ALICE)!.tradeCount).toBe(2)
         expect(stats.get(ALICE)!.buyCount).toBe(1)

@@ -5,10 +5,6 @@ import type { V3PoolDayVolumeRow } from '../ponder/queries/pools.js'
 const Q96 = 2n ** 96n
 const SECONDS_PER_DAY = 86400
 
-/**
- * Minimal pool shape the volume math needs. `V3PoolData` (frontend) satisfies this
- * structurally, so callers pass their pools directly without mapping.
- */
 export interface PoolVolumeMeta {
     address: string
     token0: { address: string; decimals: number }
@@ -25,12 +21,6 @@ function isAddr(a: string, b: string | undefined): boolean {
     return !!b && a.toLowerCase() === b.toLowerCase()
 }
 
-/**
- * Derives the native-token USD price from the wrappedNative/usdStable pool's current
- * sqrtPriceX96, or null when that pool (or price) isn't available. A low-liquidity pool can
- * sit near a tick extreme and yield a wildly out-of-band price, so the result is run through
- * the same {@link sanitizeUsdPrice} bound used for PnL pricing.
- */
 export function deriveNativeUsdPrice(
     pools: PoolVolumeMeta[],
     wrappedNative: string | undefined,
@@ -55,7 +45,6 @@ export function deriveNativeUsdPrice(
     return sanitizeUsdPrice(Number(priceRaw) / 1e18, MAX_NATIVE_USD_PRICE)
 }
 
-/** Prices both token volumes directly from a USD price map (non-native pools). */
 export function computeVolumeFromPrices(
     volumeToken0: bigint,
     decimals0: number,
@@ -69,10 +58,6 @@ export function computeVolumeFromPrices(
     return human0 * price0 + human1 * price1
 }
 
-/**
- * Converts a native-leg pool's token volumes into USD via the pool's own sqrtPriceX96
- * (converting the non-native leg into native terms) and the native/USD price.
- */
 export function computeVolumeUsd(
     volumeToken0: bigint,
     volumeToken1: bigint,
@@ -96,19 +81,6 @@ export function computeVolumeUsd(
     return Number(formatEther(volumeNative)) * nativeUsdPrice
 }
 
-/**
- * Buckets per-day volume rows into 1d/30d windows and converts each pool's volume to USD.
- *
- * Three pricing strategies, in priority order per pool:
- *  1. native leg + a real native/USD price → USD via {@link computeVolumeUsd}.
- *  2. native leg but no native/USD price (and sqrtPriceX96 > 0) → volume expressed in
- *     native-token units (not USD — an intentional fallback, mixed units).
- *  3. no native leg → priced directly from `priceMap` via {@link computeVolumeFromPrices}.
- *
- * `nowSeconds` is passed in so the day-window boundaries are deterministic.
- * Result keys come straight from `row.poolAddress` (the indexer returns lowercased
- * addresses), matching how callers key their lookups.
- */
 export function computePoolVolumesUsd(params: {
     rows: V3PoolDayVolumeRow[]
     pools: PoolVolumeMeta[]

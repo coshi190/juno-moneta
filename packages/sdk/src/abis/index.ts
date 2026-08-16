@@ -1,6 +1,3 @@
-// Barrel for the ABI modules. Generated files are rebuilt by `bun run codegen`;
-// the hand-written ones have no Solidity source in this repo.
-
 export * from './agg-router-junoswap.js'
 export * from './bonding-curve-junoswap.js'
 export * from './erc20-token.js'

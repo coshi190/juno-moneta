@@ -2,7 +2,6 @@ import type { PonderClient } from '../client.js'
 import type { LaunchToken, TokenSnapshot, NativeUsdPrice, SwapEvent } from '../entities.js'
 import { sel, type Items, type Row } from './internal.js'
 
-/** Everything the launchpad UI shows about a token. */
 const DETAIL_FIELDS = [
     'tokenAddr',
     'creator',
@@ -18,7 +17,6 @@ const DETAIL_FIELDS = [
     'graduatedAt',
 ] as const satisfies readonly (keyof LaunchToken)[]
 
-/** Just enough to render a token's avatar/name anywhere it's referenced. */
 const META_FIELDS = [
     'tokenAddr',
     'name',
@@ -67,7 +65,6 @@ export type LaunchTokenMeta = Row<LaunchToken, typeof META_FIELDS>
 export type LaunchTokenListSnapshot = Row<TokenSnapshot, typeof LIST_SNAPSHOT_FIELDS>
 export type CreatorTokenSnapshot = Row<TokenSnapshot, typeof CREATOR_SNAPSHOT_FIELDS>
 
-/** The launchpad token list: tokens and their snapshots in a single round trip. */
 export async function fetchTokenList(
     client: PonderClient,
     { chainId }: { chainId: number }
@@ -126,10 +123,6 @@ export async function fetchCreatorSnapshots(
     return data.tokenSnapshots.items
 }
 
-/**
- * Graduated tokens only. The filter is applied server-side — this used to fetch every launch
- * token and throw away the non-graduated ones in the browser.
- */
 export async function fetchGraduatedTokens(
     client: PonderClient,
     { chainId }: { chainId: number }
@@ -148,7 +141,6 @@ export async function fetchGraduatedTokens(
     return data.launchTokens.items
 }
 
-/** Not-yet-graduated tokens, for token discovery / the swap token list. */
 export async function fetchBondingCurveTokens(
     client: PonderClient,
     { chainId }: { chainId: number }
@@ -164,7 +156,6 @@ export async function fetchBondingCurveTokens(
     return data.launchTokens.items
 }
 
-/** Metadata for every launch token on a chain — used to label swaps/activity rows. */
 export async function fetchLaunchTokenMeta(
     client: PonderClient,
     { chainId }: { chainId: number }
@@ -213,7 +204,6 @@ const RECENT_SWAP_FIELDS = [
 
 export type RecentSwap = Row<SwapEvent, typeof RECENT_SWAP_FIELDS>
 
-/** The launchpad's live trade feed: recent swaps plus the token metadata to label them. */
 export async function fetchRecentSwaps(
     client: PonderClient,
     { chainId, limit = 50 }: { chainId: number; limit?: number }
@@ -244,10 +234,6 @@ export interface LaunchTokenOg {
     nativeUsdPrice: Pick<NativeUsdPrice, 'chainId' | 'price'> | null
 }
 
-/**
- * One token's metadata for server-rendered OG images. Filters by address in the query — the
- * server path used to fetch every token, snapshot and price unfiltered and `.find()` the row.
- */
 export async function fetchLaunchTokenOg(
     client: PonderClient,
     { tokenAddr }: { tokenAddr: string }

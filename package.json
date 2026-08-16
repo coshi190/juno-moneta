@@ -2,9 +2,11 @@
     "name": "junoswap-core",
     "private": true,
     "type": "module",
-    "workspaces": ["packages/*", "indexer"],
+    "workspaces": [
+        "packages/*",
+        "indexer"
+    ],
     "scripts": {
-        "codegen": "bun run scripts/gen-abis.ts && bun run scripts/gen-ponder-types.ts",
         "build": "bun run --filter @coshi190/junoswap-sdk build",
         "typecheck": "bun run --filter '*' typecheck",
         "test": "bun run --filter '*' test",

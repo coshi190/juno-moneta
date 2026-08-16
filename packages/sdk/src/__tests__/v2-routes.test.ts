@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { zeroAddress, type Address, type PublicClient } from 'viem'
-import { CHAIN_IDS } from '../configs/dex-config.js'
+import { CHAIN_IDS } from '../configs/chains.js'
 import type { ContractCall } from '../dex/plan-swap.js'
 import type { ReadResult } from '../dex/multicall.js'
 import {
@@ -47,7 +47,9 @@ describe('dex/v2-routes', () => {
         })
 
         it('normalizes address casing', () => {
-            expect(pairKey(FACTORY, IN.toUpperCase() as Address, OUT)).toBe(pairKey(FACTORY, IN, OUT))
+            expect(pairKey(FACTORY, IN.toUpperCase() as Address, OUT)).toBe(
+                pairKey(FACTORY, IN, OUT)
+            )
         })
     })
 
@@ -94,7 +96,7 @@ describe('dex/v2-routes', () => {
 
         it('drops a candidate when any leg has no pair', () => {
             const c = candidate([IN, C1, OUT])
-            const existing = new Set([pairKey(factory, IN, C1)]) // second leg missing
+            const existing = new Set([pairKey(factory, IN, C1)])
             expect(buildViableRoutes([c], existing)).toEqual([])
         })
 
@@ -112,10 +114,7 @@ describe('dex/v2-routes', () => {
 
     describe('getV2Routes', () => {
         it('discovers legs then quotes the surviving path', async () => {
-            const phases: ReadResult[][] = [
-                [ok(PAIR_1), ok(PAIR_2)], // IN-C1, C1-OUT
-                [ok([1000n, 500n, 1234n])],
-            ]
+            const phases: ReadResult[][] = [[ok(PAIR_1), ok(PAIR_2)], [ok([1000n, 500n, 1234n])]]
             const { client, batches } = stubClient(phases)
 
             const routes = await getV2Routes(client, {

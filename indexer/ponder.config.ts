@@ -27,11 +27,6 @@ const seed = (dex: keyof typeof externalPools) =>
         (p) => (p.pair ?? p.pool) as `0x${string}`
     )
 
-/**
- * Factory addresses come from the SDK's dex-config — the same registry the frontend routes
- * against — so the two can no longer drift. A missing or disabled entry throws rather than
- * silently skipping: it would otherwise leave the DEX unindexed with no error anywhere.
- */
 function v2Factory(chainId: number, dexId: DEXType): `0x${string}` {
     const factoryAddress = getV2Config(chainId, dexId)?.factory
     if (!factoryAddress) throw new Error(`No enabled V2 config for ${dexId} on chain ${chainId}`)
@@ -56,12 +51,7 @@ function v3Staker(chainId: number, dexId: DEXType): `0x${string}` {
     return address
 }
 
-// The Extract<> return type is load-bearing: ponder's factory() needs the event's literal
-// `inputs` to type its `parameter`, so this must not widen to a plain {type,name}.
-const abiEvent = <
-    TAbi extends readonly { type: string; name?: string }[],
-    TName extends string,
->(
+const abiEvent = <TAbi extends readonly { type: string; name?: string }[], TName extends string>(
     abi: TAbi,
     name: TName
 ): Extract<TAbi[number], { type: 'event'; name: TName }> => {
@@ -73,8 +63,6 @@ const abiEvent = <
     return event
 }
 
-// Looked up by name, never by index. The SDK ships full generated ABIs (functions *and*
-// events), so the old positional `ABI[0]` access would now bind the wrong entry.
 const CREATION_EVENT = abiEvent(BONDING_CURVE_JUNOSWAP_ABI, 'Creation')
 const PAIR_CREATED_EVENT = abiEvent(UNISWAP_V2_FACTORY_ABI, 'PairCreated')
 const V3_POOL_CREATED_EVENT = abiEvent(UNISWAP_V3_FACTORY_ABI, 'PoolCreated')
@@ -83,7 +71,6 @@ const BONDING_CURVE_TESTNET = BONDING_CURVE_DEPLOYMENTS[CHAIN_IDS.kubTestnet]!
 const BONDING_CURVE_BITKUB = BONDING_CURVE_DEPLOYMENTS[CHAIN_IDS.bitkub]
 const AGG_ROUTER_BITKUB = AGG_ROUTER_DEPLOYMENTS[CHAIN_IDS.bitkub]!
 
-// getBondingCurveAddress() returns undefined for an unset (zero-address) deployment.
 const BONDING_CURVE_MAINNET_ENABLED = getBondingCurveAddress(CHAIN_IDS.bitkub) !== undefined
 
 const V3_TESTNET_START = 23900000

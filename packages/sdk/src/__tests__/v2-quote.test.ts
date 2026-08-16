@@ -1,17 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { zeroAddress, type Address, type PublicClient } from 'viem'
-import { CHAIN_IDS, ProtocolType } from '../configs/dex-config.js'
-import { WRAPPED_NATIVE_ADDRESSES } from '../configs/token-addresses.js'
+import { CHAIN_IDS, WRAPPED_NATIVE_ADDRESSES } from '../configs/chains.js'
+import { ProtocolType } from '../configs/dex-config.js'
 import { NATIVE_TOKEN_ADDRESS } from '../dex/native.js'
 import type { ContractCall } from '../dex/plan-swap.js'
 import type { ReadResult } from '../dex/multicall.js'
 import { resolveDexIds } from '../dex/v3-pools.js'
-import {
-    discoverV2Pairs,
-    fromAmountsOut,
-    getV2Quotes,
-    quoteV2Pairs,
-} from '../dex/v2-quote.js'
+import { discoverV2Pairs, fromAmountsOut, getV2Quotes, quoteV2Pairs } from '../dex/v2-quote.js'
 
 const TOKEN_A = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as Address
 const TOKEN_B = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' as Address
@@ -21,7 +16,6 @@ const KKUB = WRAPPED_NATIVE_ADDRESSES[CHAIN_IDS.bitkub]!
 const ok = (result: unknown): ReadResult => ({ status: 'success', result })
 const fail = (message: string): ReadResult => ({ status: 'failure', error: new Error(message) })
 
-/** Records the calls handed to each batched read, and replays canned results per phase. */
 function stubClient(phases: ReadResult[][]) {
     const batches: ContractCall[][] = []
     const client = {
@@ -35,7 +29,6 @@ function stubClient(phases: ReadResult[][]) {
     return { client, batches }
 }
 
-/** A chain with no multicall3: every multicall throws and viem falls back to eth_call. */
 function fallbackClient(phases: ReadResult[][]) {
     const flat = phases.flat()
     let cursor = 0
@@ -212,7 +205,6 @@ describe('dex/v2-quote', () => {
         })
 
         it('produces the same answer on a chain with no multicall3', async () => {
-            // bitkub is exactly this chain, so it is the production path — not an edge case.
             const result = await getV2Quotes(fallbackClient([[ok(PAIR_1)], [ok([1000n, 1234n])]]), {
                 chainId: CHAIN_IDS.bitkub,
                 dexId: 'udonswap',

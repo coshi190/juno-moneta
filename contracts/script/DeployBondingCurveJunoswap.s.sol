@@ -5,22 +5,16 @@ import "forge-std/Script.sol";
 import "../src/BondingCurveJunoswap.sol";
 
 contract DeployBondingCurveJunoswap is Script {
-    // Addresses default to KUB testnet; override per-network via env for mainnet.
-    // kub mainnet: WRAPPED_NATIVE=0x67eBD850304c70d983B2d1b93ea79c7CD6c3F6b5 (KKUB),
-    // V3_FACTORY=0x090C6E5fF29251B1eF9EC31605Bdd13351eA316C,
-    // V3_POS_MANAGER=0xb6b76870549893c6b59E7e979F254d0F9Cca4Cc9
-    address constant WRAPPED_NATIVE_TESTNET = 0x700D3ba307E1256e509eD3E45D6f9dff441d6907; // tKKUB
+    address constant WRAPPED_NATIVE_TESTNET = 0x700D3ba307E1256e509eD3E45D6f9dff441d6907;
     address constant V3_FACTORY_TESTNET = 0xCBd41F872FD46964bD4Be4d72a8bEBA9D656565b;
     address constant V3_POS_MANAGER_TESTNET = 0x690f45C21744eCC4ac0D897ACAC920889c3cFa4b;
 
-    // Curve parameters
     uint256 constant INITIAL_NATIVE = 0;
     uint256 constant VIRTUAL_AMOUNT = 3400000000000000000000;
     uint256 constant GRADUATION_AMOUNT = 4000000000000000000000;
 
-    // Fee parameters
     uint256 constant CREATE_FEE = 0.1 ether;
-    uint256 constant PUMP_FEE = 100; // 1% in basis points
+    uint256 constant PUMP_FEE = 100;
 
     function run() external {
         address wrappedNative = vm.envOr("WRAPPED_NATIVE", WRAPPED_NATIVE_TESTNET);
@@ -30,11 +24,7 @@ contract DeployBondingCurveJunoswap is Script {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        BondingCurveJunoswap pump = new BondingCurveJunoswap(
-            wrappedNative,
-            v3Factory,
-            v3PosManager
-        );
+        BondingCurveJunoswap pump = new BondingCurveJunoswap(wrappedNative, v3Factory, v3PosManager);
 
         pump.setCurveState(INITIAL_NATIVE, VIRTUAL_AMOUNT, GRADUATION_AMOUNT);
         pump.setFee(CREATE_FEE, PUMP_FEE);

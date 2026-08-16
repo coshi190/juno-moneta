@@ -1,6 +1,3 @@
-// Generated from contracts/src by `bun run codegen`. Do not edit by hand.
-// Source artifact: IUniswapV2Factory.sol
-
 export const UNISWAP_V2_FACTORY_ABI = [
     {
         type: 'function',

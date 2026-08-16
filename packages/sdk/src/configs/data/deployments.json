@@ -1,0 +1,23 @@
+{
+    "bondingCurve": {
+        "kubTestnet": {
+            "address": "0x77e5D3fC554e30aceFd5322ca65beE15ee6E39a9",
+            "startBlock": 29065000
+        },
+        "bitkub": {
+            "address": "0x65F6EC30A9E70822721585f6Bba15c40c2F8ab4e",
+            "startBlock": 32995517
+        }
+    },
+    "aggRouter": {
+        "bitkub": {
+            "address": "0x869A40921A332e0D79300F91361A3DC77F2a0ebc",
+            "startBlock": 32685221
+        }
+    },
+    "v3StakerStartBlocks": {
+        "kubTestnet": 25824963,
+        "bitkub": 28844994,
+        "jbc": 4990196
+    }
+}

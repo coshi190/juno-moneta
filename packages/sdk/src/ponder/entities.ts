@@ -1,9 +1,3 @@
-// Generated from indexer/ponder.schema.ts by `bun run codegen`. Do not edit by hand.
-//
-// One type per indexed table. Query field lists in ./queries are constrained against
-// these (`satisfies readonly (keyof X)[]`), so a column renamed in the indexer breaks
-// the build instead of silently returning undefined.
-
 export interface AggSwapEvent {
     id: string
     chainId: number
@@ -323,7 +317,6 @@ export interface V3TokenSnapshot {
     updatedAt: number
 }
 
-/** GraphQL root field -> entity, for reference. Ponder pluralises a table as tsName + "s". */
 export interface PonderRootFields {
     aggSwapEvents: 'AggSwapEvent'
     deposits: 'Deposit'

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { Address, PublicClient } from 'viem'
-import { CHAIN_IDS, ProtocolType } from '../configs/dex-config.js'
+import { CHAIN_IDS } from '../configs/chains.js'
+import { ProtocolType } from '../configs/dex-config.js'
 import type { ContractCall } from '../dex/plan-swap.js'
 import type { ReadResult } from '../dex/multicall.js'
 import { computePriceImpactPercent, getRoutePriceImpact } from '../dex/price-impact.js'
@@ -46,7 +47,6 @@ describe('computePriceImpactPercent', () => {
 
 describe('getRoutePriceImpact', () => {
     it('quotes the route at 0.1% and compares against the full output', async () => {
-        // V3 single hop, 1000 in. Reference (1 in -> 2 out, rate 2); full 1000 in -> 1900 out (rate 1.9) -> 5%.
         const { client, batches } = stubClient([ok([2n, 0n, 0, 0n])])
 
         const result = await getRoutePriceImpact(client, {
@@ -65,8 +65,6 @@ describe('getRoutePriceImpact', () => {
     })
 
     it('extracts the last element for a V2 getAmountsOut return', async () => {
-        // V2 getAmountsOut returns [amountIn, amountOut]; rate 2 reference, full 5% worse.
-        // udonswap is a V2 DEX on bitkub.
         const result = await getRoutePriceImpact(stubClient([ok([1n, 2n])]).client, {
             chainId: CHAIN_IDS.bitkub,
             protocol: ProtocolType.V2,
@@ -88,7 +86,7 @@ describe('getRoutePriceImpact', () => {
             dexId: 'junoswap',
             path: [TOKEN_A, TOKEN_B],
             fees: [3000],
-            amountIn: 500n, // 500 / 1000 = 0
+            amountIn: 500n,
             fullAmountOut: 100n,
         })
 

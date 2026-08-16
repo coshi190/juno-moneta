@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { Address, PublicClient } from 'viem'
-import { CHAIN_IDS, ProtocolType } from '../configs/dex-config.js'
+import { CHAIN_IDS } from '../configs/chains.js'
+import { ProtocolType } from '../configs/dex-config.js'
 import type { ContractCall } from '../dex/plan-swap.js'
 import type { ReadResult } from '../dex/multicall.js'
 import {
@@ -83,7 +84,7 @@ describe('dex/split-routing', () => {
 
     describe('computeGridAmounts', () => {
         it('produces exact legs that always sum to amountIn', () => {
-            const amountIn = 1_000_000_000_000_000_001n // odd, to catch rounding
+            const amountIn = 1_000_000_000_000_000_001n
             const { amountsInA, amountsInB } = computeGridAmounts(amountIn, [0.1, 0.5, 0.9])
             amountsInA.forEach((a, i) => expect(a + amountsInB[i]!).toBe(amountIn))
             expect(amountsInA[1]).toBe(amountIn / 2n)
@@ -97,7 +98,6 @@ describe('dex/split-routing', () => {
         }
 
         it('picks the interior allocation that beats routing everything through one DEX', () => {
-            // 50/50 yields 70+70=140, beating the best single route (120).
             const grid: SplitQuoteGrid = {
                 ...base,
                 amountsInA: [30n, 50n, 70n],
@@ -120,7 +120,7 @@ describe('dex/split-routing', () => {
                 amountsInB: [70n, 50n, 30n],
                 grossA: [30n, 55n, 80n],
                 grossB: [55n, 50n, 30n],
-                bestSingleOut: 120n, // 85, 105, 110 all fall short
+                bestSingleOut: 120n,
                 aggFeeBps: 0,
             }
             expect(pickBestSplit(grid)).toBeNull()
@@ -134,7 +134,7 @@ describe('dex/split-routing', () => {
                 grossA: [5000n],
                 grossB: [5000n],
                 bestSingleOut: 9000n,
-                aggFeeBps: 100, // 1% -> 10000 net
+                aggFeeBps: 100,
             }
             expect(pickBestSplit(grid)?.predictedNetOut).toBe(9900n)
         })
@@ -154,14 +154,14 @@ describe('dex/split-routing', () => {
     })
 
     describe('splitClearsMargin', () => {
-        const marginBps = 50 // beat the baseline by strictly more than 0.5%
+        const marginBps = 50
 
         it('clears when the predicted output beats the baseline by more than the margin', () => {
-            expect(splitClearsMargin(1010n, 1000n, marginBps)).toBe(true) // 1.0%
+            expect(splitClearsMargin(1010n, 1000n, marginBps)).toBe(true)
         })
 
         it('does not clear when the improvement is within the margin', () => {
-            expect(splitClearsMargin(1004n, 1000n, marginBps)).toBe(false) // 0.4%
+            expect(splitClearsMargin(1004n, 1000n, marginBps)).toBe(false)
         })
 
         it('does not clear at exactly the margin (strictly greater)', () => {
@@ -211,13 +211,12 @@ describe('dex/split-routing', () => {
         }
 
         it('quotes the grid plus feeBps in one batch and returns the best split', async () => {
-            // udonswap is candidate A (120 > 100). Both legs quote 70 -> 140 net > 120.
             const { client, batches } = stubClient([[ok([50n, 70n]), ok([50n, 70n]), ok(0n)]])
 
             const res = await getSplitQuote(client, params)
 
             expect(batches).toHaveLength(1)
-            expect(batches[0]).toHaveLength(3) // A@0.5, B@0.5, feeBps
+            expect(batches[0]).toHaveLength(3)
             expect(res.allocation?.predictedNetOut).toBe(140n)
             expect(res.allocation?.amountInA).toBe(50n)
             expect(res.allocation?.amountInB).toBe(50n)
@@ -234,7 +233,7 @@ describe('dex/split-routing', () => {
             })
 
             expect(res.aggFeeBps).toBe(100)
-            expect(res.allocation?.predictedNetOut).toBe(9900n) // 10000 * (1 - 1%)
+            expect(res.allocation?.predictedNetOut).toBe(9900n)
         })
 
         it('returns no allocation but still reads feeBps when fewer than two DEXes qualify', async () => {
@@ -245,7 +244,7 @@ describe('dex/split-routing', () => {
                 routes: [route('udonswap', 120n)],
             })
 
-            expect(batches[0]).toHaveLength(1) // feeBps only
+            expect(batches[0]).toHaveLength(1)
             expect(res.allocation).toBeNull()
             expect(res.aggFeeBps).toBe(30)
         })

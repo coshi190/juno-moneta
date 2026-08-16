@@ -1,11 +1,4 @@
-// Hand-written: no Solidity source for this contract in contracts/src (we only call it).
-/**
- * Uniswap V3 Staker ABI
- * Contract for staking Uniswap V3 LP positions to earn rewards
- * https://github.com/Uniswap/v3-staker
- */
 export const UNISWAP_V3_STAKER_ABI = [
-    // Stake a deposited NFT into an incentive
     {
         type: 'function',
         name: 'stakeToken',
@@ -27,7 +20,6 @@ export const UNISWAP_V3_STAKER_ABI = [
         outputs: [],
     },
 
-    // Unstake a staked NFT from an incentive
     {
         type: 'function',
         name: 'unstakeToken',
@@ -49,7 +41,6 @@ export const UNISWAP_V3_STAKER_ABI = [
         outputs: [],
     },
 
-    // Claim accumulated rewards
     {
         type: 'function',
         name: 'claimReward',
@@ -62,7 +53,6 @@ export const UNISWAP_V3_STAKER_ABI = [
         outputs: [{ name: 'reward', type: 'uint256' }],
     },
 
-    // Withdraw a deposited NFT (must be unstaked first)
     {
         type: 'function',
         name: 'withdrawToken',
@@ -75,7 +65,6 @@ export const UNISWAP_V3_STAKER_ABI = [
         outputs: [],
     },
 
-    // Transfer ownership of a deposited NFT
     {
         type: 'function',
         name: 'transferDeposit',
@@ -87,7 +76,6 @@ export const UNISWAP_V3_STAKER_ABI = [
         outputs: [],
     },
 
-    // Create a new incentive
     {
         type: 'function',
         name: 'createIncentive',
@@ -109,7 +97,6 @@ export const UNISWAP_V3_STAKER_ABI = [
         outputs: [],
     },
 
-    // End an incentive and refund remaining rewards
     {
         type: 'function',
         name: 'endIncentive',
@@ -130,7 +117,6 @@ export const UNISWAP_V3_STAKER_ABI = [
         outputs: [{ name: 'refund', type: 'uint256' }],
     },
 
-    // Multicall for batching transactions
     {
         type: 'function',
         name: 'multicall',
@@ -139,7 +125,6 @@ export const UNISWAP_V3_STAKER_ABI = [
         outputs: [{ name: 'results', type: 'bytes[]' }],
     },
 
-    // Get reward info for a staked position
     {
         type: 'function',
         name: 'getRewardInfo',
@@ -164,7 +149,6 @@ export const UNISWAP_V3_STAKER_ABI = [
         ],
     },
 
-    // Get deposit info for a token
     {
         type: 'function',
         name: 'deposits',
@@ -178,7 +162,6 @@ export const UNISWAP_V3_STAKER_ABI = [
         ],
     },
 
-    // Get incentive info by ID
     {
         type: 'function',
         name: 'incentives',
@@ -191,7 +174,6 @@ export const UNISWAP_V3_STAKER_ABI = [
         ],
     },
 
-    // Get stake info for a position in an incentive
     {
         type: 'function',
         name: 'stakes',
@@ -206,7 +188,6 @@ export const UNISWAP_V3_STAKER_ABI = [
         ],
     },
 
-    // Get claimable rewards for an owner
     {
         type: 'function',
         name: 'rewards',
@@ -218,7 +199,6 @@ export const UNISWAP_V3_STAKER_ABI = [
         outputs: [{ name: 'rewardsOwed', type: 'uint256' }],
     },
 
-    // Get the NonfungiblePositionManager address
     {
         type: 'function',
         name: 'nonfungiblePositionManager',
@@ -227,7 +207,6 @@ export const UNISWAP_V3_STAKER_ABI = [
         outputs: [{ name: '', type: 'address' }],
     },
 
-    // Get the factory address
     {
         type: 'function',
         name: 'factory',
@@ -236,7 +215,6 @@ export const UNISWAP_V3_STAKER_ABI = [
         outputs: [{ name: '', type: 'address' }],
     },
 
-    // Get max incentive duration
     {
         type: 'function',
         name: 'maxIncentiveDuration',
@@ -245,7 +223,6 @@ export const UNISWAP_V3_STAKER_ABI = [
         outputs: [{ name: '', type: 'uint256' }],
     },
 
-    // Get max incentive start lead time
     {
         type: 'function',
         name: 'maxIncentiveStartLeadTime',
@@ -314,7 +291,3 @@ export const UNISWAP_V3_STAKER_ABI = [
         ],
     },
 ] as const
-
-/**
- * IncentiveKey type for TypeScript
- */

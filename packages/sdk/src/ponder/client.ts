@@ -16,12 +16,6 @@ export interface PonderPageInfo {
 
 export interface PonderClient {
     request<T>(query: string, variables?: Record<string, unknown>): Promise<T>
-    /**
-     * Walks every page of a Ponder list query via opaque cursor. The cursor must be
-     * pageInfo.endCursor (a raw row id is rejected server-side). Ponder caps a list response
-     * at 50 items without an explicit limit, so callers must pass `limit` (and a matching
-     * `$after` variable) in their query.
-     */
     fetchAllPages<TResponse, TItem>(
         query: string,
         variables: Record<string, unknown>,
@@ -29,10 +23,6 @@ export interface PonderClient {
     ): Promise<TItem[]>
 }
 
-/**
- * `url` is resolved lazily: the frontend's endpoint depends on window.location.origin, which
- * doesn't exist when this module is first imported during SSR.
- */
 export function createPonderClient(url: string | (() => string)): PonderClient {
     let client: GraphQLClient | null = null
     let consecutiveFailures = 0
@@ -43,7 +33,7 @@ export function createPonderClient(url: string | (() => string)): PonderClient {
         return client
     }
 
-    const request = <T,>(query: string, variables?: Record<string, unknown>): Promise<T> => {
+    const request = <T>(query: string, variables?: Record<string, unknown>): Promise<T> => {
         if (Date.now() < circuitOpenUntil) {
             throw new Error('Ponder circuit breaker open')
         }

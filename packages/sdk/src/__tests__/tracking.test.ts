@@ -11,13 +11,13 @@ import {
 import type { Address } from 'viem'
 
 const REF: Address = '0x1111111111111111111111111111111111111111'
-const SWAP_CALLDATA = ('0x38ed1739' + 'ab'.repeat(160)) as `0x${string}` // arbitrary encoded swap
+const SWAP_CALLDATA = ('0x38ed1739' + 'ab'.repeat(160)) as `0x${string}`
 
 describe('buildTrackingSuffix', () => {
     it('is marker + referrer = 24 bytes', () => {
         const suffix = buildTrackingSuffix(REF)
         expect(suffix.startsWith(JUNOSWAP_CALLDATA_MARKER)).toBe(true)
-        expect(suffix.length).toBe(2 + 48) // 0x + 24 bytes
+        expect(suffix.length).toBe(2 + 48)
         expect(suffix.toLowerCase().endsWith(REF.slice(2))).toBe(true)
     })
 })
@@ -30,8 +30,6 @@ describe('normalizeReferrer', () => {
     })
 })
 
-// The frontend and indexer must agree on the suffix format, or attribution silently
-// breaks. Round-trip through both modules to lock that contract.
 describe('appendTrackingTag <-> parseTrackingTag', () => {
     it('marks the swap as frontend-originated and recovers the referrer', () => {
         const tagged = appendTrackingTag(SWAP_CALLDATA, REF)
@@ -40,8 +38,6 @@ describe('appendTrackingTag <-> parseTrackingTag', () => {
     })
 
     it('is frontend-originated with null referrer when no ref param was present', () => {
-        // No ?ref= => DEFAULT_REFERRER (zero address) is appended; marker is still
-        // present, so it counts as a frontend swap but referrer parses to null.
         const tagged = appendTrackingTag(SWAP_CALLDATA, normalizeReferrer(null))
         expect(DEFAULT_REFERRER).toBe('0x0000000000000000000000000000000000000000')
         expect(parseTrackingTag(tagged)).toEqual({ referrer: null })
@@ -51,7 +47,6 @@ describe('appendTrackingTag <-> parseTrackingTag', () => {
         expect(parseTrackingTag(SWAP_CALLDATA)).toBeNull()
         expect(parseTrackingTag(undefined)).toBeNull()
         expect(parseTrackingTag('0x')).toBeNull()
-        // 24-byte tail that is the right length but wrong marker
         expect(parseTrackingTag('0x' + 'cd'.repeat(24))).toBeNull()
     })
 })

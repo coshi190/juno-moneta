@@ -51,7 +51,11 @@ export type V3PoolTvlDayRow = Row<V3PoolTvlDay, typeof POOL_TVL_DAY_FIELDS>
 
 export async function fetchV3Pools(
     client: PonderClient,
-    { chainId, protocol = 'junoswap', limit = 500 }: { chainId: number; protocol?: string; limit?: number }
+    {
+        chainId,
+        protocol = 'junoswap',
+        limit = 500,
+    }: { chainId: number; protocol?: string; limit?: number }
 ): Promise<V3PoolRow[]> {
     const data = await client.request<{ v3Pools: Items<V3PoolRow> }>(
         `query V3Pools($chainId: Int!, $protocol: String!, $limit: Int!) {
@@ -64,13 +68,6 @@ export async function fetchV3Pools(
     return data.v3Pools.items
 }
 
-/**
- * Every token the indexer has seen in a V3 pool on this chain.
- *
- * One function for what used to be four separate near-identical queries across useAllPools,
- * useChainTokens, useTokenDiscovery and useUserActivity — three of which also shared a
- * React-Query cache key while returning different shapes.
- */
 export async function fetchV3Tokens(
     client: PonderClient,
     { chainId, limit = 500 }: { chainId: number; limit?: number }
@@ -116,13 +113,13 @@ export async function fetchV3PoolDayVolumes(
     return data.v3PoolDayVolumes.items
 }
 
-/**
- * Current indexed reserves + latest state for the given pools. Only pools tracked from creation
- * (junoswap V3) have a row — callers should fall back to an on-chain balanceOf for the rest.
- */
 export async function fetchV3PoolReserves(
     client: PonderClient,
-    { chainId, poolAddresses, limit = 1000 }: { chainId: number; poolAddresses: string[]; limit?: number }
+    {
+        chainId,
+        poolAddresses,
+        limit = 1000,
+    }: { chainId: number; poolAddresses: string[]; limit?: number }
 ): Promise<V3PoolStateRow[]> {
     if (poolAddresses.length === 0) return []
     const data = await client.request<{ v3PoolStates: Items<V3PoolStateRow> }>(
@@ -137,7 +134,6 @@ export async function fetchV3PoolReserves(
     return data.v3PoolStates.items
 }
 
-/** Daily liquidity-state snapshots (reserves + end-of-day sqrtPrice) for a TVL history series. */
 export async function fetchV3PoolTvlDays(
     client: PonderClient,
     {
@@ -168,10 +164,6 @@ export async function fetchV3PoolTvlDays(
     return data.v3PoolTvlDays.items
 }
 
-/**
- * The V3 pool a bonding-curve token graduated into. Token order in the pool depends on address
- * sort order, so both orientations are tried.
- */
 export async function fetchGraduatedPool(
     client: PonderClient,
     {
