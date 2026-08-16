@@ -1,12 +1,5 @@
-# Compiler files
 cache/
 out/
-
-# Deploy artifacts
 broadcast/
-
-# Dotenv file
 .env
-
-# OS files
 .DS_Store

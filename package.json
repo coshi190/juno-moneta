@@ -8,6 +8,8 @@
     ],
     "scripts": {
         "build": "bun run --filter @coshi190/junoswap-sdk build && bun run --filter @coshi190/junoswap-cli build",
+        "cli": "bun run packages/cli/src/cli.ts",
+        "clean": "bun run --filter '*' clean && rm -rf contracts/out contracts/cache contracts/broadcast",
         "typecheck": "bun run --filter '*' typecheck",
         "test": "bun run --filter '*' test",
         "format": "prettier --write .",

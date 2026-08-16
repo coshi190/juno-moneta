@@ -23,6 +23,7 @@
     "sideEffects": false,
     "scripts": {
         "build": "rm -rf dist && tsc -p tsconfig.build.json",
+        "clean": "rm -rf dist *.tsbuildinfo",
         "typecheck": "tsc --noEmit",
         "test": "vitest --run",
         "prepublishOnly": "bun run build"

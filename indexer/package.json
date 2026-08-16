@@ -6,6 +6,7 @@
         "dev": "ponder dev",
         "start": "ponder start",
         "codegen": "ponder codegen",
+        "clean": "rm -rf .ponder generated dist *.tsbuildinfo",
         "typecheck": "tsc --noEmit",
         "test": "vitest --run"
     },
