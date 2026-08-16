@@ -9,7 +9,7 @@ import {
     type PnlFold,
     type FoldSwapInput,
     type PnlSwapEvent,
-} from '../pnl/index.js'
+} from '../traders/fold.js'
 
 function fold(events: FoldSwapInput[], decimals = 18): PnlFold {
     return events.reduce((f, e) => applyFoldEvent(f, e, decimals), EMPTY_FOLD)
@@ -33,7 +33,7 @@ function sell(tokens: number, kub: number, nativeUsd: number): FoldSwapInput {
     }
 }
 
-describe('pnl fold + finalize', () => {
+describe('traders fold + finalize', () => {
     it('buy-only: unrealized only, no realized', () => {
         const pnl = finalizeTokenPnl(fold([buy(100, 10, 2)]), 100, 0.5)
         expect(pnl.totalInvestedUsd).toBeCloseTo(20)
@@ -113,7 +113,7 @@ describe('pnl fold + finalize', () => {
     })
 })
 
-describe('pnl batch engine', () => {
+describe('traders batch engine', () => {
     const TOKEN = '0xtoken'
 
     function bEvent(tokens: number, kub: number, timestamp: number): PnlSwapEvent {

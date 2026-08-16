@@ -1,12 +1,12 @@
 import { formatEther } from 'viem'
-import { computePoints, isJunoswapProtocol } from './points.js'
+import { computePoints, isJunoswapProtocol } from '../rewards/points.js'
 import {
     EMPTY_FOLD,
     applyFoldEvent,
     finalizePortfolioPnl,
     type PnlFold,
     type PnlSwapEvent,
-} from '../pnl/index.js'
+} from './fold.js'
 
 export interface LeaderboardSwapEvent extends PnlSwapEvent {
     sender: string
