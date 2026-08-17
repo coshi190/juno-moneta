@@ -1,5 +1,6 @@
 import type { PonderClient } from '../client.js'
 import type { UserStat } from '../entities.js'
+import { userStatPoints } from '../../rewards/points.js'
 import { sel, MAX_LIMIT, type Page, type Row } from './internal.js'
 
 const USER_STAT_FIELDS = [
@@ -12,13 +13,22 @@ const USER_STAT_FIELDS = [
     'sellCount',
 ] as const satisfies readonly (keyof UserStat)[]
 
-export type UserStatRow = Row<UserStat, typeof USER_STAT_FIELDS>
+type UserStatFields = Row<UserStat, typeof USER_STAT_FIELDS>
 
-export function fetchUserStats(
+export type UserStatRow = UserStatFields & {
+    points: number
+    volumeUsd: number
+}
+
+export async function fetchUserStats(
     client: PonderClient,
-    { chainId, users }: { chainId: number; users: string[] }
+    {
+        chainId,
+        users,
+        nativeUsdPrice,
+    }: { chainId: number; users: string[]; nativeUsdPrice: number | null }
 ): Promise<UserStatRow[]> {
-    return client.fetchAllPages<{ userStats: Page<UserStatRow> }, UserStatRow>(
+    const rows = await client.fetchAllPages<{ userStats: Page<UserStatFields> }, UserStatFields>(
         `query UserStats($where: userStatFilter, $after: String) {
             userStats(
                 where: $where
@@ -34,4 +44,10 @@ export function fetchUserStats(
         { where: { chainId, user_in: users } },
         (r) => r.userStats
     )
+    const price = nativeUsdPrice ?? 0
+    return rows.map((row) => ({
+        ...row,
+        points: userStatPoints(row),
+        volumeUsd: row.volumeNative * price,
+    }))
 }

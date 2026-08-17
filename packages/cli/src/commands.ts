@@ -12,6 +12,7 @@ import {
     V3_STAKER_START_BLOCKS,
     WRAPPED_NATIVE_ADDRESSES,
     createPonderClient,
+    fetchNativeUsdPrice,
     fetchUserStats,
     getAggRouterAddress,
     getBondingCurveAddress,
@@ -220,14 +221,14 @@ export const COMMANDS: Record<string, Command> = {
     fetchUserStats: {
         group: PONDER,
         flags: `${CHAIN_FLAG} --users <addr,addr> [--ponderUrl <url>]`,
-        describe: 'Aggregate trade volume and counts per user from the indexer',
-        run: (args) => {
+        describe:
+            'Aggregate trade volume, counts, points, and USD volume per user from the indexer',
+        run: async (args) => {
             const chainId = parseChainId(args.chainId)
             const users = parseAddressList(args.users, 'users')
-            return fetchUserStats(createPonderClient(parsePonderUrl(args.ponderUrl)), {
-                chainId,
-                users,
-            })
+            const client = createPonderClient(parsePonderUrl(args.ponderUrl))
+            const nativeUsdPrice = await fetchNativeUsdPrice(client, { chainId })
+            return fetchUserStats(client, { chainId, users, nativeUsdPrice })
         },
     },
 }

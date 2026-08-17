@@ -7,7 +7,8 @@ import {
     finalizeTokenPnl,
     finalizePortfolioPnl,
     computeWindowedTraderStats,
-    computePoints,
+    computeReferralPoints,
+    userStatPoints,
     parseV2Swap,
     parseV3Swap,
     makePriceAt,
@@ -215,6 +216,29 @@ async function windowedLeaderboardTraders(chainId: number, since: number) {
     return [...statsByAddr].map(([address, s]) => ({ address, ...s }))
 }
 
+async function withReferredPoints<T extends { address: string; points: number }>(
+    chainId: number,
+    traders: T[]
+): Promise<Array<T & { referredPoints: number }>> {
+    const bindings = await db
+        .select()
+        .from(schema.referralBinding)
+        .where(eq(schema.referralBinding.chainId, chainId))
+
+    const pointsByUser = new Map(traders.map((t) => [t.address.toLowerCase(), t.points]))
+    const byReferrer = new Map<string, number[]>()
+    for (const b of bindings) {
+        const list = byReferrer.get(b.referrer) ?? []
+        list.push(pointsByUser.get(b.referee) ?? 0)
+        byReferrer.set(b.referrer, list)
+    }
+
+    return traders.map((t) => ({
+        ...t,
+        referredPoints: computeReferralPoints(byReferrer.get(t.address.toLowerCase()) ?? []),
+    }))
+}
+
 app.get('/leaderboard', async (c) => {
     const chainId = Number(c.req.query('chainId'))
     if (!Number.isInteger(chainId)) {
@@ -224,7 +248,8 @@ app.get('/leaderboard', async (c) => {
     const windowSeconds = PERIOD_SECONDS[c.req.query('period') ?? '']
     if (windowSeconds) {
         const since = Math.floor(Date.now() / 1000) - windowSeconds
-        return c.json({ traders: await windowedLeaderboardTraders(chainId, since) })
+        const windowed = await windowedLeaderboardTraders(chainId, since)
+        return c.json({ traders: await withReferredPoints(chainId, windowed) })
     }
 
     const [pnlRows, statRows] = await Promise.all([
@@ -253,14 +278,14 @@ app.get('/leaderboard', async (c) => {
             volumeNative: s.volumeNative,
             junoVolumeNative: s.junoVolumeNative,
             externalVolumeNative: s.externalVolumeNative,
-            points: computePoints(s.junoVolumeNative, s.externalVolumeNative),
+            points: userStatPoints(s),
             tradeCount: s.tradeCount,
             buyCount: s.buyCount,
             sellCount: s.sellCount,
         }
     })
 
-    return c.json({ traders })
+    return c.json({ traders: await withReferredPoints(chainId, traders) })
 })
 
 export default app

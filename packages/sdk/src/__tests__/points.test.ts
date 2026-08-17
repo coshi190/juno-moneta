@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computePoints, computeReferralPoints, isJunoswapProtocol } from '../rewards/points.js'
+import { computePoints, isJunoswapProtocol, userStatPoints } from '../rewards/points.js'
 
 describe('computePoints', () => {
     it('scores junoswap volume at 1 point per 50 native', () => {
@@ -17,14 +17,9 @@ describe('computePoints', () => {
     })
 })
 
-describe('computeReferralPoints', () => {
-    it('awards 10% of the summed referee points, floored once', () => {
-        expect(computeReferralPoints([1200, 340])).toBe(154)
-    })
-
-    it('floors the aggregate, not per referee', () => {
-        expect(computeReferralPoints([5, 5])).toBe(1)
-        expect(computeReferralPoints([])).toBe(0)
+describe('userStatPoints', () => {
+    it('scores a stat row from its two volume columns', () => {
+        expect(userStatPoints({ junoVolumeNative: 1000, externalVolumeNative: 1000 })).toBe(22)
     })
 })
 
