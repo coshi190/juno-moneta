@@ -23,6 +23,7 @@ export function helpText(): string {
         '  --dexId <dex>           dex id, defaults to junoswap',
         '  --protocolType v2|v3    protocol to select',
         '  --users <addr,addr>     comma-separated user addresses',
+        '  --referrer <addr>       referrer address',
         '  --ponderUrl <url>       indexer graphql endpoint, defaults to $JUNOSWAP_PONDER_URL',
         '  --raw                   print scalar results unquoted',
         '  -h, --help              show this help',

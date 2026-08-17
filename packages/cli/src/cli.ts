@@ -10,6 +10,7 @@ const OPTIONS = {
     dexId: { type: 'string' },
     protocolType: { type: 'string' },
     users: { type: 'string' },
+    referrer: { type: 'string' },
     ponderUrl: { type: 'string' },
     raw: { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h', default: false },

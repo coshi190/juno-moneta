@@ -12,7 +12,10 @@ import {
     V3_STAKER_START_BLOCKS,
     WRAPPED_NATIVE_ADDRESSES,
     createPonderClient,
+    fetchAllReferralBindings,
     fetchNativeUsdPrice,
+    fetchReferralBindings,
+    fetchReferralRewards,
     fetchUserStats,
     getAggRouterAddress,
     getBondingCurveAddress,
@@ -33,6 +36,7 @@ import {
 } from '@coshi190/junoswap-sdk'
 import {
     optionalProtocolType,
+    parseAddress,
     parseAddressList,
     parseChainId,
     parsePonderUrl,
@@ -45,6 +49,7 @@ export interface CommandArgs {
     dexId?: string | undefined
     protocolType?: string | undefined
     users?: string | undefined
+    referrer?: string | undefined
     ponderUrl?: string | undefined
 }
 
@@ -229,6 +234,33 @@ export const COMMANDS: Record<string, Command> = {
             const client = createPonderClient(parsePonderUrl(args.ponderUrl))
             const nativeUsdPrice = await fetchNativeUsdPrice(client, { chainId })
             return fetchUserStats(client, { chainId, users, nativeUsdPrice })
+        },
+    },
+    fetchAllReferralBindings: {
+        group: PONDER,
+        flags: '[--ponderUrl <url>]',
+        describe: 'Every referee and referrer pair from the indexer, oldest binding first',
+        run: (args) => fetchAllReferralBindings(createPonderClient(parsePonderUrl(args.ponderUrl))),
+    },
+    fetchReferralBindings: {
+        group: PONDER,
+        flags: '--referrer <addr> [--ponderUrl <url>]',
+        describe: 'Referees bound to a referrer, oldest binding first',
+        run: (args) =>
+            fetchReferralBindings(createPonderClient(parsePonderUrl(args.ponderUrl)), {
+                referrer: parseAddress(args.referrer, 'referrer'),
+            }),
+    },
+    fetchReferralRewards: {
+        group: PONDER,
+        flags: `${CHAIN_FLAG} --referrer <addr> [--ponderUrl <url>]`,
+        describe: 'Referral points and referred trader breakdown for a referrer',
+        run: async (args) => {
+            const chainId = parseChainId(args.chainId)
+            const referrer = parseAddress(args.referrer, 'referrer')
+            const client = createPonderClient(parsePonderUrl(args.ponderUrl))
+            const nativeUsdPrice = await fetchNativeUsdPrice(client, { chainId })
+            return fetchReferralRewards(client, { chainId, referrer, nativeUsdPrice })
         },
     },
 }

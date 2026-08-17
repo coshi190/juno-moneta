@@ -14,6 +14,18 @@ export const CHAIN_SLUGS = Object.keys(CHAIN_IDS)
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/
 
+function normalizeAddress(item: string): string {
+    if (!ADDRESS.test(item)) {
+        throw new UsageError(`invalid address "${item}" (expected 0x + 40 hex chars)`)
+    }
+    return item.toLowerCase()
+}
+
+export function parseAddress(value: string | undefined, flag: string): string {
+    if (value === undefined) throw new UsageError(`missing required flag --${flag}`)
+    return normalizeAddress(value.trim())
+}
+
 export function parseAddressList(value: string | undefined, flag: string): string[] {
     if (value === undefined) throw new UsageError(`missing required flag --${flag}`)
     const items = value
@@ -21,12 +33,7 @@ export function parseAddressList(value: string | undefined, flag: string): strin
         .map((item) => item.trim())
         .filter((item) => item.length > 0)
     if (items.length === 0) throw new UsageError(`--${flag} requires at least one address`)
-    for (const item of items) {
-        if (!ADDRESS.test(item)) {
-            throw new UsageError(`invalid address "${item}" (expected 0x + 40 hex chars)`)
-        }
-    }
-    return items.map((item) => item.toLowerCase())
+    return items.map(normalizeAddress)
 }
 
 export function parsePonderUrl(value: string | undefined): string {
