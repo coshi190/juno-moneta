@@ -9,6 +9,7 @@ WORKDIR /app
 # Manifests first so a source-only change doesn't bust the install layer.
 COPY package.json bun.lock ./
 COPY packages/sdk/package.json ./packages/sdk/
+COPY packages/cli/package.json ./packages/cli/
 COPY indexer/package.json ./indexer/
 RUN bun install --frozen-lockfile
 
