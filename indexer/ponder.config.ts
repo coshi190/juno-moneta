@@ -94,6 +94,7 @@ export default createConfig({
         bitkub: {
             id: CHAIN_IDS.bitkub,
             rpc: process.env.PONDER_RPC_URL_96 ?? DEFAULT_RPC_URLS[CHAIN_IDS.bitkub]!,
+            ethGetLogsBlockRange: 50_000,
         },
         jbc: {
             id: CHAIN_IDS.jbc,
