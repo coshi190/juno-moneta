@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { parse, type DocumentNode, type OperationDefinitionNode, type FieldNode } from 'graphql'
 import type { PonderClient, PonderPageInfo } from '../ponder/client'
 import * as q from '../ponder/queries'
@@ -232,5 +232,73 @@ describe('empty address lists short-circuit instead of querying', () => {
         ],
     ])('%s', async (_name, run) => {
         await expect(run()).resolves.toEqual([])
+    })
+})
+
+describe('fetchIndexerStatus', () => {
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
+    it('reads `_meta` and derives the lag from the indexed block timestamp', async () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(1_755_561_234_000)
+
+        const cap: Captured[] = []
+        const client = stubClient(
+            {
+                _meta: {
+                    status: {
+                        bitkub: { id: 96, block: { number: 26104233, timestamp: 1755561220 } },
+                        jbc: { id: 8899, block: { number: 3100000, timestamp: 1755560234 } },
+                    },
+                },
+            },
+            cap
+        )
+
+        const status = await q.fetchIndexerStatus(client)
+
+        expect(() => parse(cap[0]!.query)).not.toThrow()
+        expect(rootFields(parse(cap[0]!.query))).toEqual(['_meta'])
+        expect(status).toEqual({
+            bitkub: {
+                id: 96,
+                block: { number: 26104233, timestamp: 1755561220 },
+                lagSeconds: 14,
+            },
+            jbc: {
+                id: 8899,
+                block: { number: 3100000, timestamp: 1755560234 },
+                lagSeconds: 1000,
+            },
+        })
+    })
+
+    it('never reports a negative lag when the indexed block is ahead of the clock', async () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(1_755_561_000_000)
+
+        const status = await q.fetchIndexerStatus(
+            stubClient({
+                _meta: {
+                    status: { bitkub: { id: 96, block: { number: 1, timestamp: 1755561220 } } },
+                },
+            })
+        )
+
+        expect(status.bitkub!.lagSeconds).toBe(0)
+    })
+
+    it('returns an empty status before any checkpoint exists', async () => {
+        await expect(q.fetchIndexerStatus(stubClient({ _meta: null }))).resolves.toEqual({})
+        await expect(
+            q.fetchIndexerStatus(stubClient({ _meta: { status: null } }))
+        ).resolves.toEqual({})
+        await expect(
+            q.fetchIndexerStatus(
+                stubClient({ _meta: { status: { bitkub: { id: 96, block: null } } } })
+            )
+        ).resolves.toEqual({})
     })
 })

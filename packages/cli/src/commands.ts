@@ -13,6 +13,7 @@ import {
     WRAPPED_NATIVE_ADDRESSES,
     createPonderClient,
     fetchAllReferralBindings,
+    fetchIndexerStatus,
     fetchNativeUsdPrice,
     fetchReferralBindings,
     fetchReferralRewards,
@@ -235,6 +236,12 @@ export const COMMANDS: Record<string, Command> = {
             const nativeUsdPrice = await fetchNativeUsdPrice(client, { chainId })
             return fetchUserStats(client, { chainId, users, nativeUsdPrice })
         },
+    },
+    fetchIndexerStatus: {
+        group: PONDER,
+        flags: '[--ponderUrl <url>]',
+        describe: 'Latest indexed block and lag per chain from the indexer',
+        run: (args) => fetchIndexerStatus(createPonderClient(parsePonderUrl(args.ponderUrl))),
     },
     fetchAllReferralBindings: {
         group: PONDER,
