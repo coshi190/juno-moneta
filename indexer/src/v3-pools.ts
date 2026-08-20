@@ -7,12 +7,10 @@ import {
     parseTrackingTag,
     resolveBinding,
     parseV3Swap,
-    sanitizeUsdPrice,
-    MAX_NATIVE_USD_PRICE,
-    MAX_TOKEN_USD_PRICE,
     WRAPPED_NATIVE_ADDRESSES,
     STABLECOIN_ADDRESSES,
 } from '@coshi190/junoswap-sdk'
+import { sanitizeUsdPrice, MAX_NATIVE_USD_PRICE, MAX_TOKEN_USD_PRICE } from './price-history.js'
 import { recordUserSwap } from './user-pnl.js'
 
 const Q96 = 2n ** 96n

@@ -11,15 +11,20 @@ import {
     userStatPoints,
     parseV2Swap,
     parseV3Swap,
-    makePriceAt,
-    sanitizePricePoints,
-    sanitizeUsdPrice,
-    MAX_TOKEN_USD_PRICE,
+    calculatePrice,
+    calculatePriceFromSqrtPrice,
     WRAPPED_NATIVE_ADDRESSES,
     type PnlFold,
     type TokenPnl,
     type LeaderboardSwapEvent,
 } from '@coshi190/junoswap-sdk'
+import {
+    makePriceAt,
+    sanitizePricePoints,
+    sanitizeUsdPrice,
+    MAX_TOKEN_USD_PRICE,
+    type NativePricePoint,
+} from '../price-history.js'
 
 const app = new Hono()
 
@@ -55,6 +60,21 @@ async function priceMapForTokens(
         if (p !== null) prices.set(s.tokenAddr, p)
     }
     return prices
+}
+
+async function nativeUsdPoints(chainId: number, since: number): Promise<NativePricePoint[]> {
+    const rows = await db
+        .select()
+        .from(schema.nativeUsdPriceSnapshot)
+        .where(
+            and(
+                eq(schema.nativeUsdPriceSnapshot.chainId, chainId),
+                gte(schema.nativeUsdPriceSnapshot.timestamp, since)
+            )
+        )
+    return sanitizePricePoints(
+        rows.map((s) => ({ timestamp: s.timestamp, price: parseFloat(s.price) }))
+    ).sort((a, b) => a.timestamp - b.timestamp)
 }
 
 function foldOf(row: {
@@ -183,18 +203,7 @@ async function windowedLeaderboardTraders(chainId: number, since: number) {
         .from(schema.nativeUsdPrice)
         .where(eq(schema.nativeUsdPrice.chainId, chainId))
         .limit(1)
-    const snapRows = await db
-        .select()
-        .from(schema.nativeUsdPriceSnapshot)
-        .where(
-            and(
-                eq(schema.nativeUsdPriceSnapshot.chainId, chainId),
-                gte(schema.nativeUsdPriceSnapshot.timestamp, since)
-            )
-        )
-    const points = sanitizePricePoints(
-        snapRows.map((s) => ({ timestamp: s.timestamp, price: parseFloat(s.price) }))
-    ).sort((a, b) => a.timestamp - b.timestamp)
+    const points = await nativeUsdPoints(chainId, since)
     const priceAt = makePriceAt(points, currentNative ? parseFloat(currentNative.price) : 0)
 
     const tokenAddrs = [...new Set(events.map((e) => e.tokenAddr))]
@@ -286,6 +295,81 @@ app.get('/leaderboard', async (c) => {
     })
 
     return c.json({ traders: await withReferredPoints(chainId, traders) })
+})
+
+app.get('/native-usd-price-history', async (c) => {
+    const chainId = Number(c.req.query('chainId'))
+    if (!Number.isInteger(chainId)) {
+        return c.json({ error: 'chainId is required' }, 400)
+    }
+
+    const sinceRaw = c.req.query('since')
+    const since = sinceRaw === undefined ? 0 : Number(sinceRaw)
+    if (!Number.isInteger(since) || since < 0) {
+        return c.json({ error: 'since must be a unix timestamp' }, 400)
+    }
+
+    return c.json({ points: await nativeUsdPoints(chainId, since) })
+})
+
+app.get('/token-price-history', async (c) => {
+    const chainId = Number(c.req.query('chainId'))
+    const tokenAddr = c.req.query('tokenAddr')?.toLowerCase()
+    const since = Number(c.req.query('since'))
+    const source = c.req.query('source')
+    if (!Number.isInteger(chainId) || !tokenAddr || !Number.isInteger(since) || since < 0) {
+        return c.json({ error: 'chainId, tokenAddr and since are required' }, 400)
+    }
+    if (source !== 'bc' && source !== 'v3') {
+        return c.json({ error: 'source must be bc or v3' }, 400)
+    }
+
+    const raw: NativePricePoint[] = []
+    if (source === 'bc') {
+        const rows = await db
+            .select()
+            .from(schema.swapEvent)
+            .where(
+                and(
+                    eq(schema.swapEvent.chainId, chainId),
+                    eq(schema.swapEvent.tokenAddr, tokenAddr),
+                    gte(schema.swapEvent.timestamp, since)
+                )
+            )
+        for (const r of rows) {
+            raw.push({
+                timestamp: r.timestamp,
+                price: calculatePrice({
+                    timestamp: r.timestamp,
+                    isBuy: r.isBuy === 1,
+                    amountIn: 0n,
+                    amountOut: 0n,
+                    reserveIn: BigInt(r.reserveIn),
+                    reserveOut: BigInt(r.reserveOut),
+                }),
+            })
+        }
+    } else {
+        const rows = await db
+            .select()
+            .from(schema.v3SwapEvent)
+            .where(
+                and(
+                    eq(schema.v3SwapEvent.chainId, chainId),
+                    eq(schema.v3SwapEvent.tokenAddr, tokenAddr),
+                    gte(schema.v3SwapEvent.timestamp, since)
+                )
+            )
+        for (const r of rows) {
+            raw.push({
+                timestamp: r.timestamp,
+                price: calculatePriceFromSqrtPrice(BigInt(r.sqrtPriceX96), r.tokenIsToken0 === 1),
+            })
+        }
+    }
+
+    const points = sanitizePricePoints(raw).sort((a, b) => a.timestamp - b.timestamp)
+    return c.json({ points })
 })
 
 export default app

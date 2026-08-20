@@ -1,9 +1,13 @@
 import { formatEther } from 'viem'
-import { MAX_NATIVE_USD_PRICE, sanitizeUsdPrice } from '../price/history.js'
 import type { V3PoolDayVolumeRow } from '../ponder/queries/pools.js'
 
 const Q96 = 2n ** 96n
 const SECONDS_PER_DAY = 86400
+const MAX_NATIVE_USD_PRICE = 1e6
+
+function sanitizeNativeUsd(value: number): number | null {
+    return Number.isFinite(value) && value > 0 && value <= MAX_NATIVE_USD_PRICE ? value : null
+}
 
 export interface PoolVolumeMeta {
     address: string
@@ -42,7 +46,7 @@ export function deriveNativeUsdPrice(
         ? (sqrtPriceX96 * sqrtPriceX96 * UNIT) / (Q96 * Q96)
         : (Q96 * Q96 * UNIT) / (sqrtPriceX96 * sqrtPriceX96)
 
-    return sanitizeUsdPrice(Number(priceRaw) / 1e18, MAX_NATIVE_USD_PRICE)
+    return sanitizeNativeUsd(Number(priceRaw) / 1e18)
 }
 
 export function computeVolumeFromPrices(

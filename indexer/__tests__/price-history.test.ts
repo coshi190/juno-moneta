@@ -5,9 +5,9 @@ import {
     sanitizeUsdPrice,
     MAX_NATIVE_USD_PRICE,
     MAX_TOKEN_USD_PRICE,
-} from '../price/history.js'
+} from '../src/price-history.js'
 
-describe('price/history', () => {
+describe('price-history', () => {
     it('makePriceAt returns the last price at or before a timestamp', () => {
         const priceAt = makePriceAt(
             [

@@ -3,11 +3,10 @@ import { formatEther } from 'viem'
 import {
     applyFoldEvent,
     isJunoswapProtocol,
-    sanitizeUsdPrice,
-    MAX_NATIVE_USD_PRICE,
     EMPTY_FOLD,
     type PnlFold,
 } from '@coshi190/junoswap-sdk'
+import { sanitizeUsdPrice, MAX_NATIVE_USD_PRICE } from './price-history.js'
 
 export async function recordUserSwap(
     context: any,

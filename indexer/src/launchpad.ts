@@ -3,12 +3,8 @@ import schema from 'ponder:schema'
 import { formatEther, zeroAddress } from 'viem'
 import { readERC20Metadata } from './erc20-read.js'
 import { creatorFeeShareForSwap, VIRTUAL_AMOUNT } from './creator-fee.js'
-import {
-    BONDING_CURVE_ADDRESS_BY_CHAIN,
-    isLaunchpadChain,
-    sanitizeUsdPrice,
-    MAX_TOKEN_USD_PRICE,
-} from '@coshi190/junoswap-sdk'
+import { BONDING_CURVE_ADDRESS_BY_CHAIN, isLaunchpadChain } from '@coshi190/junoswap-sdk'
+import { sanitizeUsdPrice, MAX_TOKEN_USD_PRICE } from './price-history.js'
 import { CHAIN_IDS } from './chains.js'
 import { recordUserSwap } from './user-pnl.js'
 import { foldTokenCandle } from './candles.js'
