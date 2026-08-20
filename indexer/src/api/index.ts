@@ -4,9 +4,6 @@ import { graphql, eq, and, gte, inArray } from 'ponder'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import {
-    finalizeTokenPnl,
-    finalizePortfolioPnl,
-    computeWindowedTraderStats,
     computeReferralPoints,
     userStatPoints,
     parseV2Swap,
@@ -14,10 +11,10 @@ import {
     calculatePrice,
     calculatePriceFromSqrtPrice,
     WRAPPED_NATIVE_ADDRESSES,
-    type PnlFold,
     type TokenPnl,
-    type LeaderboardSwapEvent,
 } from '@coshi190/junoswap-sdk'
+import { finalizeTokenPnl, finalizePortfolioPnl, type PnlFold } from '../pnl-math.js'
+import { computeWindowedTraderStats, type LeaderboardSwapEvent } from '../trader-stats.js'
 import {
     makePriceAt,
     sanitizePricePoints,

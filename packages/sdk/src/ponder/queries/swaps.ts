@@ -1,4 +1,7 @@
-import type { PonderClient } from '../client.js'
+import { isPonderError, type PonderClient } from '../client.js'
+import { WRAPPED_NATIVE_ADDRESSES } from '../../configs/chains.js'
+import { isLaunchpadChain } from '../../configs/deployments.js'
+import { parseV2Swap, parseV3Swap, type ParsedSwap } from '../parse-swaps.js'
 import type {
     AggSwapEvent,
     SwapEvent,
@@ -208,6 +211,49 @@ export function fetchV2Swaps(client: PonderClient, filter: SwapScanFilter): Prom
         { where: scanWhere(filter, 'txFrom') },
         (r) => r.v2SwapEvents
     )
+}
+
+function parseBondingCurveSwap(e: BondingCurveSwap): ParsedSwap {
+    return {
+        tokenAddr: e.tokenAddr.toLowerCase(),
+        sender: e.sender,
+        isBuy: e.isBuy === 1,
+        amountIn: e.amountIn,
+        amountOut: e.amountOut,
+        timestamp: e.timestamp,
+        protocol: 'junoswap',
+    }
+}
+
+export async function fetchUserSwapEvents(
+    client: PonderClient,
+    params: { chainId: number; address: string }
+): Promise<ParsedSwap[]> {
+    const { chainId } = params
+    const wrappedNative = WRAPPED_NATIVE_ADDRESSES[chainId]?.toLowerCase()
+    if (!wrappedNative) return []
+    const sender = params.address.toLowerCase()
+    const filter: SwapScanFilter = { chainId, sender }
+
+    try {
+        const [bondingCurveEvents, v3Rows, v2Rows] = await Promise.all([
+            isLaunchpadChain(chainId)
+                ? fetchBondingCurveSwaps(client, filter)
+                : Promise.resolve([] as BondingCurveSwap[]),
+            fetchV3Swaps(client, filter),
+            fetchV2Swaps(client, filter),
+        ])
+        return [
+            ...bondingCurveEvents.map(parseBondingCurveSwap),
+            ...v3Rows.map((e) => parseV3Swap(e, wrappedNative)),
+            ...v2Rows.map((e) => parseV2Swap(e, wrappedNative)),
+        ]
+            .filter((s): s is ParsedSwap => s !== null)
+            .sort((a, b) => a.timestamp - b.timestamp)
+    } catch (e) {
+        if (isPonderError(e)) return []
+        throw e
+    }
 }
 
 export interface ActivityArgs {

@@ -17,10 +17,23 @@
     },
     "stablecoins": {
         "kubTestnet": ["0x70138f1b88bee73dd2cb06f24146f964dde6144e"],
-        "bitkub": ["0x7d984c24d2499d840eb3b7016077164e15e5faa6"],
+        "bitkub": [
+            "0x7d984c24d2499d840eb3b7016077164e15e5faa6",
+            "0x21cdc3706b8c7b1836df0e533dd884069521350b",
+            "0x31929a0fd776f971c5dd14bf03e1f9ff69d9c91c"
+        ],
         "jbc": [
             "0x24599b658b57f91e7643f4f154b16bcd2884f9ac",
             "0xfd8ef75c1cb00a594d02df48addc27414bd07f8a"
+        ],
+        "worldchain": ["0x79a02482a880bce3f13e09da970dc34db4cd24d1"],
+        "base": [
+            "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+            "0x50c5725949a6f0c72e6c4a641f24049a917db0cb"
+        ],
+        "bsc": [
+            "0x55d398326f99059ff775485246999027b3197955",
+            "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d"
         ]
     }
 }

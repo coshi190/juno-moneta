@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { parseEther } from 'viem'
-import { computeWindowedTraderStats, type LeaderboardSwapEvent } from '../traders/trader-stats.js'
-import type { PnlSwapEvent } from '../traders/fold.js'
+import type { PnlSwapEvent } from '@coshi190/junoswap-sdk'
+import { computeWindowedTraderStats, type LeaderboardSwapEvent } from '../src/trader-stats.js'
 
-describe('traders/trader-stats', () => {
+describe('trader-stats', () => {
     const TOKEN = '0xtoken'
     const ALICE = '0xalice'
     const BOB = '0xbob'

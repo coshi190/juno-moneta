@@ -1,15 +1,15 @@
 import { describe, it, expect } from 'vitest'
 import { parseEther, parseUnits } from 'viem'
+import type { PnlSwapEvent } from '@coshi190/junoswap-sdk'
 import {
     applyFoldEvent,
     finalizeTokenPnl,
     finalizePortfolioPnl,
-    computePortfolioPnl,
+    foldEventsByToken,
     EMPTY_FOLD,
     type PnlFold,
     type FoldSwapInput,
-    type PnlSwapEvent,
-} from '../traders/fold.js'
+} from '../src/pnl-math.js'
 
 function fold(events: FoldSwapInput[], decimals = 18): PnlFold {
     return events.reduce((f, e) => applyFoldEvent(f, e, decimals), EMPTY_FOLD)
@@ -33,7 +33,7 @@ function sell(tokens: number, kub: number, nativeUsd: number): FoldSwapInput {
     }
 }
 
-describe('traders fold + finalize', () => {
+describe('pnl-math fold + finalize', () => {
     it('buy-only: unrealized only, no realized', () => {
         const pnl = finalizeTokenPnl(fold([buy(100, 10, 2)]), 100, 0.5)
         expect(pnl.totalInvestedUsd).toBeCloseTo(20)
@@ -113,29 +113,31 @@ describe('traders fold + finalize', () => {
     })
 })
 
-describe('traders batch engine', () => {
-    const TOKEN = '0xtoken'
+describe('foldEventsByToken', () => {
+    it('folds each token independently regardless of input ordering', () => {
+        const events: PnlSwapEvent[] = [
+            {
+                tokenAddr: '0xAAA',
+                isBuy: false,
+                amountIn: '1000000000000000000',
+                amountOut: '2000000000000000000',
+                timestamp: 200,
+            },
+            {
+                tokenAddr: '0xaaa',
+                isBuy: true,
+                amountIn: '1000000000000000000',
+                amountOut: '2000000000000000000',
+                timestamp: 100,
+            },
+        ]
 
-    function bEvent(tokens: number, kub: number, timestamp: number): PnlSwapEvent {
-        return {
-            tokenAddr: TOKEN,
-            isBuy: true,
-            amountIn: parseEther(String(kub)).toString(),
-            amountOut: parseEther(String(tokens)).toString(),
-            timestamp,
-        }
-    }
+        const folds = foldEventsByToken(events, () => 1)
+        const fold = folds.get('0xaaa')
 
-    it('computePortfolioPnl values each buy at its historical rate', () => {
-        const events = [bEvent(50, 10, 1), bEvent(50, 10, 2)]
-        const priceAt = (t: number) => (t <= 1 ? 1 : 3)
-        const { perToken } = computePortfolioPnl(
-            events,
-            new Map([[TOKEN, 100]]),
-            new Map([[TOKEN, 0.5]]),
-            priceAt
-        )
-        expect(perToken.get(TOKEN)!.totalInvestedUsd).toBeCloseTo(40)
-        expect(perToken.get(TOKEN)!.unrealizedUsd).toBeCloseTo(10)
+        expect(folds.size).toBe(1)
+        expect(fold?.position).toBe(1)
+        expect(fold?.totalInvestedUsd).toBe(1)
+        expect(fold?.realizedUsd).toBeCloseTo(1.5, 10)
     })
 })

@@ -1,12 +1,6 @@
 import { formatEther } from 'viem'
-import { computePoints, isJunoswapProtocol } from '../rewards/points.js'
-import {
-    EMPTY_FOLD,
-    applyFoldEvent,
-    finalizePortfolioPnl,
-    type PnlFold,
-    type PnlSwapEvent,
-} from './fold.js'
+import { computePoints, isJunoswapProtocol, type PnlSwapEvent } from '@coshi190/junoswap-sdk'
+import { finalizePortfolioPnl, foldEventsByToken } from './pnl-math.js'
 
 export interface LeaderboardSwapEvent extends PnlSwapEvent {
     sender: string
@@ -45,7 +39,6 @@ export function computeWindowedTraderStats(
         let externalVolumeNative = 0
         let buyCount = 0
         let sellCount = 0
-        const eventsByToken = new Map<string, LeaderboardSwapEvent[]>()
         for (const event of addrEvents) {
             const nativeAmount = parseFloat(
                 formatEther(BigInt(event.isBuy ? event.amountIn : event.amountOut))
@@ -54,32 +47,11 @@ export function computeWindowedTraderStats(
             else externalVolumeNative += nativeAmount
             if (event.isBuy) buyCount++
             else sellCount++
-            const token = event.tokenAddr.toLowerCase()
-            const list = eventsByToken.get(token)
-            if (list) list.push(event)
-            else eventsByToken.set(token, [event])
         }
 
-        const foldsByToken = new Map<string, PnlFold>()
+        const foldsByToken = foldEventsByToken(addrEvents, priceAt, decimalsByToken)
         const balanceByToken = new Map<string, number>()
-        for (const [token, tokenEvents] of eventsByToken) {
-            const decimals = decimalsByToken?.get(token) ?? 18
-            let fold = EMPTY_FOLD
-            for (const e of [...tokenEvents].sort((a, b) => a.timestamp - b.timestamp)) {
-                fold = applyFoldEvent(
-                    fold,
-                    {
-                        isBuy: e.isBuy,
-                        amountIn: e.amountIn,
-                        amountOut: e.amountOut,
-                        nativeUsd: priceAt(e.timestamp),
-                    },
-                    decimals
-                )
-            }
-            foldsByToken.set(token, fold)
-            balanceByToken.set(token, fold.position)
-        }
+        for (const [token, fold] of foldsByToken) balanceByToken.set(token, fold.position)
 
         const { totals } = finalizePortfolioPnl(foldsByToken, balanceByToken, currentPriceByToken)
 

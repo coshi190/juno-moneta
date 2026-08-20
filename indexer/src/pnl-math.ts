@@ -1,21 +1,5 @@
 import { formatEther, formatUnits } from 'viem'
-
-export interface TokenPnl {
-    costBasisUsd: number
-    totalInvestedUsd: number
-    realizedUsd: number
-    unrealizedUsd: number
-    totalPnlUsd: number
-    pnlPercent: number
-}
-
-export interface PortfolioPnlTotals {
-    totalInvestedUsd: number
-    realizedUsd: number
-    unrealizedUsd: number
-    totalPnlUsd: number
-    totalPnlPercent: number
-}
+import type { TokenPnl, PortfolioPnlTotals, PnlSwapEvent } from '@coshi190/junoswap-sdk'
 
 export interface PnlFold {
     position: number
@@ -113,21 +97,11 @@ export function finalizePortfolioPnl(
     return { perToken, totals }
 }
 
-export interface PnlSwapEvent {
-    tokenAddr: string
-    isBuy: boolean
-    amountIn: string
-    amountOut: string
-    timestamp: number
-}
-
-export function computePortfolioPnl(
+export function foldEventsByToken(
     events: PnlSwapEvent[],
-    balanceByToken: Map<string, number>,
-    priceUsdByToken: Map<string, number | null>,
     priceAt: (timestamp: number) => number,
     decimalsByToken?: Map<string, number>
-): { perToken: Map<string, TokenPnl>; totals: PortfolioPnlTotals } {
+): Map<string, PnlFold> {
     const eventsByToken = new Map<string, PnlSwapEvent[]>()
     for (const event of events) {
         const key = event.tokenAddr.toLowerCase()
@@ -155,5 +129,5 @@ export function computePortfolioPnl(
         foldsByToken.set(tokenAddr, fold)
     }
 
-    return finalizePortfolioPnl(foldsByToken, balanceByToken, priceUsdByToken)
+    return foldsByToken
 }

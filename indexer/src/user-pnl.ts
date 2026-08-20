@@ -1,11 +1,7 @@
 import schema from 'ponder:schema'
 import { formatEther } from 'viem'
-import {
-    applyFoldEvent,
-    isJunoswapProtocol,
-    EMPTY_FOLD,
-    type PnlFold,
-} from '@coshi190/junoswap-sdk'
+import { isJunoswapProtocol } from '@coshi190/junoswap-sdk'
+import { applyFoldEvent, EMPTY_FOLD, type PnlFold } from './pnl-math.js'
 import { sanitizeUsdPrice, MAX_NATIVE_USD_PRICE } from './price-history.js'
 
 export async function recordUserSwap(
