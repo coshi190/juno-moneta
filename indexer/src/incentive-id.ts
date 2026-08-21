@@ -1,5 +1,12 @@
-import { encodeAbiParameters, keccak256 } from 'viem'
-import type { IncentiveKey } from './types.js'
+import { encodeAbiParameters, keccak256, type Address } from 'viem'
+
+export interface IncentiveKey {
+    rewardToken: Address
+    pool: Address
+    startTime: number
+    endTime: number
+    refundee: Address
+}
 
 export function computeIncentiveId(key: IncentiveKey): `0x${string}` {
     return keccak256(

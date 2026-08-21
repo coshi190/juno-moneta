@@ -59,6 +59,14 @@ export function parseChainId(value: string | undefined): number {
     return chainId
 }
 
+export function optionalLimit(value: string | undefined): number | undefined {
+    if (value === undefined) return undefined
+    if (!/^\d+$/.test(value) || Number(value) === 0) {
+        throw new UsageError(`invalid --limit "${value}" (expected a positive integer)`)
+    }
+    return Number(value)
+}
+
 export function parseProtocolType(value: string | undefined): ProtocolType {
     if (value === undefined) throw new UsageError('missing required flag --protocolType')
     if (value === 'v2') return ProtocolType.V2

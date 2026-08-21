@@ -11,6 +11,7 @@ const OPTIONS = {
     protocolType: { type: 'string' },
     users: { type: 'string' },
     referrer: { type: 'string' },
+    limit: { type: 'string' },
     ponderUrl: { type: 'string' },
     raw: { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h', default: false },

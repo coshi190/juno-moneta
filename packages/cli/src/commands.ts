@@ -13,6 +13,7 @@ import {
     WRAPPED_NATIVE_ADDRESSES,
     createPonderClient,
     fetchAllReferralBindings,
+    fetchIncentives,
     fetchIndexerStatus,
     fetchNativeUsdPrice,
     fetchReferralBindings,
@@ -36,6 +37,7 @@ import {
     type ProtocolConfig,
 } from '@coshi190/junoswap-sdk'
 import {
+    optionalLimit,
     optionalProtocolType,
     parseAddress,
     parseAddressList,
@@ -51,6 +53,7 @@ export interface CommandArgs {
     protocolType?: string | undefined
     users?: string | undefined
     referrer?: string | undefined
+    limit?: string | undefined
     ponderUrl?: string | undefined
 }
 
@@ -269,5 +272,16 @@ export const COMMANDS: Record<string, Command> = {
             const nativeUsdPrice = await fetchNativeUsdPrice(client, { chainId })
             return fetchReferralRewards(client, { chainId, referrer, nativeUsdPrice })
         },
+    },
+    fetchIncentives: {
+        group: PONDER,
+        flags: `${CHAIN_FLAG} [--limit <n>] [--ponderUrl <url>]`,
+        describe:
+            'V3 staker incentives on a chain, with reward token, pool, window, and refund state',
+        run: (args) =>
+            fetchIncentives(createPonderClient(parsePonderUrl(args.ponderUrl)), {
+                chainId: parseChainId(args.chainId),
+                limit: optionalLimit(args.limit),
+            }),
     },
 }

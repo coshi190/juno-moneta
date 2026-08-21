@@ -1,6 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { computeIncentiveId } from '../mining/incentive-id.js'
-import type { IncentiveKey } from '../mining/types.js'
+import { describe, it, expect } from 'vitest'
+import { computeIncentiveId, type IncentiveKey } from '../src/incentive-id'
 
 const TESTNET_KEY: IncentiveKey = {
     rewardToken: '0x23352915164527e0AB53Ca5519aec5188aa224A2',

@@ -1,6 +1,6 @@
 import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
-import { computeIncentiveId } from '@coshi190/junoswap-sdk'
+import { computeIncentiveId } from './incentive-id.js'
 import { upsertToken } from './v3-pools.js'
 import { readV3PoolImmutables } from './erc20-read.js'
 
