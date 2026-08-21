@@ -1,3 +1,4 @@
+import type { Address } from 'viem'
 import type { ContractCall } from './plan-swap.js'
 
 export type ReadResult<T = unknown> =
@@ -6,6 +7,10 @@ export type ReadResult<T = unknown> =
 export interface ReadClient {
     multicall(args: { contracts: readonly ContractCall[]; allowFailure: true }): Promise<unknown>
     readContract(args: ContractCall): Promise<unknown>
+}
+
+export interface SimulateClient extends ReadClient {
+    simulateContract(args: ContractCall & { account?: Address }): Promise<{ result: unknown }>
 }
 
 export async function batchRead(

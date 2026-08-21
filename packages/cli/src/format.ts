@@ -1,5 +1,6 @@
 function replacer(_key: string, value: unknown): unknown {
-    return value instanceof Set ? [...value] : value
+    if (value instanceof Set) return [...value]
+    return typeof value === 'bigint' ? value.toString() : value
 }
 
 function isScalar(value: unknown): value is string | number | boolean {

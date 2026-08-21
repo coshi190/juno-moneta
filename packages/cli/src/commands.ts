@@ -13,9 +13,11 @@ import {
     WRAPPED_NATIVE_ADDRESSES,
     createPonderClient,
     fetchAllReferralBindings,
+    fetchGraduatedPool,
     fetchIncentives,
     fetchIndexerStatus,
     fetchNativeUsdPrice,
+    fetchPoolMetrics,
     fetchReferralBindings,
     fetchReferralRewards,
     fetchUserStats,
@@ -38,6 +40,8 @@ import {
 } from '@coshi190/junoswap-sdk'
 import {
     optionalLimit,
+    optionalPositiveInt,
+    optionalProtocol,
     optionalProtocolType,
     parseAddress,
     parseAddressList,
@@ -45,14 +49,19 @@ import {
     parsePonderUrl,
     parseProtocolType,
     resolveProtocolConfig,
+    resolveWrappedNative,
 } from './args.js'
 
 export interface CommandArgs {
     chainId?: string | undefined
     dexId?: string | undefined
     protocolType?: string | undefined
+    protocol?: string | undefined
     users?: string | undefined
     referrer?: string | undefined
+    tokenAddr?: string | undefined
+    wrappedNative?: string | undefined
+    fee?: string | undefined
     limit?: string | undefined
     ponderUrl?: string | undefined
 }
@@ -283,5 +292,30 @@ export const COMMANDS: Record<string, Command> = {
                 chainId: parseChainId(args.chainId),
                 limit: optionalLimit(args.limit),
             }),
+    },
+    fetchPoolMetrics: {
+        group: PONDER,
+        flags: `${CHAIN_FLAG} [--protocol <name>] [--limit <n>] [--ponderUrl <url>]`,
+        describe:
+            'Pools on a chain with token metadata, price, TVL, 1d and 30d volume, and fee APR',
+        run: (args) =>
+            fetchPoolMetrics(createPonderClient(parsePonderUrl(args.ponderUrl)), {
+                chainId: parseChainId(args.chainId),
+                protocol: optionalProtocol(args.protocol),
+                limit: optionalLimit(args.limit),
+            }),
+    },
+    fetchGraduatedPool: {
+        group: PONDER,
+        flags: `${CHAIN_FLAG} --tokenAddr <addr> [--wrappedNative <addr>] [--fee <n>] [--ponderUrl <url>]`,
+        describe: 'Pool address a launchpad token graduated into, or null when it has none',
+        run: (args) => {
+            const chainId = parseChainId(args.chainId)
+            return fetchGraduatedPool(createPonderClient(parsePonderUrl(args.ponderUrl)), {
+                tokenAddr: parseAddress(args.tokenAddr, 'tokenAddr'),
+                wrappedNative: resolveWrappedNative(chainId, args.wrappedNative),
+                fee: optionalPositiveInt(args.fee, 'fee'),
+            })
+        },
     },
 }
