@@ -7,19 +7,33 @@ import {
     DEFAULT_FEE_TIER,
     FEE_TIERS,
     LAUNCHPAD_CHAIN_IDS,
+    LAUNCH_TOKEN_CARD_FIELDS,
+    LAUNCH_TOKEN_DETAIL_FIELDS,
+    LAUNCH_TOKEN_META_FIELDS,
     ProtocolType,
     STABLECOIN_ADDRESSES,
+    TOKEN_HOLDER_ADDRESS_FIELDS,
+    TOKEN_HOLDER_BALANCE_FIELDS,
+    TOKEN_SNAPSHOT_CREATOR_FIELDS,
+    TOKEN_SNAPSHOT_HOLDER_COUNT_FIELDS,
+    TOKEN_SNAPSHOT_LIST_FIELDS,
     V3_STAKER_START_BLOCKS,
     WRAPPED_NATIVE_ADDRESSES,
     createPonderClient,
     fetchAllReferralBindings,
     fetchIncentives,
     fetchIndexerStatus,
+    fetchLaunchTokens,
     fetchNativeUsdPrice,
     fetchPoolMetrics,
+    fetchPositionsByTokenIds,
+    fetchRecentSwaps,
     fetchReferralBindings,
     fetchReferralRewards,
+    fetchTokenHolders,
+    fetchTokenSnapshots,
     fetchUserStats,
+    fetchUserPositions,
     getAggRouterAddress,
     getBondingCurveAddress,
     getDefaultDexForChain,
@@ -35,17 +49,27 @@ import {
     isV2Config,
     isV3Config,
     type DEXType,
+    type LaunchToken,
     type ProtocolConfig,
+    type TokenHolder,
+    type TokenSnapshot,
 } from '@coshi190/junoswap-sdk'
 import {
+    optionalAddress,
+    optionalAddressList,
+    optionalChainId,
+    optionalGraduated,
     optionalLimit,
+    optionalOrder,
     optionalProtocol,
     optionalProtocolType,
     parseAddress,
     parseAddressList,
     parseChainId,
+    parseFields,
     parsePonderUrl,
     parseProtocolType,
+    parseTokenIds,
     resolveProtocolConfig,
 } from './args.js'
 
@@ -55,8 +79,17 @@ export interface CommandArgs {
     protocolType?: string | undefined
     protocol?: string | undefined
     users?: string | undefined
+    owner?: string | undefined
+    tokenIds?: string | undefined
     referrer?: string | undefined
     tokenAddr?: string | undefined
+    tokenAddrs?: string | undefined
+    creator?: string | undefined
+    address?: string | undefined
+    isGraduated?: string | undefined
+    fields?: string | undefined
+    orderBy?: string | undefined
+    orderDirection?: string | undefined
     limit?: string | undefined
     ponderUrl?: string | undefined
 }
@@ -76,6 +109,26 @@ const PONDER = 'ponder'
 const CHAIN_FLAG = '--chainId <id|slug>'
 const CHAIN_DEX_FLAGS = `${CHAIN_FLAG} [--dexId <dex>]`
 const CONFIG_FLAGS = `${CHAIN_DEX_FLAGS} [--protocolType v2|v3]`
+const OPTIONAL_CHAIN_FLAG = '[--chainId <id|slug>]'
+const SELECT_FLAGS = '[--fields <preset|a,b,c>] [--orderBy <field>] [--orderDirection asc|desc]'
+const PONDER_FLAG = '[--ponderUrl <url>]'
+
+const LAUNCH_TOKEN_PRESETS: Record<string, readonly (keyof LaunchToken)[]> = {
+    detail: LAUNCH_TOKEN_DETAIL_FIELDS,
+    meta: LAUNCH_TOKEN_META_FIELDS,
+    card: LAUNCH_TOKEN_CARD_FIELDS,
+}
+
+const TOKEN_SNAPSHOT_PRESETS: Record<string, readonly (keyof TokenSnapshot)[]> = {
+    list: TOKEN_SNAPSHOT_LIST_FIELDS,
+    creator: TOKEN_SNAPSHOT_CREATOR_FIELDS,
+    holderCount: TOKEN_SNAPSHOT_HOLDER_COUNT_FIELDS,
+}
+
+const TOKEN_HOLDER_PRESETS: Record<string, readonly (keyof TokenHolder)[]> = {
+    address: TOKEN_HOLDER_ADDRESS_FIELDS,
+    balance: TOKEN_HOLDER_BALANCE_FIELDS,
+}
 
 function chainCommand(group: string, describe: string, fn: (chainId: number) => unknown): Command {
     return {
@@ -285,6 +338,98 @@ export const COMMANDS: Record<string, Command> = {
         run: (args) =>
             fetchIncentives(createPonderClient(parsePonderUrl(args.ponderUrl)), {
                 chainId: parseChainId(args.chainId),
+                limit: optionalLimit(args.limit),
+            }),
+    },
+    fetchLaunchTokens: {
+        group: PONDER,
+        flags: `${OPTIONAL_CHAIN_FLAG} [--creator <addr>] [--isGraduated 0|1] [--tokenAddrs <a,a>] ${SELECT_FLAGS} ${PONDER_FLAG}`,
+        describe: 'Launchpad tokens from the indexer, filtered by chain, creator, or graduation',
+        run: (args) =>
+            fetchLaunchTokens(
+                createPonderClient(parsePonderUrl(args.ponderUrl)),
+                {
+                    chainId: optionalChainId(args.chainId),
+                    creator: optionalAddress(args.creator),
+                    isGraduated: optionalGraduated(args.isGraduated),
+                    tokenAddrs: optionalAddressList(args.tokenAddrs),
+                },
+                parseFields<LaunchToken>(
+                    args.fields,
+                    LAUNCH_TOKEN_PRESETS,
+                    LAUNCH_TOKEN_CARD_FIELDS
+                ),
+                optionalOrder<LaunchToken>(args.orderBy, args.orderDirection)
+            ),
+    },
+    fetchTokenSnapshots: {
+        group: PONDER,
+        flags: `${OPTIONAL_CHAIN_FLAG} [--tokenAddrs <a,a>] ${SELECT_FLAGS} ${PONDER_FLAG}`,
+        describe: 'Per-token market cap, price, fee, and holder snapshots from the indexer',
+        run: (args) =>
+            fetchTokenSnapshots(
+                createPonderClient(parsePonderUrl(args.ponderUrl)),
+                {
+                    chainId: optionalChainId(args.chainId),
+                    tokenAddrs: optionalAddressList(args.tokenAddrs),
+                },
+                parseFields<TokenSnapshot>(
+                    args.fields,
+                    TOKEN_SNAPSHOT_PRESETS,
+                    TOKEN_SNAPSHOT_LIST_FIELDS
+                ),
+                optionalOrder<TokenSnapshot>(args.orderBy, args.orderDirection)
+            ),
+    },
+    fetchTokenHolders: {
+        group: PONDER,
+        flags: `${OPTIONAL_CHAIN_FLAG} [--tokenAddr <addr>] [--address <addr>] ${SELECT_FLAGS} ${PONDER_FLAG}`,
+        describe: 'Launch token holders and balances from the indexer',
+        run: (args) =>
+            fetchTokenHolders(
+                createPonderClient(parsePonderUrl(args.ponderUrl)),
+                {
+                    chainId: optionalChainId(args.chainId),
+                    tokenAddr: optionalAddress(args.tokenAddr),
+                    address: optionalAddress(args.address),
+                },
+                parseFields<TokenHolder>(
+                    args.fields,
+                    TOKEN_HOLDER_PRESETS,
+                    TOKEN_HOLDER_BALANCE_FIELDS
+                ),
+                optionalOrder<TokenHolder>(args.orderBy, args.orderDirection)
+            ),
+    },
+    fetchRecentSwaps: {
+        group: PONDER,
+        flags: `${CHAIN_FLAG} [--limit <n>] ${PONDER_FLAG}`,
+        describe: 'Latest bonding curve swaps on a chain, newest first, with token metadata',
+        run: (args) =>
+            fetchRecentSwaps(createPonderClient(parsePonderUrl(args.ponderUrl)), {
+                chainId: parseChainId(args.chainId),
+                limit: optionalLimit(args.limit),
+            }),
+    },
+    fetchUserPositions: {
+        group: PONDER,
+        flags: `${CHAIN_FLAG} --owner <addr> [--limit <n>] [--ponderUrl <url>]`,
+        describe: 'V3 positions held by an owner on a chain, with range, liquidity, and fees owed',
+        run: (args) =>
+            fetchUserPositions(createPonderClient(parsePonderUrl(args.ponderUrl)), {
+                chainId: parseChainId(args.chainId),
+                owner: parseAddress(args.owner, 'owner'),
+                limit: optionalLimit(args.limit),
+            }),
+    },
+    fetchPositionsByTokenIds: {
+        group: PONDER,
+        flags: `${CHAIN_FLAG} --tokenIds <id,id> [--limit <n>] [--ponderUrl <url>]`,
+        describe: 'V3 positions on a chain looked up by NFT token id',
+        run: (args) =>
+            fetchPositionsByTokenIds(createPonderClient(parsePonderUrl(args.ponderUrl)), {
+                chainId: parseChainId(args.chainId),
+                tokenIds: parseTokenIds(args.tokenIds),
                 limit: optionalLimit(args.limit),
             }),
     },

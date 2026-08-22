@@ -1,8 +1,8 @@
 import type { PonderClient } from '../client.js'
-import type { LaunchToken, TokenSnapshot, NativeUsdPrice, SwapEvent } from '../entities.js'
-import { sel, type Items, type Row } from './internal.js'
+import type { LaunchToken, TokenSnapshot, SwapEvent, TokenHolder } from '../entities.js'
+import { sel, MAX_LIMIT, type Items, type Page, type Row, type OrderDirection } from './internal.js'
 
-const DETAIL_FIELDS = [
+export const LAUNCH_TOKEN_DETAIL_FIELDS = [
     'tokenAddr',
     'creator',
     'name',
@@ -17,14 +17,22 @@ const DETAIL_FIELDS = [
     'graduatedAt',
 ] as const satisfies readonly (keyof LaunchToken)[]
 
-const META_FIELDS = [
+export const LAUNCH_TOKEN_META_FIELDS = [
     'tokenAddr',
     'name',
     'symbol',
     'logo',
 ] as const satisfies readonly (keyof LaunchToken)[]
 
-const LIST_SNAPSHOT_FIELDS = [
+export const LAUNCH_TOKEN_CARD_FIELDS = [
+    'tokenAddr',
+    'name',
+    'symbol',
+    'logo',
+    'isGraduated',
+] as const satisfies readonly (keyof LaunchToken)[]
+
+export const TOKEN_SNAPSHOT_LIST_FIELDS = [
     'tokenAddr',
     'lastSwapAt',
     'marketCapNative',
@@ -34,7 +42,7 @@ const LIST_SNAPSHOT_FIELDS = [
     'priceChange1dPct',
 ] as const satisfies readonly (keyof TokenSnapshot)[]
 
-const CREATOR_SNAPSHOT_FIELDS = [
+export const TOKEN_SNAPSHOT_CREATOR_FIELDS = [
     'tokenAddr',
     'marketCapNative',
     'creatorFeeNative',
@@ -44,150 +52,103 @@ const CREATOR_SNAPSHOT_FIELDS = [
     'lastPriceUsd',
 ] as const satisfies readonly (keyof TokenSnapshot)[]
 
-const OG_TOKEN_FIELDS = [
-    'tokenAddr',
-    'chainId',
-    'name',
-    'symbol',
-    'logo',
-    'description',
-    'isGraduated',
-] as const satisfies readonly (keyof LaunchToken)[]
-
-const OG_SNAPSHOT_FIELDS = [
-    'tokenAddr',
-    'marketCapNative',
-    'priceChange1dPct',
+export const TOKEN_SNAPSHOT_HOLDER_COUNT_FIELDS = [
+    'holderCount',
 ] as const satisfies readonly (keyof TokenSnapshot)[]
 
-export type LaunchTokenDetail = Row<LaunchToken, typeof DETAIL_FIELDS>
-export type LaunchTokenMeta = Row<LaunchToken, typeof META_FIELDS>
-export type LaunchTokenListSnapshot = Row<TokenSnapshot, typeof LIST_SNAPSHOT_FIELDS>
-export type CreatorTokenSnapshot = Row<TokenSnapshot, typeof CREATOR_SNAPSHOT_FIELDS>
+export type LaunchTokenDetail = Row<LaunchToken, typeof LAUNCH_TOKEN_DETAIL_FIELDS>
+export type LaunchTokenMeta = Row<LaunchToken, typeof LAUNCH_TOKEN_META_FIELDS>
+export type LaunchTokenCard = Row<LaunchToken, typeof LAUNCH_TOKEN_CARD_FIELDS>
+export type LaunchTokenListSnapshot = Row<TokenSnapshot, typeof TOKEN_SNAPSHOT_LIST_FIELDS>
+export type CreatorTokenSnapshot = Row<TokenSnapshot, typeof TOKEN_SNAPSHOT_CREATOR_FIELDS>
 
-export async function fetchTokenList(
+export interface LaunchTokenFilter {
+    chainId?: number
+    creator?: string
+    isGraduated?: 0 | 1
+    tokenAddrs?: string[]
+}
+
+export interface TokenSnapshotFilter {
+    chainId?: number
+    tokenAddrs?: string[]
+}
+
+export interface QueryOrder<TEntity> {
+    orderBy: keyof TEntity
+    orderDirection?: OrderDirection
+}
+
+function launchTokenWhere(filter: LaunchTokenFilter) {
+    const where: Record<string, unknown> = {}
+    if (filter.chainId !== undefined) where.chainId = filter.chainId
+    if (filter.creator) where.creator = filter.creator.toLowerCase()
+    if (filter.isGraduated !== undefined) where.isGraduated = filter.isGraduated
+    if (filter.tokenAddrs) where.tokenAddr_in = filter.tokenAddrs.map((a) => a.toLowerCase())
+    return where
+}
+
+function tokenSnapshotWhere(filter: TokenSnapshotFilter) {
+    const where: Record<string, unknown> = {}
+    if (filter.chainId !== undefined) where.chainId = filter.chainId
+    if (filter.tokenAddrs) where.tokenAddr_in = filter.tokenAddrs.map((a) => a.toLowerCase())
+    return where
+}
+
+function orderArgs<TEntity>(order: QueryOrder<TEntity> | undefined) {
+    if (!order) return ''
+    return `orderBy: "${String(order.orderBy)}" orderDirection: "${order.orderDirection ?? 'asc'}"`
+}
+
+export function fetchLaunchTokens<F extends readonly (keyof LaunchToken)[]>(
     client: PonderClient,
-    { chainId }: { chainId: number }
-): Promise<{ tokens: LaunchTokenDetail[]; snapshots: LaunchTokenListSnapshot[] }> {
-    const data = await client.request<{
-        launchTokens: Items<LaunchTokenDetail>
-        tokenSnapshots: Items<LaunchTokenListSnapshot>
-    }>(
-        `query TokenList($chainId: Int!) {
+    filter: LaunchTokenFilter,
+    fields: F,
+    order?: QueryOrder<LaunchToken>
+): Promise<Row<LaunchToken, F>[]> {
+    if (filter.tokenAddrs && filter.tokenAddrs.length === 0) return Promise.resolve([])
+    return client.fetchAllPages<{ launchTokens: Page<Row<LaunchToken, F>> }, Row<LaunchToken, F>>(
+        `query LaunchTokens($where: launchTokenFilter, $after: String) {
             launchTokens(
-                where: { chainId: $chainId }
-                orderBy: "createdTime"
-                orderDirection: "desc"
-            ) { items { ${sel(DETAIL_FIELDS)} } }
-            tokenSnapshots(where: { chainId: $chainId }) {
-                items { ${sel(LIST_SNAPSHOT_FIELDS)} }
-            }
-        }`,
-        { chainId }
-    )
-    return { tokens: data.launchTokens.items, snapshots: data.tokenSnapshots.items }
-}
-
-export async function fetchCreatedTokens(
-    client: PonderClient,
-    { chainId, creator, limit = 200 }: { chainId: number; creator: string; limit?: number }
-): Promise<LaunchTokenDetail[]> {
-    const data = await client.request<{ launchTokens: Items<LaunchTokenDetail> }>(
-        `query CreatedTokens($chainId: Int!, $creator: String!, $limit: Int!) {
-            launchTokens(
-                where: { chainId: $chainId, creator: $creator }
-                orderBy: "createdTime"
-                orderDirection: "desc"
-                limit: $limit
-            ) { items { ${sel(DETAIL_FIELDS)} } }
-        }`,
-        { chainId, creator, limit }
-    )
-    return data.launchTokens.items
-}
-
-export async function fetchCreatorSnapshots(
-    client: PonderClient,
-    { chainId, tokenAddrs, limit = 200 }: { chainId: number; tokenAddrs: string[]; limit?: number }
-): Promise<CreatorTokenSnapshot[]> {
-    if (tokenAddrs.length === 0) return []
-    const data = await client.request<{ tokenSnapshots: Items<CreatorTokenSnapshot> }>(
-        `query CreatorSnapshots($chainId: Int!, $tokenAddrs: [String!], $limit: Int!) {
-            tokenSnapshots(
-                where: { chainId: $chainId, tokenAddr_in: $tokenAddrs }
-                limit: $limit
-            ) { items { ${sel(CREATOR_SNAPSHOT_FIELDS)} } }
-        }`,
-        { chainId, tokenAddrs, limit }
-    )
-    return data.tokenSnapshots.items
-}
-
-export async function fetchGraduatedTokens(
-    client: PonderClient,
-    { chainId }: { chainId: number }
-): Promise<LaunchTokenMeta[]> {
-    const data = await client.request<{ launchTokens: Items<LaunchTokenMeta> }>(
-        `query GraduatedTokens($chainId: Int!) {
-            launchTokens(
-                where: { chainId: $chainId, isGraduated: 1 }
-                orderBy: "graduatedAt"
-                orderDirection: "desc"
-                limit: 1000
-            ) { items { ${sel(META_FIELDS)} } }
-        }`,
-        { chainId }
-    )
-    return data.launchTokens.items
-}
-
-export async function fetchBondingCurveTokens(
-    client: PonderClient,
-    { chainId }: { chainId: number }
-): Promise<LaunchTokenMeta[]> {
-    const data = await client.request<{ launchTokens: Items<LaunchTokenMeta> }>(
-        `query BondingCurveTokens($chainId: Int!) {
-            launchTokens(where: { chainId: $chainId, isGraduated: 0 }, limit: 1000) {
-                items { ${sel(META_FIELDS)} }
-            }
-        }`,
-        { chainId }
-    )
-    return data.launchTokens.items
-}
-
-export async function fetchLaunchTokenMeta(
-    client: PonderClient,
-    { chainId }: { chainId: number }
-): Promise<LaunchTokenMeta[]> {
-    const data = await client.request<{ launchTokens: Items<LaunchTokenMeta> }>(
-        `query LaunchTokenMeta($chainId: Int!) {
-            launchTokens(where: { chainId: $chainId }, limit: 1000) {
-                items { ${sel(META_FIELDS)} }
-            }
-        }`,
-        { chainId }
-    )
-    return data.launchTokens.items
-}
-
-export async function fetchLaunchTokensByAddresses(
-    client: PonderClient,
-    { tokenAddrs, limit = 100 }: { tokenAddrs: string[]; limit?: number }
-): Promise<Array<LaunchTokenMeta & Pick<LaunchToken, 'isGraduated'>>> {
-    if (tokenAddrs.length === 0) return []
-    const fields = [...META_FIELDS, 'isGraduated'] as const satisfies readonly (keyof LaunchToken)[]
-    const data = await client.request<{
-        launchTokens: Items<Row<LaunchToken, typeof fields>>
-    }>(
-        `query LaunchTokensByAddresses($tokenAddrs: [String!], $limit: Int!) {
-            launchTokens(where: { tokenAddr_in: $tokenAddrs }, limit: $limit) {
+                where: $where
+                ${orderArgs(order)}
+                limit: ${MAX_LIMIT}
+                after: $after
+            ) {
+                pageInfo { hasNextPage endCursor }
                 items { ${sel(fields)} }
             }
         }`,
-        { tokenAddrs, limit }
+        { where: launchTokenWhere(filter) },
+        (r) => r.launchTokens
     )
-    return data.launchTokens.items
+}
+
+export function fetchTokenSnapshots<F extends readonly (keyof TokenSnapshot)[]>(
+    client: PonderClient,
+    filter: TokenSnapshotFilter,
+    fields: F,
+    order?: QueryOrder<TokenSnapshot>
+): Promise<Row<TokenSnapshot, F>[]> {
+    if (filter.tokenAddrs && filter.tokenAddrs.length === 0) return Promise.resolve([])
+    return client.fetchAllPages<
+        { tokenSnapshots: Page<Row<TokenSnapshot, F>> },
+        Row<TokenSnapshot, F>
+    >(
+        `query TokenSnapshots($where: tokenSnapshotFilter, $after: String) {
+            tokenSnapshots(
+                where: $where
+                ${orderArgs(order)}
+                limit: ${MAX_LIMIT}
+                after: $after
+            ) {
+                pageInfo { hasNextPage endCursor }
+                items { ${sel(fields)} }
+            }
+        }`,
+        { where: tokenSnapshotWhere(filter) },
+        (r) => r.tokenSnapshots
+    )
 }
 
 const RECENT_SWAP_FIELDS = [
@@ -219,8 +180,8 @@ export async function fetchRecentSwaps(
                 orderDirection: "desc"
                 limit: $limit
             ) { items { ${sel(RECENT_SWAP_FIELDS)} } }
-            launchTokens(where: { chainId: $chainId }, limit: 1000) {
-                items { ${sel(META_FIELDS)} }
+            launchTokens(where: { chainId: $chainId }, limit: ${MAX_LIMIT}) {
+                items { ${sel(LAUNCH_TOKEN_META_FIELDS)} }
             }
         }`,
         { chainId, limit }
@@ -228,38 +189,48 @@ export async function fetchRecentSwaps(
     return { swaps: data.swapEvents.items, tokens: data.launchTokens.items }
 }
 
-export interface LaunchTokenOg {
-    token: Row<LaunchToken, typeof OG_TOKEN_FIELDS> | null
-    snapshot: Row<TokenSnapshot, typeof OG_SNAPSHOT_FIELDS> | null
-    nativeUsdPrice: Pick<NativeUsdPrice, 'chainId' | 'price'> | null
+export const TOKEN_HOLDER_ADDRESS_FIELDS = [
+    'address',
+] as const satisfies readonly (keyof TokenHolder)[]
+
+export const TOKEN_HOLDER_BALANCE_FIELDS = [
+    'tokenAddr',
+    'balance',
+] as const satisfies readonly (keyof TokenHolder)[]
+
+export interface TokenHolderFilter {
+    chainId?: number
+    tokenAddr?: string
+    address?: string
 }
 
-export async function fetchLaunchTokenOg(
+function tokenHolderWhere(filter: TokenHolderFilter) {
+    const where: Record<string, unknown> = {}
+    if (filter.chainId !== undefined) where.chainId = filter.chainId
+    if (filter.tokenAddr) where.tokenAddr = filter.tokenAddr.toLowerCase()
+    if (filter.address) where.address = filter.address.toLowerCase()
+    return where
+}
+
+export function fetchTokenHolders<F extends readonly (keyof TokenHolder)[]>(
     client: PonderClient,
-    { tokenAddr }: { tokenAddr: string }
-): Promise<LaunchTokenOg> {
-    const data = await client.request<{
-        launchTokens: Items<Row<LaunchToken, typeof OG_TOKEN_FIELDS>>
-        tokenSnapshots: Items<Row<TokenSnapshot, typeof OG_SNAPSHOT_FIELDS>>
-        nativeUsdPrices: Items<Pick<NativeUsdPrice, 'chainId' | 'price'>>
-    }>(
-        `query LaunchTokenOg($tokenAddr: String!) {
-            launchTokens(where: { tokenAddr: $tokenAddr }, limit: 1) {
-                items { ${sel(OG_TOKEN_FIELDS)} }
+    filter: TokenHolderFilter,
+    fields: F,
+    order?: QueryOrder<TokenHolder>
+): Promise<Row<TokenHolder, F>[]> {
+    return client.fetchAllPages<{ tokenHolders: Page<Row<TokenHolder, F>> }, Row<TokenHolder, F>>(
+        `query TokenHolders($where: tokenHolderFilter, $after: String) {
+            tokenHolders(
+                where: $where
+                ${orderArgs(order)}
+                limit: ${MAX_LIMIT}
+                after: $after
+            ) {
+                pageInfo { hasNextPage endCursor }
+                items { ${sel(fields)} }
             }
-            tokenSnapshots(where: { tokenAddr: $tokenAddr }, limit: 1) {
-                items { ${sel(OG_SNAPSHOT_FIELDS)} }
-            }
-            nativeUsdPrices(limit: 100) { items { chainId price } }
         }`,
-        { tokenAddr }
+        { where: tokenHolderWhere(filter) },
+        (r) => r.tokenHolders
     )
-    const token = data.launchTokens.items[0] ?? null
-    const nativeUsdPrice =
-        (token && data.nativeUsdPrices.items.find((p) => p.chainId === token.chainId)) || null
-    return {
-        token,
-        snapshot: data.tokenSnapshots.items[0] ?? null,
-        nativeUsdPrice,
-    }
 }

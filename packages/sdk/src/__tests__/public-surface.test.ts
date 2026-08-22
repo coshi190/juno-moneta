@@ -38,6 +38,16 @@ const REMOVED = [
     'decodePoolStates',
     'getPositionPoolKey',
     'fetchV3PoolTvlDays',
+    'fetchTokenList',
+    'fetchCreatedTokens',
+    'fetchCreatorSnapshots',
+    'fetchGraduatedTokens',
+    'fetchBondingCurveTokens',
+    'fetchLaunchTokenMeta',
+    'fetchLaunchTokensByAddresses',
+    'fetchHolderBalances',
+    'fetchAllTokenHolders',
+    'fetchLaunchTokenOg',
 ]
 
 const EXPOSED = [
@@ -63,6 +73,9 @@ const EXPOSED = [
     'computeFeeAprPercent',
     'sortTokens',
     'isInRange',
+    'fetchLaunchTokens',
+    'fetchTokenSnapshots',
+    'fetchTokenHolders',
 ]
 
 const surface = sdk as unknown as Record<string, unknown>

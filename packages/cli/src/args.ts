@@ -6,6 +6,7 @@ import {
     getV3Config,
     type DEXType,
     type ProtocolConfig,
+    type QueryOrder,
 } from '@coshi190/junoswap-sdk'
 
 export class UsageError extends Error {}
@@ -13,6 +14,7 @@ export class UsageError extends Error {}
 export const CHAIN_SLUGS = Object.keys(CHAIN_IDS)
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/
+const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/
 
 function normalizeAddress(item: string): string {
     if (!ADDRESS.test(item)) {
@@ -36,6 +38,34 @@ export function parseAddressList(value: string | undefined, flag: string): strin
     return items.map(normalizeAddress)
 }
 
+export function optionalAddress(value: string | undefined): string | undefined {
+    return value === undefined ? undefined : normalizeAddress(value.trim())
+}
+
+export function optionalAddressList(value: string | undefined): string[] | undefined {
+    if (value === undefined) return undefined
+    return value
+        .split(',')
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0)
+        .map(normalizeAddress)
+}
+
+export function parseTokenIds(value: string | undefined): bigint[] {
+    if (value === undefined) throw new UsageError('missing required flag --tokenIds')
+    const items = value
+        .split(',')
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0)
+    if (items.length === 0) throw new UsageError('--tokenIds requires at least one token id')
+    return items.map((item) => {
+        if (!/^\d+$/.test(item)) {
+            throw new UsageError(`invalid token id "${item}" (expected a non-negative integer)`)
+        }
+        return BigInt(item)
+    })
+}
+
 export function parsePonderUrl(value: string | undefined): string {
     const url = value ?? process.env.JUNOSWAP_PONDER_URL
     if (!url) {
@@ -46,8 +76,7 @@ export function parsePonderUrl(value: string | undefined): string {
     return url
 }
 
-export function parseChainId(value: string | undefined): number {
-    if (value === undefined) throw new UsageError('missing required flag --chainId')
+function resolveChainId(value: string): number {
     if (/^\d+$/.test(value)) return Number(value)
 
     const chainId = (CHAIN_IDS as Record<string, number | undefined>)[value]
@@ -57,6 +86,15 @@ export function parseChainId(value: string | undefined): number {
         )
     }
     return chainId
+}
+
+export function parseChainId(value: string | undefined): number {
+    if (value === undefined) throw new UsageError('missing required flag --chainId')
+    return resolveChainId(value)
+}
+
+export function optionalChainId(value: string | undefined): number | undefined {
+    return value === undefined ? undefined : resolveChainId(value)
 }
 
 export function optionalPositiveInt(value: string | undefined, flag: string): number | undefined {
@@ -105,4 +143,58 @@ export function resolveProtocolConfig(
         )
     }
     return config
+}
+
+export function optionalGraduated(value: string | undefined): 0 | 1 | undefined {
+    if (value === undefined) return undefined
+    if (value === '0') return 0
+    if (value === '1') return 1
+    throw new UsageError(`invalid --isGraduated "${value}" (expected 0 or 1)`)
+}
+
+export function parseFields<TEntity>(
+    value: string | undefined,
+    presets: Record<string, readonly (keyof TEntity)[]>,
+    fallback: readonly (keyof TEntity)[]
+): readonly (keyof TEntity)[] {
+    if (value === undefined) return fallback
+
+    const preset = presets[value]
+    if (preset !== undefined) return preset
+
+    const names = value
+        .split(',')
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0)
+    if (names.length === 0) {
+        throw new UsageError(
+            `--fields requires field names or one of: ${Object.keys(presets).join(', ')}`
+        )
+    }
+
+    return names.map((name) => {
+        if (!IDENTIFIER.test(name)) {
+            throw new UsageError(`invalid field "${name}" (expected a plain field name)`)
+        }
+        return name as keyof TEntity
+    })
+}
+
+export function optionalOrder<TEntity>(
+    orderBy: string | undefined,
+    orderDirection: string | undefined
+): QueryOrder<TEntity> | undefined {
+    if (orderBy === undefined) {
+        if (orderDirection !== undefined) {
+            throw new UsageError('--orderDirection requires --orderBy')
+        }
+        return undefined
+    }
+    if (!IDENTIFIER.test(orderBy)) {
+        throw new UsageError(`invalid --orderBy "${orderBy}" (expected a plain field name)`)
+    }
+    if (orderDirection !== undefined && orderDirection !== 'asc' && orderDirection !== 'desc') {
+        throw new UsageError(`invalid --orderDirection "${orderDirection}" (expected asc or desc)`)
+    }
+    return { orderBy: orderBy as keyof TEntity, orderDirection }
 }

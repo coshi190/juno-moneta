@@ -50,19 +50,43 @@ describe('every query is valid GraphQL and hits the expected root field', () => 
             cap
         )
 
-        await q.fetchTokenList(client, { chainId: 96 })
-        await q.fetchCreatedTokens(client, { chainId: 96, creator: '0xabc' })
-        await q.fetchGraduatedTokens(client, { chainId: 96 })
-        await q.fetchBondingCurveTokens(client, { chainId: 96 })
-        await q.fetchLaunchTokenMeta(client, { chainId: 96 })
+        await q.fetchLaunchTokens(client, { chainId: 96 }, q.LAUNCH_TOKEN_DETAIL_FIELDS)
+        await q.fetchLaunchTokens(
+            client,
+            { chainId: 96, creator: '0xabc' },
+            q.LAUNCH_TOKEN_DETAIL_FIELDS,
+            { orderBy: 'createdTime', orderDirection: 'desc' }
+        )
+        await q.fetchLaunchTokens(
+            client,
+            { chainId: 96, isGraduated: 1 },
+            q.LAUNCH_TOKEN_META_FIELDS,
+            { orderBy: 'graduatedAt', orderDirection: 'desc' }
+        )
+        await q.fetchLaunchTokens(
+            client,
+            { chainId: 96, isGraduated: 0 },
+            q.LAUNCH_TOKEN_META_FIELDS
+        )
+        await q.fetchLaunchTokens(client, { tokenAddrs: ['0xtok'] }, q.LAUNCH_TOKEN_CARD_FIELDS)
+        await q.fetchTokenSnapshots(client, { chainId: 96 }, q.TOKEN_SNAPSHOT_LIST_FIELDS)
+        await q.fetchTokenSnapshots(
+            client,
+            { chainId: 96, tokenAddrs: ['0xtok'] },
+            q.TOKEN_SNAPSHOT_CREATOR_FIELDS
+        )
         await q.fetchRecentSwaps(client, { chainId: 96 })
-        await q.fetchLaunchTokenOg(client, { tokenAddr: '0xtok' })
 
         for (const c of cap) expect(() => parse(c.query)).not.toThrow()
 
-        expect(rootFields(parse(cap[0]!.query))).toEqual(['launchTokens', 'tokenSnapshots'])
-        expect(rootFields(parse(cap[5]!.query))).toEqual(['swapEvents', 'launchTokens'])
-        expect(cap[1]!.variables).toMatchObject({ chainId: 96, creator: '0xabc' })
+        for (const i of [0, 1, 2, 3, 4]) {
+            expect(rootFields(parse(cap[i]!.query))).toEqual(['launchTokens'])
+        }
+        for (const i of [5, 6]) {
+            expect(rootFields(parse(cap[i]!.query))).toEqual(['tokenSnapshots'])
+        }
+        expect(rootFields(parse(cap[7]!.query))).toEqual(['swapEvents', 'launchTokens'])
+        expect(cap[1]!.variables!.where).toEqual({ chainId: 96, creator: '0xabc' })
     })
 
     it('prices, pools and holders', async () => {
@@ -86,12 +110,14 @@ describe('every query is valid GraphQL and hits the expected root field', () => 
         await q.fetchV3TokenSnapshots(client, { chainId: 96 })
         await q.fetchV3Pools(client, { chainId: 96 })
         await q.fetchV3Tokens(client, { chainId: 96 })
-        await q.fetchTokenHolders(client, { tokenAddr: '0xtok' })
-        await q.fetchHolderBalances(client, { address: '0xme' })
-        await q.fetchAllTokenHolders(client)
+        await q.fetchTokenHolders(client, { tokenAddr: '0xtok' }, q.TOKEN_HOLDER_ADDRESS_FIELDS)
+        await q.fetchTokenHolders(client, { address: '0xme' }, q.TOKEN_HOLDER_BALANCE_FIELDS)
+        await q.fetchTokenHolders(client, { chainId: 96 }, q.TOKEN_HOLDER_ADDRESS_FIELDS)
 
         for (const c of cap) expect(() => parse(c.query)).not.toThrow()
-        expect(rootFields(parse(cap[5]!.query))).toEqual(['tokenHolders', 'tokenSnapshots'])
+        for (const i of [5, 6, 7]) {
+            expect(rootFields(parse(cap[i]!.query))).toEqual(['tokenHolders'])
+        }
     })
 
     it('swaps and history', async () => {
@@ -151,8 +177,61 @@ describe('filters travel as GraphQL variables, never interpolated into the query
     it('filters graduated tokens server-side', async () => {
         const cap: Captured[] = []
         const client = stubClient({ launchTokens: page([]) }, cap)
-        await q.fetchGraduatedTokens(client, { chainId: 96 })
-        expect(cap[0]!.query).toContain('isGraduated: 1')
+        await q.fetchLaunchTokens(
+            client,
+            { chainId: 96, isGraduated: 1 },
+            q.LAUNCH_TOKEN_META_FIELDS
+        )
+        expect(cap[0]!.variables!.where).toEqual({ chainId: 96, isGraduated: 1 })
+        expect(cap[0]!.query).not.toContain('96')
+    })
+
+    it('lowercases creator and token addresses so checksummed input still matches', async () => {
+        const cap: Captured[] = []
+        const client = stubClient({ launchTokens: page([]), tokenSnapshots: page([]) }, cap)
+
+        await q.fetchLaunchTokens(
+            client,
+            { chainId: 96, creator: '0xAbCdEf', tokenAddrs: ['0xToK'] },
+            q.LAUNCH_TOKEN_META_FIELDS
+        )
+        await q.fetchTokenSnapshots(client, { tokenAddrs: ['0xToK'] }, q.TOKEN_SNAPSHOT_LIST_FIELDS)
+
+        expect(cap[0]!.variables!.where).toEqual({
+            chainId: 96,
+            creator: '0xabcdef',
+            tokenAddr_in: ['0xtok'],
+        })
+        expect(cap[1]!.variables!.where).toEqual({ tokenAddr_in: ['0xtok'] })
+    })
+
+    it('omits ordering arguments when no order is requested', async () => {
+        const cap: Captured[] = []
+        const client = stubClient({ launchTokens: page([]) }, cap)
+
+        await q.fetchLaunchTokens(client, { chainId: 96 }, q.LAUNCH_TOKEN_META_FIELDS)
+        expect(cap[0]!.query).not.toContain('orderBy')
+
+        await q.fetchLaunchTokens(client, { chainId: 96 }, q.LAUNCH_TOKEN_META_FIELDS, {
+            orderBy: 'createdTime',
+            orderDirection: 'desc',
+        })
+        expect(cap[1]!.query).toContain('orderBy: "createdTime"')
+        expect(cap[1]!.query).toContain('orderDirection: "desc"')
+    })
+
+    it('paginates the launch token and snapshot lists', async () => {
+        const cap: Captured[] = []
+        const client = stubClient({ launchTokens: page([]), tokenSnapshots: page([]) }, cap)
+
+        await q.fetchLaunchTokens(client, { chainId: 96 }, q.LAUNCH_TOKEN_META_FIELDS)
+        await q.fetchTokenSnapshots(client, { chainId: 96 }, q.TOKEN_SNAPSHOT_LIST_FIELDS)
+
+        for (const c of cap) {
+            expect(c.query).toContain('$after: String')
+            expect(c.query).toContain('pageInfo { hasNextPage endCursor }')
+            expect(c.variables).toMatchObject({ after: null })
+        }
     })
 
     it('builds the token trade feed filter from the optional args', async () => {
@@ -189,16 +268,19 @@ describe('fetchV3Pools', () => {
 describe('empty address lists short-circuit instead of querying', () => {
     it.each([
         [
-            'fetchCreatorSnapshots',
-            () => q.fetchCreatorSnapshots(stubClient({}), { chainId: 96, tokenAddrs: [] }),
+            'fetchTokenSnapshots',
+            () =>
+                q.fetchTokenSnapshots(stubClient({}), { chainId: 96, tokenAddrs: [] }, [
+                    'tokenAddr',
+                ]),
         ],
         [
             'fetchTokenSnapshotsByAddresses',
             () => q.fetchTokenSnapshotsByAddresses(stubClient({}), { tokenAddrs: [] }),
         ],
         [
-            'fetchLaunchTokensByAddresses',
-            () => q.fetchLaunchTokensByAddresses(stubClient({}), { tokenAddrs: [] }),
+            'fetchLaunchTokens',
+            () => q.fetchLaunchTokens(stubClient({}), { tokenAddrs: [] }, ['tokenAddr']),
         ],
         [
             'fetchV3PoolDayVolumes',
@@ -211,6 +293,16 @@ describe('empty address lists short-circuit instead of querying', () => {
         ],
     ])('%s', async (_name, run) => {
         await expect(run()).resolves.toEqual([])
+    })
+
+    it('issues no request at all for an empty address list', async () => {
+        const cap: Captured[] = []
+        const client = stubClient({ launchTokens: page([]), tokenSnapshots: page([]) }, cap)
+
+        await q.fetchLaunchTokens(client, { chainId: 96, tokenAddrs: [] }, ['tokenAddr'])
+        await q.fetchTokenSnapshots(client, { chainId: 96, tokenAddrs: [] }, ['tokenAddr'])
+
+        expect(cap).toHaveLength(0)
     })
 })
 
