@@ -1,6 +1,6 @@
 {
     "name": "@coshi190/junoswap-sdk",
-    "version": "0.27.0",
+    "version": "0.28.0",
     "description": "Chain-facing primitives",
     "license": "MIT",
     "repository": {

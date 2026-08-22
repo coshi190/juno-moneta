@@ -1,7 +1,6 @@
 import {
     CHAIN_IDS,
     ProtocolType,
-    WRAPPED_NATIVE_ADDRESSES,
     getDexConfig,
     getV2Config,
     getV3Config,
@@ -77,17 +76,6 @@ export function optionalProtocol(value: string | undefined): string | undefined 
     const protocol = value.trim()
     if (protocol.length === 0) throw new UsageError('--protocol requires a name')
     return protocol
-}
-
-export function resolveWrappedNative(chainId: number, value: string | undefined): string {
-    if (value !== undefined) return parseAddress(value, 'wrappedNative')
-    const wrappedNative = WRAPPED_NATIVE_ADDRESSES[chainId]
-    if (wrappedNative === undefined) {
-        throw new UsageError(
-            `no wrapped native address for chain ${chainId} (pass --wrappedNative)`
-        )
-    }
-    return wrappedNative
 }
 
 export function parseProtocolType(value: string | undefined): ProtocolType {

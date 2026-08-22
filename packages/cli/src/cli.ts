@@ -13,8 +13,6 @@ const OPTIONS = {
     users: { type: 'string' },
     referrer: { type: 'string' },
     tokenAddr: { type: 'string' },
-    wrappedNative: { type: 'string' },
-    fee: { type: 'string' },
     limit: { type: 'string' },
     ponderUrl: { type: 'string' },
     raw: { type: 'boolean', default: false },

@@ -174,36 +174,15 @@ describe('filters travel as GraphQL variables, never interpolated into the query
     })
 })
 
-describe('fetchGraduatedPool', () => {
-    it('retries with the token order reversed before giving up', async () => {
+describe('fetchV3Pools', () => {
+    it('declares cursor pagination so the pool list is never truncated', async () => {
         const cap: Captured[] = []
-        let call = 0
-        const client: PonderClient = {
-            request: async <T>(query: string, variables?: Record<string, unknown>) => {
-                cap.push({ query, variables })
-                const hit = variables!.token0 === '0xwnative'
-                return { v3Pools: { items: hit ? [{ address: '0xpool' }] : [] } } as T
-            },
-            fetchAllPages: async () => [],
-        }
-        void call
+        await q.fetchV3Pools(stubClient({ v3Pools: page([]) }, cap), { chainId: 96 })
 
-        const address = await q.fetchGraduatedPool(client, {
-            tokenAddr: '0xtok',
-            wrappedNative: '0xwnative',
-        })
-
-        expect(address).toBe('0xpool')
-        expect(cap).toHaveLength(2)
-        expect(cap[0]!.variables).toMatchObject({ token0: '0xtok', token1: '0xwnative' })
-        expect(cap[1]!.variables).toMatchObject({ token0: '0xwnative', token1: '0xtok' })
-    })
-
-    it('returns null when neither orientation exists', async () => {
-        const client = stubClient({ v3Pools: { items: [] } })
-        expect(
-            await q.fetchGraduatedPool(client, { tokenAddr: '0xtok', wrappedNative: '0xwn' })
-        ).toBeNull()
+        expect(cap).toHaveLength(1)
+        expect(cap[0]!.query).toContain('$after: String')
+        expect(cap[0]!.query).toContain('pageInfo { hasNextPage endCursor }')
+        expect(cap[0]!.variables).toMatchObject({ chainId: 96, protocol: 'junoswap', after: null })
     })
 })
 

@@ -26,8 +26,6 @@ export function helpText(): string {
         '  --users <addr,addr>     comma-separated user addresses',
         '  --referrer <addr>       referrer address',
         '  --tokenAddr <addr>      token address',
-        "  --wrappedNative <addr>  wrapped native address, defaults to the chain's",
-        '  --fee <n>               v3 fee tier in hundredths of a bip',
         '  --limit <n>             max rows to return',
         '  --ponderUrl <url>       indexer graphql endpoint, defaults to $JUNOSWAP_PONDER_URL',
         '  --raw                   print scalar results unquoted',

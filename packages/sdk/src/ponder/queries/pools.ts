@@ -8,7 +8,7 @@ import {
 } from '../../pool/pool-tvl-math.js'
 import { computePoolVolumesUsd, type PoolVolumeMeta } from '../../pool/pool-volume-math.js'
 import { fetchV3TokenSnapshots } from './prices.js'
-import { sel, type Items, type Row } from './internal.js'
+import { sel, type Items, type Page, type Row } from './internal.js'
 
 const POOL_FIELDS = [
     'address',
@@ -49,7 +49,7 @@ export type V3TokenRow = Row<V3Token, typeof TOKEN_FIELDS>
 export type V3PoolDayVolumeRow = Row<V3PoolDayVolume, typeof DAY_VOLUME_FIELDS>
 export type V3PoolStateRow = Row<V3PoolState, typeof POOL_STATE_FIELDS>
 
-export async function fetchV3Pools(
+export function fetchV3Pools(
     client: PonderClient,
     {
         chainId,
@@ -57,15 +57,20 @@ export async function fetchV3Pools(
         limit = 500,
     }: { chainId: number; protocol?: string; limit?: number }
 ): Promise<V3PoolRow[]> {
-    const data = await client.request<{ v3Pools: Items<V3PoolRow> }>(
-        `query V3Pools($chainId: Int!, $protocol: String!, $limit: Int!) {
-            v3Pools(where: { chainId: $chainId, protocol: $protocol }, limit: $limit) {
+    return client.fetchAllPages<{ v3Pools: Page<V3PoolRow> }, V3PoolRow>(
+        `query V3Pools($chainId: Int!, $protocol: String!, $limit: Int!, $after: String) {
+            v3Pools(
+                where: { chainId: $chainId, protocol: $protocol }
+                limit: $limit
+                after: $after
+            ) {
+                pageInfo { hasNextPage endCursor }
                 items { ${sel(POOL_FIELDS)} }
             }
         }`,
-        { chainId, protocol, limit }
+        { chainId, protocol, limit },
+        (r) => r.v3Pools
     )
-    return data.v3Pools.items
 }
 
 export async function fetchV3Tokens(
@@ -132,37 +137,6 @@ export async function fetchV3PoolReserves(
         { chainId, poolAddresses, limit }
     )
     return data.v3PoolStates.items
-}
-
-export async function fetchGraduatedPool(
-    client: PonderClient,
-    {
-        tokenAddr,
-        wrappedNative,
-        fee = 10000,
-    }: { tokenAddr: string; wrappedNative: string; fee?: number }
-): Promise<string | null> {
-    const query = `query GraduatedPool($token0: String!, $token1: String!, $fee: Int!) {
-        v3Pools(where: { token0: $token0, token1: $token1, fee: $fee }, limit: 1) {
-            items { address }
-        }
-    }`
-    type Response = { v3Pools: Items<Pick<V3Pool, 'address'>> }
-
-    const direct = await client.request<Response>(query, {
-        token0: tokenAddr,
-        token1: wrappedNative,
-        fee,
-    })
-    const hit = direct.v3Pools.items[0]
-    if (hit) return hit.address
-
-    const reversed = await client.request<Response>(query, {
-        token0: wrappedNative,
-        token1: tokenAddr,
-        fee,
-    })
-    return reversed.v3Pools.items[0]?.address ?? null
 }
 
 export interface PoolMetricsToken {

@@ -13,7 +13,6 @@ import {
     WRAPPED_NATIVE_ADDRESSES,
     createPonderClient,
     fetchAllReferralBindings,
-    fetchGraduatedPool,
     fetchIncentives,
     fetchIndexerStatus,
     fetchNativeUsdPrice,
@@ -40,7 +39,6 @@ import {
 } from '@coshi190/junoswap-sdk'
 import {
     optionalLimit,
-    optionalPositiveInt,
     optionalProtocol,
     optionalProtocolType,
     parseAddress,
@@ -49,7 +47,6 @@ import {
     parsePonderUrl,
     parseProtocolType,
     resolveProtocolConfig,
-    resolveWrappedNative,
 } from './args.js'
 
 export interface CommandArgs {
@@ -60,8 +57,6 @@ export interface CommandArgs {
     users?: string | undefined
     referrer?: string | undefined
     tokenAddr?: string | undefined
-    wrappedNative?: string | undefined
-    fee?: string | undefined
     limit?: string | undefined
     ponderUrl?: string | undefined
 }
@@ -304,18 +299,5 @@ export const COMMANDS: Record<string, Command> = {
                 protocol: optionalProtocol(args.protocol),
                 limit: optionalLimit(args.limit),
             }),
-    },
-    fetchGraduatedPool: {
-        group: PONDER,
-        flags: `${CHAIN_FLAG} --tokenAddr <addr> [--wrappedNative <addr>] [--fee <n>] [--ponderUrl <url>]`,
-        describe: 'Pool address a launchpad token graduated into, or null when it has none',
-        run: (args) => {
-            const chainId = parseChainId(args.chainId)
-            return fetchGraduatedPool(createPonderClient(parsePonderUrl(args.ponderUrl)), {
-                tokenAddr: parseAddress(args.tokenAddr, 'tokenAddr'),
-                wrappedNative: resolveWrappedNative(chainId, args.wrappedNative),
-                fee: optionalPositiveInt(args.fee, 'fee'),
-            })
-        },
     },
 }

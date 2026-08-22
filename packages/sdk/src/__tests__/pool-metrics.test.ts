@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { computeFeeAprPercent, fetchPoolMetrics } from '../ponder/queries/pools'
-import type { PonderClient } from '../ponder/client'
+import type { PonderClient, PonderPageInfo } from '../ponder/client'
 import { CHAIN_IDS, STABLECOIN_ADDRESSES, WRAPPED_NATIVE_ADDRESSES } from '../configs/chains'
 
 const Q96 = 2n ** 96n
@@ -49,19 +49,24 @@ interface StubData {
 }
 
 function stub(data: StubData): PonderClient {
+    const request = async <T>(query: string) => {
+        if (query.includes('v3Pools(')) return { v3Pools: { items: data.pools ?? [] } } as T
+        if (query.includes('v3Tokens(')) return { v3Tokens: { items: data.tokens ?? [] } } as T
+        if (query.includes('v3PoolStates('))
+            return { v3PoolStates: { items: data.states ?? [] } } as T
+        if (query.includes('v3PoolDayVolumes('))
+            return { v3PoolDayVolumes: { items: data.volumes ?? [] } } as T
+        if (query.includes('v3TokenSnapshots('))
+            return { v3TokenSnapshots: { items: data.snapshots ?? [] } } as T
+        return {} as T
+    }
     return {
-        request: async <T>(query: string) => {
-            if (query.includes('v3Pools(')) return { v3Pools: { items: data.pools ?? [] } } as T
-            if (query.includes('v3Tokens(')) return { v3Tokens: { items: data.tokens ?? [] } } as T
-            if (query.includes('v3PoolStates('))
-                return { v3PoolStates: { items: data.states ?? [] } } as T
-            if (query.includes('v3PoolDayVolumes('))
-                return { v3PoolDayVolumes: { items: data.volumes ?? [] } } as T
-            if (query.includes('v3TokenSnapshots('))
-                return { v3TokenSnapshots: { items: data.snapshots ?? [] } } as T
-            return {} as T
-        },
-        fetchAllPages: async () => [],
+        request,
+        fetchAllPages: async <TResponse, TItem>(
+            query: string,
+            _variables: Record<string, unknown>,
+            select: (r: TResponse) => { pageInfo: PonderPageInfo; items: TItem[] }
+        ) => select(await request<TResponse>(query)).items,
     }
 }
 
