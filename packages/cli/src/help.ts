@@ -28,7 +28,7 @@ export function helpText(): string {
         '  --tokenAddr <addr>      token address',
         '  --limit <n>             max rows to return',
         '  --ponderUrl <url>       indexer graphql endpoint, defaults to $JUNOSWAP_PONDER_URL',
-        '  --raw                   print scalar results unquoted',
+        '  --json                  print raw JSON instead of formatted output',
         '  -h, --help              show this help',
         '',
         ...[...groups].map(([group, lines]) => `${group}\n${lines.join('\n')}\n`),

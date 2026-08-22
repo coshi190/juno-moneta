@@ -2,8 +2,9 @@
 import { parseArgs } from 'node:util'
 import { UsageError } from './args.js'
 import { COMMANDS } from './commands.js'
-import { format } from './format.js'
+import { formatJson } from './format.js'
 import { helpText, signature } from './help.js'
+import { render } from './render.js'
 
 const OPTIONS = {
     chainId: { type: 'string' },
@@ -15,7 +16,7 @@ const OPTIONS = {
     tokenAddr: { type: 'string' },
     limit: { type: 'string' },
     ponderUrl: { type: 'string' },
-    raw: { type: 'boolean', default: false },
+    json: { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h', default: false },
 } as const
 
@@ -57,7 +58,8 @@ async function main(): Promise<number> {
     }
 
     try {
-        process.stdout.write(`${format(await command.run(values), values.raw)}\n`)
+        const result = await command.run(values)
+        process.stdout.write(`${values.json ? formatJson(result) : render(result)}\n`)
         return 0
     } catch (error) {
         if (error instanceof UsageError) {
