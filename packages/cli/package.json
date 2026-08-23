@@ -1,17 +1,17 @@
 {
-    "name": "@coshi190/junoswap-cli",
+    "name": "@coshi190/juno-moneta-cli",
     "version": "0.1.0",
     "description": "1:1 command line surface over the SDK",
     "private": true,
     "license": "MIT",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/coshi190/junoswap-core.git",
+        "url": "git+https://github.com/coshi190/juno-moneta.git",
         "directory": "packages/cli"
     },
     "type": "module",
     "bin": {
-        "junoswap": "./dist/cli.js"
+        "juno-moneta": "./dist/cli.js"
     },
     "files": [
         "dist"
@@ -22,7 +22,7 @@
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
-        "@coshi190/junoswap-sdk": "workspace:*"
+        "@coshi190/juno-moneta-sdk": "workspace:*"
     },
     "devDependencies": {
         "@types/node": "^22.10.0",

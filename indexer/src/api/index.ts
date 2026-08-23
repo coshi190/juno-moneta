@@ -12,7 +12,7 @@ import {
     calculatePriceFromSqrtPrice,
     WRAPPED_NATIVE_ADDRESSES,
     type TokenPnl,
-} from '@coshi190/junoswap-sdk'
+} from '@coshi190/juno-moneta-sdk'
 import { finalizeTokenPnl, finalizePortfolioPnl, type PnlFold } from '../pnl-math.js'
 import { computeWindowedTraderStats, type LeaderboardSwapEvent } from '../trader-stats.js'
 import {

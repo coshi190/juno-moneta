@@ -5,7 +5,7 @@ import {
     resolveBinding,
     parseV2Swap,
     WRAPPED_NATIVE_ADDRESSES,
-} from '@coshi190/junoswap-sdk'
+} from '@coshi190/juno-moneta-sdk'
 import { upsertToken } from './v3-pools.js'
 import { getSeedV2Pool, getSeedV2Dex } from './seed.js'
 import { recordUserSwap } from './user-pnl.js'

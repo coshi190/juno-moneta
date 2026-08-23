@@ -53,7 +53,7 @@ import {
     type ProtocolConfig,
     type TokenHolder,
     type TokenSnapshot,
-} from '@coshi190/junoswap-sdk'
+} from '@coshi190/juno-moneta-sdk'
 import {
     optionalAddress,
     optionalAddressList,
@@ -270,7 +270,7 @@ export const COMMANDS: Record<string, Command> = {
     ),
     BONDING_CURVE_JUNOSWAP_CHAIN_ID: constantCommand(
         DEPLOYMENTS,
-        'Chain id of the canonical Junoswap bonding curve',
+        'Chain id of the canonical JunoMoneta bonding curve',
         BONDING_CURVE_JUNOSWAP_CHAIN_ID
     ),
     LAUNCHPAD_CHAIN_IDS: constantCommand(

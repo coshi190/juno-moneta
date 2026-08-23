@@ -42,11 +42,11 @@ jobs:
             - run: bun install --frozen-lockfile
 
             - name: Typecheck
-              run: bun run --filter @coshi190/junoswap-sdk typecheck
+              run: bun run --filter @coshi190/juno-moneta-sdk typecheck
             - name: Test
-              run: bun run --filter @coshi190/junoswap-sdk test
+              run: bun run --filter @coshi190/juno-moneta-sdk test
             - name: Build
-              run: bun run --filter @coshi190/junoswap-sdk build
+              run: bun run --filter @coshi190/juno-moneta-sdk build
 
     cli:
         name: CLI
@@ -59,11 +59,11 @@ jobs:
                   bun-version: 1.x
             - run: bun install --frozen-lockfile
             - name: Build SDK
-              run: bun run --filter @coshi190/junoswap-sdk build
+              run: bun run --filter @coshi190/juno-moneta-sdk build
             - name: Typecheck
-              run: bun run --filter @coshi190/junoswap-cli typecheck
+              run: bun run --filter @coshi190/juno-moneta-cli typecheck
             - name: Build
-              run: bun run --filter @coshi190/junoswap-cli build
+              run: bun run --filter @coshi190/juno-moneta-cli build
 
     indexer:
         name: Indexer
@@ -76,7 +76,7 @@ jobs:
                   bun-version: 1.x
             - run: bun install --frozen-lockfile
             - name: Build SDK
-              run: bun run --filter @coshi190/junoswap-sdk build
+              run: bun run --filter @coshi190/juno-moneta-sdk build
             - name: Codegen
               run: bun run codegen
               working-directory: indexer

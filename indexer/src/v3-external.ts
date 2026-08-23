@@ -1,7 +1,7 @@
 import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
 import { upsertToken, recordV3SwapEvent } from './v3-pools.js'
-import { parseTrackingTag } from '@coshi190/junoswap-sdk'
+import { parseTrackingTag } from '@coshi190/juno-moneta-sdk'
 import { getSeedV3Pool } from './seed.js'
 
 async function recordExternalV3Pool(context: any, chainId: number, event: any) {

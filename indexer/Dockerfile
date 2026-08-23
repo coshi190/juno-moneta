@@ -1,4 +1,4 @@
-# Build context is the REPO ROOT, not indexer/ — the indexer resolves @coshi190/junoswap-sdk through
+# Build context is the REPO ROOT, not indexer/ — the indexer resolves @coshi190/juno-moneta-sdk through
 # the bun workspace. On Railway: root directory "/", Dockerfile path "indexer/Dockerfile".
 #
 #   docker build -f indexer/Dockerfile .
@@ -16,8 +16,8 @@ RUN bun install --frozen-lockfile
 COPY packages/sdk ./packages/sdk
 COPY indexer ./indexer
 
-# The indexer imports @coshi190/junoswap-sdk's build output, not its source.
-RUN bun run --filter @coshi190/junoswap-sdk build
+# The indexer imports @coshi190/juno-moneta-sdk's build output, not its source.
+RUN bun run --filter @coshi190/juno-moneta-sdk build
 
 WORKDIR /app/indexer
 

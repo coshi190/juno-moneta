@@ -4,7 +4,7 @@ import {
     NONFUNGIBLE_POSITION_MANAGER_ABI,
     UNISWAP_V3_POOL_ABI,
     getV3Config,
-} from '@coshi190/junoswap-sdk'
+} from '@coshi190/juno-moneta-sdk'
 
 const RPC_URLS: Record<number, string> = {
     25925: process.env.PONDER_RPC_URL_25925 ?? 'https://rpc-testnet.bitkubchain.io',

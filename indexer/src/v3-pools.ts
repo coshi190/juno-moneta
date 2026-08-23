@@ -9,7 +9,7 @@ import {
     parseV3Swap,
     WRAPPED_NATIVE_ADDRESSES,
     STABLECOIN_ADDRESSES,
-} from '@coshi190/junoswap-sdk'
+} from '@coshi190/juno-moneta-sdk'
 import { sanitizeUsdPrice, MAX_NATIVE_USD_PRICE, MAX_TOKEN_USD_PRICE } from './price-history.js'
 import { recordUserSwap } from './user-pnl.js'
 

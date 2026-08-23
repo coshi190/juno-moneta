@@ -7,7 +7,7 @@ import {
     type DEXType,
     type ProtocolConfig,
     type QueryOrder,
-} from '@coshi190/junoswap-sdk'
+} from '@coshi190/juno-moneta-sdk'
 
 export class UsageError extends Error {}
 
@@ -67,10 +67,10 @@ export function parseTokenIds(value: string | undefined): bigint[] {
 }
 
 export function parsePonderUrl(value: string | undefined): string {
-    const url = value ?? process.env.JUNOSWAP_PONDER_URL
+    const url = value ?? process.env.JUNO_MONETA_PONDER_URL ?? process.env.JUNOSWAP_PONDER_URL
     if (!url) {
         throw new UsageError(
-            'missing indexer endpoint (pass --ponderUrl or set JUNOSWAP_PONDER_URL)'
+            'missing indexer endpoint (pass --ponderUrl or set JUNO_MONETA_PONDER_URL)'
         )
     }
     return url

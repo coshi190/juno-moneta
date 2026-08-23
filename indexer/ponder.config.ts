@@ -18,7 +18,7 @@ import {
     getV3Config,
     getV3StakerAddress,
     type DEXType,
-} from '@coshi190/junoswap-sdk'
+} from '@coshi190/juno-moneta-sdk'
 import { CHAIN_IDS, DEFAULT_RPC_URLS } from './src/chains.js'
 import externalPools from './external-pools.json'
 

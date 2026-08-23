@@ -52,7 +52,7 @@ async function main(): Promise<number> {
 
     const command = COMMANDS[name]
     if (!command) {
-        process.stderr.write(`unknown command "${name}", run junoswap --help for the list\n`)
+        process.stderr.write(`unknown command "${name}", run juno-moneta --help for the list\n`)
         return 1
     }
 

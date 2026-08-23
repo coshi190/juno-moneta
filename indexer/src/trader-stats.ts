@@ -1,5 +1,5 @@
 import { formatEther } from 'viem'
-import { computePoints, isJunoswapProtocol, type PnlSwapEvent } from '@coshi190/junoswap-sdk'
+import { computePoints, isJunoswapProtocol, type PnlSwapEvent } from '@coshi190/juno-moneta-sdk'
 import { finalizePortfolioPnl, foldEventsByToken } from './pnl-math.js'
 
 export interface LeaderboardSwapEvent extends PnlSwapEvent {

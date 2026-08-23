@@ -1,5 +1,5 @@
 import { formatEther, formatUnits } from 'viem'
-import type { TokenPnl, PortfolioPnlTotals, PnlSwapEvent } from '@coshi190/junoswap-sdk'
+import type { TokenPnl, PortfolioPnlTotals, PnlSwapEvent } from '@coshi190/juno-moneta-sdk'
 
 export interface PnlFold {
     position: number

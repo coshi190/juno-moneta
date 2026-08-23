@@ -1,11 +1,11 @@
 {
-    "name": "@coshi190/junoswap-sdk",
+    "name": "@coshi190/juno-moneta-sdk",
     "version": "0.30.0",
     "description": "Chain-facing primitives",
     "license": "MIT",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/coshi190/junoswap-core.git",
+        "url": "git+https://github.com/coshi190/juno-moneta.git",
         "directory": "packages/sdk"
     },
     "type": "module",

@@ -1,5 +1,5 @@
 {
-    "name": "junoswap-indexer",
+    "name": "juno-moneta-indexer",
     "private": true,
     "type": "module",
     "scripts": {
@@ -11,7 +11,7 @@
         "test": "vitest --run"
     },
     "dependencies": {
-        "@coshi190/junoswap-sdk": "workspace:*",
+        "@coshi190/juno-moneta-sdk": "workspace:*",
         "ponder": "^0.16.6",
         "viem": "^2.25.0"
     },

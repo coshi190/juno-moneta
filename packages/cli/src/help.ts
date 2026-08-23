@@ -14,7 +14,7 @@ export function helpText(): string {
     }
 
     return [
-        'Usage: junoswap <command> [flags]',
+        'Usage: juno-moneta <command> [flags]',
         '',
         'Every command mirrors one export of the SDK.',
         '',
@@ -36,7 +36,7 @@ export function helpText(): string {
         '  --orderBy <field>       field to sort on',
         '  --orderDirection <dir>  asc or desc, defaults to asc',
         '  --limit <n>             max rows to return',
-        '  --ponderUrl <url>       indexer graphql endpoint, defaults to $JUNOSWAP_PONDER_URL',
+        '  --ponderUrl <url>       indexer graphql endpoint, defaults to $JUNO_MONETA_PONDER_URL',
         '  --json                  print raw JSON instead of formatted output',
         '  -h, --help              show this help',
         '',

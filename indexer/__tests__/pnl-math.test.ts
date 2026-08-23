@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { parseEther, parseUnits } from 'viem'
-import type { PnlSwapEvent } from '@coshi190/junoswap-sdk'
+import type { PnlSwapEvent } from '@coshi190/juno-moneta-sdk'
 import {
     applyFoldEvent,
     finalizeTokenPnl,
