@@ -275,10 +275,6 @@ describe('empty address lists short-circuit instead of querying', () => {
                 ]),
         ],
         [
-            'fetchTokenSnapshotsByAddresses',
-            () => q.fetchTokenSnapshotsByAddresses(stubClient({}), { tokenAddrs: [] }),
-        ],
-        [
             'fetchLaunchTokens',
             () => q.fetchLaunchTokens(stubClient({}), { tokenAddrs: [] }, ['tokenAddr']),
         ],

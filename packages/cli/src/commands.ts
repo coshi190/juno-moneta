@@ -21,10 +21,12 @@ import {
     WRAPPED_NATIVE_ADDRESSES,
     createPonderClient,
     fetchAllReferralBindings,
+    fetchDepositsByOwner,
     fetchIncentives,
     fetchIndexerStatus,
     fetchLaunchTokens,
     fetchNativeUsdPrice,
+    fetchNativeUsdPriceSnapshots,
     fetchPoolMetrics,
     fetchPositionsByTokenIds,
     fetchRecentSwaps,
@@ -34,6 +36,7 @@ import {
     fetchTokenSnapshots,
     fetchUserStats,
     fetchUserPositions,
+    fetchV3TokenSnapshots,
     getAggRouterAddress,
     getBondingCurveAddress,
     getDefaultDexForChain,
@@ -341,6 +344,17 @@ export const COMMANDS: Record<string, Command> = {
                 limit: optionalLimit(args.limit),
             }),
     },
+    fetchDepositsByOwner: {
+        group: PONDER,
+        flags: `${CHAIN_FLAG} --owner <addr> [--limit <n>] ${PONDER_FLAG}`,
+        describe: 'V3 staker deposits held by an owner on a chain, with position token id',
+        run: (args) =>
+            fetchDepositsByOwner(createPonderClient(parsePonderUrl(args.ponderUrl)), {
+                chainId: parseChainId(args.chainId),
+                owner: parseAddress(args.owner, 'owner'),
+                limit: optionalLimit(args.limit),
+            }),
+    },
     fetchLaunchTokens: {
         group: PONDER,
         flags: `${OPTIONAL_CHAIN_FLAG} [--creator <addr>] [--isGraduated 0|1] [--tokenAddrs <a,a>] ${SELECT_FLAGS} ${PONDER_FLAG}`,
@@ -442,6 +456,39 @@ export const COMMANDS: Record<string, Command> = {
             fetchPoolMetrics(createPonderClient(parsePonderUrl(args.ponderUrl)), {
                 chainId: parseChainId(args.chainId),
                 protocol: optionalProtocol(args.protocol),
+                limit: optionalLimit(args.limit),
+            }),
+    },
+    fetchNativeUsdPrice: {
+        group: PONDER,
+        flags: `${CHAIN_FLAG} ${PONDER_FLAG}`,
+        describe: 'Current native token price in USD on a chain, from the indexer',
+        run: (args) =>
+            fetchNativeUsdPrice(createPonderClient(parsePonderUrl(args.ponderUrl)), {
+                chainId: parseChainId(args.chainId),
+            }),
+    },
+    fetchNativeUsdPriceSnapshots: {
+        group: PONDER,
+        flags: `${CHAIN_FLAG} [--limit <n>] ${PONDER_FLAG}`,
+        describe:
+            'Native token USD price history on a chain, oldest first, --limit keeps the newest n',
+        run: async (args) => {
+            const rows = await fetchNativeUsdPriceSnapshots(
+                createPonderClient(parsePonderUrl(args.ponderUrl)),
+                { chainId: parseChainId(args.chainId) }
+            )
+            const limit = optionalLimit(args.limit)
+            return limit === undefined ? rows : rows.slice(-limit)
+        },
+    },
+    fetchV3TokenSnapshots: {
+        group: PONDER,
+        flags: `${CHAIN_FLAG} [--limit <n>] ${PONDER_FLAG}`,
+        describe: 'Latest USD price per V3 token on a chain, from the indexer',
+        run: (args) =>
+            fetchV3TokenSnapshots(createPonderClient(parsePonderUrl(args.ponderUrl)), {
+                chainId: parseChainId(args.chainId),
                 limit: optionalLimit(args.limit),
             }),
     },

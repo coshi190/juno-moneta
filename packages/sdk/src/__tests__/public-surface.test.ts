@@ -45,6 +45,7 @@ const REMOVED = [
     'fetchBondingCurveTokens',
     'fetchLaunchTokenMeta',
     'fetchLaunchTokensByAddresses',
+    'fetchTokenSnapshotsByAddresses',
     'fetchHolderBalances',
     'fetchAllTokenHolders',
     'fetchLaunchTokenOg',

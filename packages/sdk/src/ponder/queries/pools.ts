@@ -1,5 +1,13 @@
 import type { PonderClient } from '../client.js'
-import type { V3Pool, V3PoolDayVolume, V3PoolState, V3Token } from '../entities.js'
+import type {
+    NativeUsdPrice,
+    NativeUsdPriceSnapshot,
+    V3Pool,
+    V3PoolDayVolume,
+    V3PoolState,
+    V3Token,
+    V3TokenSnapshot,
+} from '../entities.js'
 import { STABLECOIN_ADDRESSES, WRAPPED_NATIVE_ADDRESSES } from '../../configs/chains.js'
 import {
     computePoolTvlUsd,
@@ -7,8 +15,7 @@ import {
     type PoolBalances,
 } from '../../pool/pool-tvl-math.js'
 import { computePoolVolumesUsd, type PoolVolumeMeta } from '../../pool/pool-volume-math.js'
-import { fetchV3TokenSnapshots } from './prices.js'
-import { sel, type Items, type Page, type Row } from './internal.js'
+import { sel, MAX_LIMIT, type Items, type Page, type Row } from './internal.js'
 
 const POOL_FIELDS = [
     'address',
@@ -44,10 +51,27 @@ const POOL_STATE_FIELDS = [
     'liquidity',
 ] as const satisfies readonly (keyof V3PoolState)[]
 
+const NATIVE_PRICE_FIELDS = [
+    'chainId',
+    'price',
+] as const satisfies readonly (keyof NativeUsdPrice)[]
+
+const SNAPSHOT_POINT_FIELDS = [
+    'timestamp',
+    'price',
+] as const satisfies readonly (keyof NativeUsdPriceSnapshot)[]
+
+const V3_TOKEN_PRICE_FIELDS = [
+    'tokenAddr',
+    'lastPriceUsd',
+] as const satisfies readonly (keyof V3TokenSnapshot)[]
+
 export type V3PoolRow = Row<V3Pool, typeof POOL_FIELDS>
 export type V3TokenRow = Row<V3Token, typeof TOKEN_FIELDS>
 export type V3PoolDayVolumeRow = Row<V3PoolDayVolume, typeof DAY_VOLUME_FIELDS>
 export type V3PoolStateRow = Row<V3PoolState, typeof POOL_STATE_FIELDS>
+export type NativeUsdPricePoint = Row<NativeUsdPriceSnapshot, typeof SNAPSHOT_POINT_FIELDS>
+export type V3TokenPrice = Row<V3TokenSnapshot, typeof V3_TOKEN_PRICE_FIELDS>
 
 export function fetchV3Pools(
     client: PonderClient,
@@ -137,6 +161,66 @@ export async function fetchV3PoolReserves(
         { chainId, poolAddresses, limit }
     )
     return data.v3PoolStates.items
+}
+
+export async function fetchNativeUsdPrice(
+    client: PonderClient,
+    { chainId }: { chainId: number }
+): Promise<number | null> {
+    const data = await client.request<{
+        nativeUsdPrices: Items<Row<NativeUsdPrice, typeof NATIVE_PRICE_FIELDS>>
+    }>(
+        `query NativeUsdPrice($chainId: Int!) {
+            nativeUsdPrices(where: { chainId: $chainId }, limit: 1) {
+                items { ${sel(NATIVE_PRICE_FIELDS)} }
+            }
+        }`,
+        { chainId }
+    )
+    const row = data.nativeUsdPrices.items[0]
+    if (!row) return null
+    const price = parseFloat(row.price)
+    return Number.isFinite(price) ? price : null
+}
+
+export function fetchNativeUsdPriceSnapshots(
+    client: PonderClient,
+    { chainId }: { chainId: number }
+): Promise<NativeUsdPricePoint[]> {
+    return client.fetchAllPages<
+        { nativeUsdPriceSnapshots: Page<NativeUsdPricePoint> },
+        NativeUsdPricePoint
+    >(
+        `query NativeUsdPriceSnapshots($chainId: Int!, $after: String) {
+            nativeUsdPriceSnapshots(
+                where: { chainId: $chainId }
+                orderBy: "timestamp"
+                orderDirection: "asc"
+                limit: ${MAX_LIMIT}
+                after: $after
+            ) {
+                pageInfo { hasNextPage endCursor }
+                items { ${sel(SNAPSHOT_POINT_FIELDS)} }
+            }
+        }`,
+        { chainId },
+        (r) => r.nativeUsdPriceSnapshots
+    )
+}
+
+export async function fetchV3TokenSnapshots(
+    client: PonderClient,
+    { chainId, limit = 500 }: { chainId: number; limit?: number }
+): Promise<V3TokenPrice[]> {
+    const data = await client.request<{ v3TokenSnapshots: Items<V3TokenPrice> }>(
+        `query V3TokenSnapshots($chainId: Int!, $limit: Int!) {
+            v3TokenSnapshots(where: { chainId: $chainId }, limit: $limit) {
+                items { ${sel(V3_TOKEN_PRICE_FIELDS)} }
+            }
+        }`,
+        { chainId, limit }
+    )
+    return data.v3TokenSnapshots.items
 }
 
 export interface PoolMetricsToken {
