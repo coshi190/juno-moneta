@@ -36,6 +36,7 @@
     },
     "devDependencies": {
         "graphql": "^16.8.0",
+        "prettier": "^3.4.0",
         "typescript": "^5.8.0",
         "viem": "^2.25.0",
         "vitest": "^2.1.0"

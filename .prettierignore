@@ -1,8 +1,0 @@
-contracts/lib
-contracts/out
-contracts/cache
-indexer/.ponder
-indexer/generated
-node_modules
-dist
-bun.lock

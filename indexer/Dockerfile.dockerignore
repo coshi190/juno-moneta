@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+**/.env
+**/.env.local
+indexer/.ponder
+indexer/generated
+contracts
+.git
+.github
+.claude

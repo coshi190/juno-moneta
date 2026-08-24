@@ -38,15 +38,19 @@ jobs:
             - uses: actions/checkout@v4
             - uses: oven-sh/setup-bun@v2
               with:
-                  bun-version: 1.x
+                  bun-version: 1.4.0
             - run: bun install --frozen-lockfile
+              working-directory: packages/sdk
 
             - name: Typecheck
-              run: bun run --filter @coshi190/juno-moneta-sdk typecheck
+              run: bun run typecheck
+              working-directory: packages/sdk
             - name: Test
-              run: bun run --filter @coshi190/juno-moneta-sdk test
+              run: bun run test
+              working-directory: packages/sdk
             - name: Build
-              run: bun run --filter @coshi190/juno-moneta-sdk build
+              run: bun run build
+              working-directory: packages/sdk
 
     cli:
         name: CLI
@@ -56,14 +60,27 @@ jobs:
             - uses: actions/checkout@v4
             - uses: oven-sh/setup-bun@v2
               with:
-                  bun-version: 1.x
-            - run: bun install --frozen-lockfile
+                  bun-version: 1.4.0
+
+            # The SDK must be installed AND built before the CLI installs. `file:../sdk`
+            # resolves to a tree of per-file symlinks created at install time, so a missing
+            # `dist` means the CLI links nothing and fails to resolve the SDK at runtime.
+            - name: Install SDK
+              run: bun install --frozen-lockfile
+              working-directory: packages/sdk
             - name: Build SDK
-              run: bun run --filter @coshi190/juno-moneta-sdk build
+              run: bun run build
+              working-directory: packages/sdk
+
+            - name: Install
+              run: bun install --frozen-lockfile
+              working-directory: packages/cli
             - name: Typecheck
-              run: bun run --filter @coshi190/juno-moneta-cli typecheck
+              run: bun run typecheck
+              working-directory: packages/cli
             - name: Build
-              run: bun run --filter @coshi190/juno-moneta-cli build
+              run: bun run build
+              working-directory: packages/cli
 
     indexer:
         name: Indexer
@@ -73,10 +90,19 @@ jobs:
             - uses: actions/checkout@v4
             - uses: oven-sh/setup-bun@v2
               with:
-                  bun-version: 1.x
-            - run: bun install --frozen-lockfile
+                  bun-version: 1.4.0
+
+            # Same ordering constraint as the CLI job above.
+            - name: Install SDK
+              run: bun install --frozen-lockfile
+              working-directory: packages/sdk
             - name: Build SDK
-              run: bun run --filter @coshi190/juno-moneta-sdk build
+              run: bun run build
+              working-directory: packages/sdk
+
+            - name: Install
+              run: bun install --frozen-lockfile
+              working-directory: indexer
             - name: Codegen
               run: bun run codegen
               working-directory: indexer

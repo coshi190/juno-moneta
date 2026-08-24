@@ -22,7 +22,8 @@
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
-        "@coshi190/juno-moneta-sdk": "workspace:*"
+        "@coshi190/juno-moneta-sdk": "file:../sdk",
+        "viem": "^2.25.0"
     },
     "devDependencies": {
         "@types/node": "^22.10.0",

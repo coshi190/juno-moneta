@@ -37,22 +37,47 @@ did not expect means a `.sol` change landed earlier without codegen.
 
 ## How to run
 
-Both generators are plain Bun scripts. Write them to the session scratchpad and
-run from the repo root:
+Both generators are plain Bun scripts. They have **different placement rules** —
+this is not cosmetic, see the warning below.
 
 ```bash
 cd contracts && forge build && cd ..
 bun run /path/to/scratchpad/gen-abis.ts
-bun run /path/to/scratchpad/gen-ponder-types.ts
+
+cp /path/to/scratchpad/gen-ponder-types.ts indexer/
+cd indexer && bun run ./gen-ponder-types.ts && rm ./gen-ponder-types.ts && cd ..
 ```
 
-The sources below resolve the repo root from `process.cwd()`, so they work from
-any scratch location as long as you invoke them from the repo root.
+`gen-abis` imports nothing outside node builtins, so it runs from the scratchpad
+and resolves the repo root from `process.cwd()` — invoke it from the repo root.
+
+### ⚠ `gen-ponder-types` must live inside `indexer/`
+
+It imports `drizzle-orm`, and so does `indexer/ponder.schema.ts`. Those two must
+be the **same copy** — `getTableColumns` reads drizzle-internal symbols off the
+table objects, and a version mismatch makes it return garbage or nothing rather
+than fail loudly.
+
+A script run from the scratchpad is outside any project, so bun ignores your cwd
+and **auto-installs its own drizzle-orm into the global cache**
+(`~/.bun/install/cache`) — currently 0.45.2, against the 0.41.0 that ponder pins
+and that actually built the schema. Copying the script into `indexer/` first is
+what makes the bare import resolve to `indexer/node_modules/drizzle-orm`.
+
+Verify at any time with:
+
+```bash
+cd indexer && bun run -e "console.log(import.meta.resolve('drizzle-orm'))"
+```
+
+It must print a path under `indexer/node_modules`, never one under
+`~/.bun/install/cache`.
 
 `gen-abis` requires a fresh `forge build` — it reads Foundry artifacts from
 `contracts/out/<Artifact>.sol/<Artifact>.json` and throws
 ``Missing artifact … — run `forge build` first.`` otherwise. `gen-ponder-types`
-has no such prerequisite; it imports `indexer/ponder.schema.ts` directly.
+has no such prerequisite; it imports `ponder.schema.ts` from its own directory.
+Both require `packages/sdk` to have been installed, for the prettier binary.
 
 Success looks like:
 
@@ -102,7 +127,12 @@ trailing newline.
 `number` when `dataType === 'number'` else `string`, suffixed `| null` when not
 `notNull`. Then `PonderRootFields` mapping `<tsName>s: '<TypeName>'`.
 
-Both finish with `bun x prettier --write` on the output path.
+Both finish by running `packages/sdk/node_modules/.bin/prettier --write` on the
+output path — the SDK's pinned prettier, not `bun x`. `bun x` would fetch an
+unpinned prettier, and the formatting of these files is part of the SDK's
+published surface. The style comes from `packages/sdk/.prettierrc`; if that file
+goes missing, prettier silently falls back to its defaults (2-space, semicolons,
+double quotes) and reformats every generated file.
 
 ## Gotcha: hand-written ABIs live in the generated barrel
 
@@ -134,6 +164,7 @@ import path from 'node:path'
 const ROOT = process.cwd()
 const OUT_DIR = path.join(ROOT, 'contracts/out')
 const ABI_DIR = path.join(ROOT, 'packages/sdk/src/abis')
+const PRETTIER = path.join(ROOT, 'packages/sdk/node_modules/.bin/prettier')
 
 const TARGETS: Record<string, [string, string]> = {
     BondingCurveJunoswap: ['bonding-curve-junoswap', 'BONDING_CURVE_JUNOSWAP_ABI'],
@@ -196,7 +227,7 @@ async function main() {
     ].join('\n')
     await writeFile(path.join(ABI_DIR, 'index.ts'), index)
 
-    await $`bun x prettier --write ${ABI_DIR}`.quiet()
+    await $`${PRETTIER} --write ${ABI_DIR}`.quiet()
     console.log(`Generated ${generated.length} ABIs → packages/sdk/src/abis`)
 }
 
@@ -211,8 +242,9 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { getTableColumns } from 'drizzle-orm'
 
-const ROOT = process.cwd()
+const ROOT = path.resolve(process.cwd(), '..')
 const OUT_FILE = path.join(ROOT, 'packages/sdk/src/ponder/entities.ts')
+const PRETTIER = path.join(ROOT, 'packages/sdk/node_modules/.bin/prettier')
 
 const pascal = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
@@ -244,7 +276,7 @@ async function main() {
 
     await mkdir(path.dirname(OUT_FILE), { recursive: true })
     await writeFile(OUT_FILE, lines.join('\n'))
-    await $`bun x prettier --write ${OUT_FILE}`.quiet()
+    await $`${PRETTIER} --write ${OUT_FILE}`.quiet()
     console.log(
         `Generated ${Object.keys(schema).length} entity types → ${path.relative(ROOT, OUT_FILE)}`
     )
