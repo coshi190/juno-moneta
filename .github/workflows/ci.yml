@@ -11,6 +11,18 @@ concurrency:
     cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+    format:
+        name: Format
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        steps:
+            - uses: actions/checkout@v4
+            - uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: 1.4.0
+            - name: Check
+              run: bunx prettier@3.9.6 --check .
+
     contracts:
         name: Contracts
         runs-on: ubuntu-latest
@@ -20,9 +32,6 @@ jobs:
               with:
                   submodules: recursive
             - uses: foundry-rs/foundry-toolchain@v1
-            # No `forge fmt --check`: the deployed contracts predate any fmt pass, and
-            # reformatting them changes the source metadata hash, which would break exact-match
-            # source verification on bkcscan against the already-deployed bytecode.
             - name: Build
               run: forge build
               working-directory: contracts
@@ -61,10 +70,6 @@ jobs:
             - uses: oven-sh/setup-bun@v2
               with:
                   bun-version: 1.4.0
-
-            # The SDK must be installed AND built before the CLI installs. `file:../sdk`
-            # resolves to a tree of per-file symlinks created at install time, so a missing
-            # `dist` means the CLI links nothing and fails to resolve the SDK at runtime.
             - name: Install SDK
               run: bun install --frozen-lockfile
               working-directory: packages/sdk
@@ -91,8 +96,6 @@ jobs:
             - uses: oven-sh/setup-bun@v2
               with:
                   bun-version: 1.4.0
-
-            # Same ordering constraint as the CLI job above.
             - name: Install SDK
               run: bun install --frozen-lockfile
               working-directory: packages/sdk

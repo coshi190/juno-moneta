@@ -8,6 +8,8 @@ contracts/cache
 contracts/broadcast
 indexer/.ponder
 indexer/generated
+indexer/ponder-env.d.ts
+indexer/package-lock.json
 .DS_Store
 .claude/*
 !.claude/skills/

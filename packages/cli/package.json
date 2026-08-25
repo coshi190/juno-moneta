@@ -17,7 +17,7 @@
         "dist"
     ],
     "scripts": {
-        "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/cli.js",
+        "build": "rm -rf dist && bun build src/cli.ts --outdir=dist --target=node --packages=external --sourcemap=linked",
         "clean": "rm -rf dist *.tsbuildinfo",
         "typecheck": "tsc --noEmit"
     },

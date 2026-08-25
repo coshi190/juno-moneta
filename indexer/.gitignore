@@ -1,7 +1,0 @@
-node_modules
-.ponder
-generated
-ponder-env.d.ts
-package-lock.json
-.env
-.env.local
