@@ -4,6 +4,7 @@ import {
     AGG_ROUTER_JUNOSWAP_ABI,
     BONDING_CURVE_DEPLOYMENTS,
     BONDING_CURVE_JUNOSWAP_ABI,
+    CHAIN_IDS,
     ERC20_ABI,
     NONFUNGIBLE_POSITION_MANAGER_ABI,
     UNISWAP_V2_FACTORY_ABI,
@@ -19,8 +20,13 @@ import {
     getV3StakerAddress,
     type DEXType,
 } from '@coshi190/juno-moneta-sdk'
-import { CHAIN_IDS, DEFAULT_RPC_URLS } from './src/chains.js'
 import externalPools from './external-pools.json'
+
+const DEFAULT_RPC_URLS: Record<number, string> = {
+    [CHAIN_IDS.kubTestnet]: 'https://rpc-testnet.bitkubchain.io',
+    [CHAIN_IDS.bitkub]: 'https://rpc.bitkubchain.io',
+    [CHAIN_IDS.jbc]: 'https://rpc-l1.jibchain.net',
+}
 
 const seed = (dex: keyof typeof externalPools) =>
     (externalPools[dex] as Array<{ pair?: string; pool?: string }>).map(

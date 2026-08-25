@@ -14,7 +14,7 @@ async function ensurePool(
     const id = `${chainId}-${pool}`
     if (await context.db.find(schema.v3Pool, { id })) return
 
-    const immutables = await readV3PoolImmutables(chainId, pool)
+    const immutables = await readV3PoolImmutables(context.client, pool)
     if (!immutables) return
 
     await upsertToken(context, chainId, immutables.token0, timestamp)

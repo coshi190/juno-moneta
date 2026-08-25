@@ -50,7 +50,7 @@ export async function upsertToken(
     const existing = await context.db.find(schema.v3Token, { id })
     if (existing) return
 
-    const meta = await readERC20Metadata(chainId, address)
+    const meta = await readERC20Metadata(context.client, address)
 
     await context.db
         .insert(schema.v3Token)

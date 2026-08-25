@@ -14,7 +14,7 @@ async function ensurePosition(
     const existing = await context.db.find(schema.v3Position, { id })
     if (existing) return true
 
-    const pos = await readPosition(chainId, tokenId)
+    const pos = await readPosition(context.client, chainId, tokenId)
     if (!pos) return false
 
     await context.db

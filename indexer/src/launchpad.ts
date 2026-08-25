@@ -3,9 +3,12 @@ import schema from 'ponder:schema'
 import { formatEther, zeroAddress } from 'viem'
 import { readERC20Metadata } from './erc20-read.js'
 import { creatorFeeShareForSwap, VIRTUAL_AMOUNT } from './creator-fee.js'
-import { BONDING_CURVE_ADDRESS_BY_CHAIN, isLaunchpadChain } from '@coshi190/juno-moneta-sdk'
+import {
+    BONDING_CURVE_ADDRESS_BY_CHAIN,
+    CHAIN_IDS,
+    isLaunchpadChain,
+} from '@coshi190/juno-moneta-sdk'
 import { sanitizeUsdPrice, MAX_TOKEN_USD_PRICE } from './price-history.js'
-import { CHAIN_IDS } from './chains.js'
 import { recordUserSwap } from './user-pnl.js'
 import { foldTokenCandle } from './candles.js'
 
@@ -93,7 +96,7 @@ async function handleCreation({ event, context }: HandlerArgs, chainId: number) 
     const { creator, tokenAddr, logo, description, link1, link2, link3, createdTime } = event.args
     const tokenAddrLower = tokenAddr.toLowerCase()
 
-    const meta = await readERC20Metadata(chainId, tokenAddrLower)
+    const meta = await readERC20Metadata(context.client, tokenAddrLower)
 
     await context.db
         .insert(schema.launchToken)

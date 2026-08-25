@@ -1,4 +1,3 @@
-import { createPublicClient, http } from 'viem'
 import {
     ERC20_ABI,
     NONFUNGIBLE_POSITION_MANAGER_ABI,
@@ -6,35 +5,32 @@ import {
     getV3Config,
 } from '@coshi190/juno-moneta-sdk'
 
-const RPC_URLS: Record<number, string> = {
-    25925: process.env.PONDER_RPC_URL_25925 ?? 'https://rpc-testnet.bitkubchain.io',
-    96: process.env.PONDER_RPC_URL_96 ?? 'https://rpc.bitkubchain.io',
-    8899: process.env.PONDER_RPC_URL_8899 ?? 'https://rpc-l1.jibchain.net',
-}
-
-const clients: Record<number, ReturnType<typeof createPublicClient>> = {}
-
-function getClient(chainId: number) {
-    if (!clients[chainId]) {
-        clients[chainId] = createPublicClient({
-            transport: http(RPC_URLS[chainId]),
-        })
-    }
-    return clients[chainId]
-}
-
 export async function readERC20Metadata(
-    chainId: number,
+    client: any,
     address: string
 ): Promise<{ name: string; symbol: string; decimals: number }> {
-    const client = getClient(chainId)
     const addr = address as `0x${string}`
 
     try {
         const [name, symbol, decimals] = await Promise.all([
-            client.readContract({ abi: ERC20_ABI, functionName: 'name', address: addr }),
-            client.readContract({ abi: ERC20_ABI, functionName: 'symbol', address: addr }),
-            client.readContract({ abi: ERC20_ABI, functionName: 'decimals', address: addr }),
+            client.readContract({
+                abi: ERC20_ABI,
+                functionName: 'name',
+                address: addr,
+                cache: 'immutable',
+            }),
+            client.readContract({
+                abi: ERC20_ABI,
+                functionName: 'symbol',
+                address: addr,
+                cache: 'immutable',
+            }),
+            client.readContract({
+                abi: ERC20_ABI,
+                functionName: 'decimals',
+                address: addr,
+                cache: 'immutable',
+            }),
         ])
         return { name: name as string, symbol: symbol as string, decimals: decimals as number }
     } catch {
@@ -43,10 +39,9 @@ export async function readERC20Metadata(
 }
 
 export async function readV3PoolImmutables(
-    chainId: number,
+    client: any,
     address: string
 ): Promise<{ token0: string; token1: string; fee: number; tickSpacing: number } | null> {
-    const client = getClient(chainId)
     const addr = address as `0x${string}`
     try {
         const [token0, token1, fee, tickSpacing] = await Promise.all([
@@ -54,17 +49,25 @@ export async function readV3PoolImmutables(
                 abi: UNISWAP_V3_POOL_ABI,
                 functionName: 'token0',
                 address: addr,
+                cache: 'immutable',
             }),
             client.readContract({
                 abi: UNISWAP_V3_POOL_ABI,
                 functionName: 'token1',
                 address: addr,
+                cache: 'immutable',
             }),
-            client.readContract({ abi: UNISWAP_V3_POOL_ABI, functionName: 'fee', address: addr }),
+            client.readContract({
+                abi: UNISWAP_V3_POOL_ABI,
+                functionName: 'fee',
+                address: addr,
+                cache: 'immutable',
+            }),
             client.readContract({
                 abi: UNISWAP_V3_POOL_ABI,
                 functionName: 'tickSpacing',
                 address: addr,
+                cache: 'immutable',
             }),
         ])
         return {
@@ -79,6 +82,7 @@ export async function readV3PoolImmutables(
 }
 
 export async function readPosition(
+    client: any,
     chainId: number,
     tokenId: bigint
 ): Promise<{
@@ -90,7 +94,6 @@ export async function readPosition(
 } | null> {
     const manager = getV3Config(chainId, 'junoswap')?.positionManager
     if (!manager) return null
-    const client = getClient(chainId)
     try {
         const pos = (await client.readContract({
             abi: NONFUNGIBLE_POSITION_MANAGER_ABI,
