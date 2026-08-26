@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { calculatePriceFromSqrtPrice } from '../launchpad/curve-price.js'
+import { calculatePriceFromSqrtPrice } from '../dex/curve.js'
 import { priceFromSqrtPriceX96 } from '../pool/pool-tvl-math.js'
 
 const sqrtFor = (ratio: number) => BigInt(Math.floor(Math.sqrt(ratio) * 2 ** 96))

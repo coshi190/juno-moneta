@@ -49,6 +49,7 @@ const REMOVED = [
     'fetchHolderBalances',
     'fetchAllTokenHolders',
     'fetchLaunchTokenOg',
+    'parseTokenAddressFromLogs',
 ]
 
 const EXPOSED = [

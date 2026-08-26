@@ -1,6 +1,5 @@
-# Rules
-
-- this codebase carries **no comments**. Never write `//`, `///`, `/* */`, `/** */`, JSDoc,
-  NatSpec, or docstrings in `.ts`, `.tsx`, or `.sol` files, The only exceptions: `// SPDX-License-Identifier:` on line 1 of every `.sol` file. and `contracts/src/interfaces/**` — verbatim vendored Uniswap sources, kept byte-identical to upstream. Do not strip or reformat them (`forge fmt` must be scoped to `test script`).
-- After editing contracts in `contracts/src/`, regenerate the ABIs via the `codegen` skill (`.claude/skills/codegen/`) before touching indexer/SDK code that consumes them. Nothing in CI catches stale ABIs, so this ordering is on you.
-- The SDK is versioned and published (see `packages/sdk/package.json`); bump its version when making a released change to its public API. Publishing is manual: `npm publish` from `packages/sdk`, to the public npm registry. There is no publish workflow.
+- prefer the **simplest architecture that satisfies the request**. When two approaches both work, take the one with less code and fewer moving parts: fewer files, fewer layers of indirection, fewer dependencies, fewer new exports. Extend what already exists rather than introducing a parallel mechanism, and do not add generality, config surface, or abstraction for needs that are only hypothetical.
+- this codebase carries **no comments**. Never write `//`, `///`, `/* */`, `/** */`, JSDoc, NatSpec, or docstrings.
+- the SDK is a **read-and-compute layer**: pure math, ABIs, configs, queries. Chain access is capped at the `ReadClient`/`SimulateClient` interfaces (`packages/sdk/src/dex/multicall.ts`) — read and simulate, never send. Everything from the signature onward — sending transactions, awaiting receipts, decoding their logs, phase state — belongs to the consumer, along with React and wagmi. Do not add a write path here.
+- The SDK is versioned and published; bump its version when making a released change to its public API.
+- The SDK's main consumer is the `junoswap` frontend at `/Users/coshi/com/junoswap`. `packages/cli` is the in-repo consumer. When changing the SDK's public API — renaming or removing exports, changing argument or return shapes — always grep both consumers for the affected symbols and report what breaks. Nothing in CI catches this.

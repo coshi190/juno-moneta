@@ -10,7 +10,7 @@ import {
     isSqrtPriceWithinTolerance,
     calculateGraduationSqrtPriceX96,
     INITIAL_TOKEN_SUPPLY,
-} from '../launchpad/bonding-curve.js'
+} from '../dex/curve.js'
 
 describe('calculateBuyOutput', () => {
     it('returns 0n when nativeAmountIn is 0n', () => {
