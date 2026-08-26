@@ -63,6 +63,7 @@ const SNAPSHOT_POINT_FIELDS = [
 
 const V3_TOKEN_PRICE_FIELDS = [
     'tokenAddr',
+    'lastPriceNative',
     'lastPriceUsd',
 ] as const satisfies readonly (keyof V3TokenSnapshot)[]
 

@@ -12,9 +12,9 @@ import {
     resolveSwapPath,
     shouldSkipUnwrap,
 } from '../dex/native.js'
-import { encodeV3Path } from '../dex/uniswap-v3.js'
+import { encodeV3Path } from '../dex/plan-swap.js'
 import { planSwap, SwapPlanError, type PlanSwapInput } from '../dex/plan-swap.js'
-import { buildQuoteCall } from '../dex/quote.js'
+import { buildQuoteCall } from '../dex/quote-call.js'
 
 const NATIVE = NATIVE_TOKEN_ADDRESS
 const TOKEN_A = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as Address

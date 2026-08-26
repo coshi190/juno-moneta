@@ -1,7 +1,5 @@
 export * from './native.js'
-export * from './uniswap-v3.js'
 export * from './plan-swap.js'
-export * from './quote.js'
 export * from './multicall.js'
 export * from './v3-pools.js'
 export * from './v3-quote.js'

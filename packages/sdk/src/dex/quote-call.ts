@@ -7,9 +7,8 @@ import {
     getV3Config,
     type DEXType,
 } from '../configs/dex-config.js'
-import type { ContractCall } from './plan-swap.js'
+import { encodeV3Path, type ContractCall } from './plan-swap.js'
 import { getSwapAddress, resolveSwapPath } from './native.js'
-import { encodeV3Path } from './uniswap-v3.js'
 
 export interface QuoteCallInput {
     protocol: ProtocolType

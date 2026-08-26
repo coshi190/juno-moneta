@@ -2,7 +2,7 @@ import type { Abi, Address } from 'viem'
 import { ProtocolType, type DEXType } from '../configs/dex-config.js'
 import { getAggRouterAddress } from '../configs/deployments.js'
 import { AGG_ROUTER_JUNOSWAP_ABI } from '../abis/agg-router-junoswap.js'
-import { buildQuoteCall } from './quote.js'
+import { buildQuoteCall } from './quote-call.js'
 import { batchRead, type ReadClient, type ReadResult } from './multicall.js'
 import type { ContractCall } from './plan-swap.js'
 
