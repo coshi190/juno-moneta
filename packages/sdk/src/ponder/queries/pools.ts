@@ -11,10 +11,11 @@ import type {
 import { STABLECOIN_ADDRESSES, WRAPPED_NATIVE_ADDRESSES } from '../../configs/chains.js'
 import {
     computePoolTvlUsd,
+    computePoolVolumesUsd,
     priceFromSqrtPriceX96,
     type PoolBalances,
-} from '../../pool/pool-tvl-math.js'
-import { computePoolVolumesUsd, type PoolVolumeMeta } from '../../pool/pool-volume-math.js'
+    type PoolUsdMeta,
+} from '../../pool/pool-usd-math.js'
 import { sel, MAX_LIMIT, type Items, type Page, type Row } from './internal.js'
 
 const POOL_FIELDS = [
@@ -304,7 +305,7 @@ export async function fetchPoolMetrics(
         if (Number.isFinite(price)) priceMap.set(row.tokenAddr.toLowerCase(), price)
     }
 
-    const meta: PoolVolumeMeta[] = []
+    const meta: PoolUsdMeta[] = []
     const balances = new Map<string, PoolBalances>()
 
     for (const pool of pools) {

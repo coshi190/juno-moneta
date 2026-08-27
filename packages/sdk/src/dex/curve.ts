@@ -1,6 +1,6 @@
 import { formatEther, parseEther } from 'viem'
 import { bigIntSqrt } from '../pool/liquidity-math.js'
-import { priceFromSqrtPriceX96 } from '../pool/pool-tvl-math.js'
+import { priceFromSqrtPriceX96 } from '../pool/pool-usd-math.js'
 
 export const PUMP_FEE_BPS = 100n
 

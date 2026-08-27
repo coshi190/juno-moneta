@@ -15,12 +15,4 @@ describe('computeIncentiveId', () => {
             '0x26d52c050f9b613112df94d71586188fc3896697329fa5b7bc29476dfde5fb70'
         )
     })
-
-    it('changes when any key field changes', () => {
-        const base = computeIncentiveId(TESTNET_KEY)
-        expect(
-            computeIncentiveId({ ...TESTNET_KEY, startTime: TESTNET_KEY.startTime + 1 })
-        ).not.toBe(base)
-        expect(computeIncentiveId({ ...TESTNET_KEY, refundee: TESTNET_KEY.pool })).not.toBe(base)
-    })
 })

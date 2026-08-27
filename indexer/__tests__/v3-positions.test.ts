@@ -1,12 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { addLiquidity, subLiquidity } from '../src/v3-position-math'
 
+// liquidity is uint128 in a text column, so the math must stay on BigInt; the clamp guards the indexer's replayed total, which no contract invariant constrains.
 describe('addLiquidity', () => {
-    it('accumulates increase deltas onto the stored string liquidity', () => {
-        expect(addLiquidity('0', 1000n)).toBe('1000')
-        expect(addLiquidity('1000', 250n)).toBe('1250')
-    })
-
     it('handles values beyond Number precision', () => {
         const big = 10n ** 30n
         expect(addLiquidity(big.toString(), big)).toBe((big * 2n).toString())

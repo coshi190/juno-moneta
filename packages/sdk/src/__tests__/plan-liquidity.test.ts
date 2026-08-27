@@ -8,7 +8,7 @@ import {
 } from '../pool/plan-liquidity'
 import { getAmountsForLiquidity } from '../pool/liquidity-math'
 import { tickToSqrtPriceX96 } from '../pool/tick-math'
-import { priceFromSqrtPriceX96 } from '../pool/pool-tvl-math'
+import { priceFromSqrtPriceX96 } from '../pool/pool-usd-math'
 
 const Q96 = 2n ** 96n
 const E18 = 10n ** 18n

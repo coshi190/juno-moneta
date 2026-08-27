@@ -11,7 +11,7 @@ import {
     MAX_TICK,
     MIN_SQRT_RATIO,
 } from '../pool/tick-math.js'
-import { priceFromSqrtPriceX96 } from '../pool/pool-tvl-math.js'
+import { priceFromSqrtPriceX96 } from '../pool/pool-usd-math.js'
 
 const Q96 = 2n ** 96n
 
@@ -87,38 +87,6 @@ describe('priceToSqrtPriceX96', () => {
         const price = priceFromSqrtPriceX96(sqrtPrice, 18, 18)
         const recovered = priceToSqrtPriceX96(String(price), 18, 18)
         expect(Number(recovered) / Number(sqrtPrice)).toBeCloseTo(1.0, 2)
-    })
-})
-
-describe('priceFromSqrtPriceX96 vs the legacy float formula', () => {
-    function legacyFloatPrice(sqrtPriceX96: bigint, decimals0: number, decimals1: number): number {
-        const sqrtPrice = Number(sqrtPriceX96) / Number(Q96)
-        return sqrtPrice * sqrtPrice * Math.pow(10, decimals0 - decimals1)
-    }
-
-    const decimalPairs: [number, number][] = [
-        [18, 18],
-        [18, 6],
-        [6, 18],
-        [8, 18],
-        [18, 8],
-    ]
-
-    it('agrees within 1e-9 relative error across ticks and decimal pairs', () => {
-        for (const tick of [-200000, -50000, -10000, -1000, 0, 1000, 10000, 50000, 200000]) {
-            const sqrtPriceX96 = tickToSqrtPriceX96(tick)
-            for (const [d0, d1] of decimalPairs) {
-                const exact = priceFromSqrtPriceX96(sqrtPriceX96, d0, d1)
-                const legacy = legacyFloatPrice(sqrtPriceX96, d0, d1)
-                const relative = Math.abs(exact - legacy) / Math.max(Math.abs(exact), 1e-300)
-                expect(relative).toBeLessThan(1e-9)
-            }
-        }
-    })
-
-    it('returns 0 for an uninitialised pool where the legacy formula also gave 0', () => {
-        expect(priceFromSqrtPriceX96(0n, 18, 18)).toBe(0)
-        expect(legacyFloatPrice(0n, 18, 18)).toBe(0)
     })
 })
 

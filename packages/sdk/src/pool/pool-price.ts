@@ -1,5 +1,5 @@
 import { STABLECOIN_ADDRESSES, WRAPPED_NATIVE_ADDRESSES } from '../configs/chains.js'
-import { priceFromSqrtPriceX96 } from './pool-tvl-math.js'
+import { priceFromSqrtPriceX96 } from './pool-usd-math.js'
 import { nearestUsableTick, priceToTick, tickToSqrtPriceX96 } from './tick-math.js'
 
 const Q96 = 2n ** 96n

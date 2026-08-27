@@ -86,15 +86,15 @@ describe('fetchReferralRewards', () => {
         expect(result).toEqual({ referralPoints: 0, refereeCount: 0, referees: [] })
     })
 
-    it("reads a referee's folded stats end-to-end", async () => {
+    it("scores a referee's two volume columns end-to-end", async () => {
         const client = stubClient({
             bindings: [{ referee: '0xRef1' }],
             stats: [
                 {
                     user: '0xRef1',
-                    volumeNative: 5000,
+                    volumeNative: 10000,
                     junoVolumeNative: 5000,
-                    externalVolumeNative: 0,
+                    externalVolumeNative: 5000,
                     tradeCount: 1,
                     buyCount: 1,
                     sellCount: 0,
@@ -109,9 +109,9 @@ describe('fetchReferralRewards', () => {
         expect(result.refereeCount).toBe(1)
         expect(result.referees[0]).toMatchObject({
             address: '0xref1',
-            points: 100,
-            volumeUsd: 10000,
+            points: 110,
+            volumeUsd: 20000,
         })
-        expect(result.referralPoints).toBe(10)
+        expect(result.referralPoints).toBe(11)
     })
 })

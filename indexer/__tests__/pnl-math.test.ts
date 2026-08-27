@@ -34,6 +34,7 @@ function sell(tokens: number, kub: number, nativeUsd: number): FoldSwapInput {
 }
 
 describe('pnl-math fold + finalize', () => {
+    // Unrealized gains must never leak into realized — that is the number users read as money made.
     it('buy-only: unrealized only, no realized', () => {
         const pnl = finalizeTokenPnl(fold([buy(100, 10, 2)]), 100, 0.5)
         expect(pnl.totalInvestedUsd).toBeCloseTo(20)
@@ -44,6 +45,7 @@ describe('pnl-math fold + finalize', () => {
         expect(pnl.pnlPercent).toBeCloseTo(150)
     })
 
+    // A sell is charged only its share of the cost pool; counting proceeds alone reports $16 instead of $6.
     it('partial sell: realizes proceeds minus avg cost of sold', () => {
         const pnl = finalizeTokenPnl(fold([buy(100, 10, 2), sell(50, 8, 2)]), 50, 0.3)
         expect(pnl.realizedUsd).toBeCloseTo(6)
@@ -52,6 +54,7 @@ describe('pnl-math fold + finalize', () => {
         expect(pnl.totalPnlUsd).toBeCloseTo(11)
     })
 
+    // Profit has to stay on the books after both the position and its price are gone.
     it('full exit: realized captured with zero remaining position', () => {
         const pnl = finalizeTokenPnl(fold([buy(100, 10, 2), sell(100, 30, 2)]), 0, null)
         expect(pnl.realizedUsd).toBeCloseTo(40)
@@ -59,6 +62,7 @@ describe('pnl-math fold + finalize', () => {
         expect(pnl.totalPnlUsd).toBeCloseTo(40)
     })
 
+    // Ties cost basis to price-history's priceAt; today's KUB rate would rewrite the user's whole basis.
     it('values each buy at its historical KUB/USD rate, not the current one', () => {
         const pnl = finalizeTokenPnl(fold([buy(50, 10, 1), buy(50, 10, 3)]), 100, 0.5)
         expect(pnl.totalInvestedUsd).toBeCloseTo(40)
@@ -66,6 +70,7 @@ describe('pnl-math fold + finalize', () => {
         expect(pnl.unrealizedUsd).toBeCloseTo(10)
     })
 
+    // Airdropped and bridged tokens never reach the fold, so a real user can outsell it; a negative position corrupts that token permanently.
     it('selling more than the accounted position never yields negative basis', () => {
         const pnl = finalizeTokenPnl(fold([buy(50, 10, 2), sell(100, 40, 2)]), 0, null)
         expect(pnl.realizedUsd).toBeCloseTo(60)
@@ -73,6 +78,7 @@ describe('pnl-math fold + finalize', () => {
         expect(pnl.unrealizedUsd).toBeCloseTo(0)
     })
 
+    // The decimalsByToken lookup is load-bearing: defaulting a 6-decimal token to 18 is a $20T error, not a rounding one.
     it('decodes the token leg at its real decimals (6-dec USDT), not 18', () => {
         const buyUsdt: FoldSwapInput = {
             isBuy: true,
@@ -89,12 +95,14 @@ describe('pnl-math fold + finalize', () => {
         expect(broken.unrealizedUsd).toBeLessThan(-1e9)
     })
 
+    // An unpriced token reads flat, instead of reporting its entire cost basis as a loss.
     it('missing price leaves unrealized and total at zero', () => {
         const pnl = finalizeTokenPnl(fold([buy(100, 10, 2)]), 100, null)
         expect(pnl.unrealizedUsd).toBeCloseTo(0)
         expect(pnl.totalPnlUsd).toBeCloseTo(0)
     })
 
+    // Totals iterate folds, not balances — iterating balances would erase every fully-sold position.
     it('finalizePortfolioPnl rolls closed and open positions into totals', () => {
         const TOKEN = '0xtoken'
         const OTHER = '0xother'
@@ -114,6 +122,7 @@ describe('pnl-math fold + finalize', () => {
 })
 
 describe('foldEventsByToken', () => {
+    // Average-cost accounting is path dependent: applied in the given order, the sell realizes $2 out of nothing.
     it('folds each token independently regardless of input ordering', () => {
         const events: PnlSwapEvent[] = [
             {

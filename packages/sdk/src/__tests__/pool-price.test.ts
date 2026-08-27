@@ -6,7 +6,7 @@ import {
     getTickForPrice,
     invertSqrtPriceX96,
 } from '../pool/pool-price'
-import { priceFromSqrtPriceX96 } from '../pool/pool-tvl-math'
+import { priceFromSqrtPriceX96 } from '../pool/pool-usd-math'
 import { tickToSqrtPriceX96 } from '../pool/tick-math'
 import { CHAIN_IDS, STABLECOIN_ADDRESSES, WRAPPED_NATIVE_ADDRESSES } from '../configs/chains'
 

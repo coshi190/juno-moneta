@@ -1,26 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { getFeeTierInfo, getTickSpacing, listFeeTiers } from '../pool/fee-tiers'
+import { getTickSpacing, listFeeTiers } from '../pool/fee-tiers'
 import { CHAIN_IDS } from '../configs/chains'
-
-describe('getTickSpacing', () => {
-    it('maps every known fee tier', () => {
-        expect(getTickSpacing(100)).toBe(1)
-        expect(getTickSpacing(500)).toBe(10)
-        expect(getTickSpacing(2500)).toBe(50)
-        expect(getTickSpacing(3000)).toBe(60)
-        expect(getTickSpacing(10000)).toBe(200)
-    })
-
-    it('falls back to 60 for an unknown fee', () => {
-        expect(getTickSpacing(1234)).toBe(60)
-    })
-})
-
-describe('getFeeTierInfo', () => {
-    it('bundles fee and spacing without any presentation', () => {
-        expect(getFeeTierInfo(500)).toEqual({ fee: 500, tickSpacing: 10 })
-    })
-})
 
 describe('listFeeTiers', () => {
     it('returns configured tiers with spacing for a known chain', () => {

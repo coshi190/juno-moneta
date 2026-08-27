@@ -17,7 +17,7 @@ import { fetchPositionsByTokenIds, fetchUserPositions } from '../ponder/queries/
 import { getTickSpacing } from './fee-tiers.js'
 import { getAmountsForLiquidity } from './liquidity-math.js'
 import { computeTickPrice } from './pool-price.js'
-import { computeTvlFromPrices } from './pool-tvl-math.js'
+import { computeValueFromPrices } from './pool-usd-math.js'
 import { isInRange, tickToSqrtPriceX96 } from './tick-math.js'
 import { isFullRange } from './tick-ranges.js'
 
@@ -212,7 +212,7 @@ export function computePositionValueUsd(params: {
     price1: number | undefined
 }): number | null {
     if (params.price0 === undefined || params.price1 === undefined) return null
-    const value = computeTvlFromPrices(
+    const value = computeValueFromPrices(
         params.amount0,
         params.decimals0,
         params.amount1,
