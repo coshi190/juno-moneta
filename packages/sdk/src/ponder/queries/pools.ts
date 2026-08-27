@@ -272,6 +272,15 @@ function toMetricsToken(row: V3TokenRow | undefined, address: string): PoolMetri
     }
 }
 
+export function toTokenPriceMap(rows: V3TokenPrice[]): Map<string, number> {
+    const priceMap = new Map<string, number>()
+    for (const row of rows) {
+        const price = row.lastPriceUsd === null ? NaN : parseFloat(row.lastPriceUsd)
+        if (Number.isFinite(price)) priceMap.set(row.tokenAddr.toLowerCase(), price)
+    }
+    return priceMap
+}
+
 export async function fetchPoolMetrics(
     client: PonderClient,
     {
@@ -279,31 +288,36 @@ export async function fetchPoolMetrics(
         protocol = 'junoswap',
         limit = 500,
         nowSeconds = Math.floor(Date.now() / 1000),
-    }: { chainId: number; protocol?: string; limit?: number; nowSeconds?: number }
+        tokens,
+        tokenPrices,
+    }: {
+        chainId: number
+        protocol?: string
+        limit?: number
+        nowSeconds?: number
+        tokens?: V3TokenRow[]
+        tokenPrices?: V3TokenPrice[]
+    }
 ): Promise<PoolMetrics[]> {
     const pools = await fetchV3Pools(client, { chainId, protocol, limit })
     if (pools.length === 0) return []
 
     const poolAddresses = pools.map((pool) => pool.address.toLowerCase())
-    const [tokens, reserves, dayVolumes, tokenPrices] = await Promise.all([
-        fetchV3Tokens(client, { chainId, limit }),
+    const [tokenRows, reserves, dayVolumes, priceRows] = await Promise.all([
+        tokens ?? fetchV3Tokens(client, { chainId, limit }),
         fetchV3PoolReserves(client, { chainId, poolAddresses }),
         fetchV3PoolDayVolumes(client, {
             chainId,
             poolAddresses,
             since: nowSeconds - VOLUME_LOOKBACK_SECONDS,
         }),
-        fetchV3TokenSnapshots(client, { chainId, limit }),
+        tokenPrices ?? fetchV3TokenSnapshots(client, { chainId, limit }),
     ])
 
-    const tokenMap = new Map(tokens.map((token) => [token.address.toLowerCase(), token]))
+    const tokenMap = new Map(tokenRows.map((token) => [token.address.toLowerCase(), token]))
     const stateMap = new Map(reserves.map((row) => [row.poolAddress.toLowerCase(), row]))
 
-    const priceMap = new Map<string, number>()
-    for (const row of tokenPrices) {
-        const price = row.lastPriceUsd === null ? NaN : parseFloat(row.lastPriceUsd)
-        if (Number.isFinite(price)) priceMap.set(row.tokenAddr.toLowerCase(), price)
-    }
+    const priceMap = toTokenPriceMap(priceRows)
 
     const meta: PoolUsdMeta[] = []
     const balances = new Map<string, PoolBalances>()

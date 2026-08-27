@@ -22,6 +22,7 @@ import {
     createPonderClient,
     fetchAllReferralBindings,
     fetchDepositsByOwner,
+    fetchIncentiveAnalytics,
     fetchIncentives,
     fetchIndexerStatus,
     fetchLaunchTokens,
@@ -52,6 +53,7 @@ import {
     isV2Config,
     isV3Config,
     type DEXType,
+    type IncentiveMetrics,
     type LaunchToken,
     type ProtocolConfig,
     type TokenHolder,
@@ -95,6 +97,7 @@ export interface CommandArgs {
     orderDirection?: string | undefined
     limit?: string | undefined
     ponderUrl?: string | undefined
+    json?: boolean | undefined
 }
 
 export interface Command {
@@ -172,6 +175,22 @@ function configCommand(
                     optionalProtocolType(args.protocolType)
                 )
             ),
+    }
+}
+
+function toTableRow(program: IncentiveMetrics) {
+    return {
+        status: program.status,
+        pair: program.poolLabel,
+        symbol: program.rewardSymbol,
+        reward: program.reward,
+        perDay: program.rewardPerDay,
+        usdPerDay: program.rewardUsdPerDay,
+        progress: program.progressPercent,
+        daysLeft: program.remainingDays,
+        tvlUsd: program.poolTvlUsd,
+        apr: program.rewardAprPoolTvlPercent,
+        feeApr: program.feeAprPercent,
     }
 }
 
@@ -343,6 +362,20 @@ export const COMMANDS: Record<string, Command> = {
                 chainId: parseChainId(args.chainId),
                 limit: optionalLimit(args.limit),
             }),
+    },
+    fetchIncentiveAnalytics: {
+        group: PONDER,
+        flags: `${CHAIN_FLAG} [--limit <n>] ${PONDER_FLAG}`,
+        describe:
+            'Per-program V3 staker insight, with status, schedule, emission rate, reward value, and APR against pool TVL, --json for every field',
+        run: async (args) => {
+            const analytics = await fetchIncentiveAnalytics(
+                createPonderClient(parsePonderUrl(args.ponderUrl)),
+                { chainId: parseChainId(args.chainId), limit: optionalLimit(args.limit) }
+            )
+            if (args.json) return analytics
+            return { totals: analytics.totals, programs: analytics.programs.map(toTableRow) }
+        },
     },
     fetchDepositsByOwner: {
         group: PONDER,

@@ -6,7 +6,7 @@ const COLOR =
 const ANSI = /\u001b\[[0-9;]*m/g
 
 const INTEGERS = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
-const DECIMALS = new Intl.NumberFormat('en-US', { maximumFractionDigits: 6 })
+const DECIMALS = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 })
 const SIGNIFICANT = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 6 })
 
 const TIME_KEY = /(?:^|[a-z])(?:Time|At)$|(?:^|\.)timestamp$/
