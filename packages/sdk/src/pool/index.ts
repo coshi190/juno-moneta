@@ -1,5 +1,3 @@
-export { TICK_SPACING_BY_FEE, getFeeTierInfo, getTickSpacing, listFeeTiers } from './fee-tiers.js'
-export type { FeeTierInfo } from './fee-tiers.js'
 export {
     computePoolPrice,
     computeTickPrice,

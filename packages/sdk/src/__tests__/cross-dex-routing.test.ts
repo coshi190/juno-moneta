@@ -4,7 +4,7 @@ import { CHAIN_IDS } from '../configs/chains.js'
 import { ProtocolType } from '../configs/dex-config.js'
 import type { ContractCall } from '../dex/plan-swap.js'
 import type { ReadResult } from '../dex/multicall.js'
-import { poolKey } from '../dex/v3-pools.js'
+import { poolKey } from '../dex/v3-routes.js'
 import {
     buildCrossDexLeg,
     candidateHopOptions,

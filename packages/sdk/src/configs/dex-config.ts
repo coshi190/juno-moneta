@@ -59,6 +59,35 @@ export const FEE_TIERS = {
 
 export const DEFAULT_FEE_TIER = FEE_TIERS.MEDIUM
 
+export const ALL_FEE_TIERS: number[] = Object.values(FEE_TIERS)
+
+export function getFeeTiers(config: V3Config | undefined): number[] {
+    return config?.feeTiers?.length ? config.feeTiers : ALL_FEE_TIERS
+}
+
+const DEFAULT_TICK_SPACING = 60
+
+export const TICK_SPACING_BY_FEE: Record<number, number> = {
+    100: 1,
+    500: 10,
+    2500: 50,
+    3000: 60,
+    10000: 200,
+}
+
+export interface FeeTierInfo {
+    fee: number
+    tickSpacing: number
+}
+
+export function getTickSpacing(fee: number): number {
+    return TICK_SPACING_BY_FEE[fee] ?? DEFAULT_TICK_SPACING
+}
+
+export function getFeeTierInfo(fee: number): FeeTierInfo {
+    return { fee, tickSpacing: getTickSpacing(fee) }
+}
+
 const DEX_CONFIGS_REGISTRY = Object.fromEntries(
     Object.entries(dexRegistry as RawDexRegistry).map(([dexId, dex]) => {
         const protocols = byChainId(dex.protocols, (byProtocol, chainId) => {
@@ -90,6 +119,10 @@ export function getV3Config(chainId: number, dexId?: DEXType): V3Config | undefi
 
     const config = dexConfig.protocols[chainId]?.[ProtocolType.V3]
     return config?.protocolType === ProtocolType.V3 && config.enabled ? config : undefined
+}
+
+export function listFeeTiers(chainId: number, dexId?: DEXType): FeeTierInfo[] {
+    return getFeeTiers(getV3Config(chainId, dexId)).map(getFeeTierInfo)
 }
 
 export function getV2Config(chainId: number, dexId?: DEXType): V2Config | undefined {
@@ -139,6 +172,21 @@ export function isV2Config(config: ProtocolConfig): config is V2Config {
 
 export function isV3Config(config: ProtocolConfig): config is V3Config {
     return config.protocolType === ProtocolType.V3
+}
+
+export function resolveDexIds(
+    chainId: number,
+    protocol: ProtocolType,
+    dexId?: DEXType | DEXType[]
+): DEXType[] {
+    if (dexId === undefined) return getDexsByProtocol(chainId, protocol)
+
+    const isProtocol = protocol === ProtocolType.V3 ? isV3Config : isV2Config
+    const requested = Array.isArray(dexId) ? dexId : [dexId]
+    return requested.filter((id) => {
+        const config = getDexConfig(chainId, id)
+        return !!config && isProtocol(config)
+    })
 }
 
 export function getProtocolSpender(config: ProtocolConfig): Address | undefined {

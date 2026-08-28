@@ -1,14 +1,17 @@
 import { zeroAddress, type Abi, type Address } from 'viem'
 import { UNISWAP_V2_FACTORY_ABI } from '../abis/index.js'
-import { ProtocolType, getV2Config, type DEXType } from '../configs/dex-config.js'
+import { ProtocolType, getV2Config, resolveDexIds, type DEXType } from '../configs/dex-config.js'
 import { getSwapAddress } from './native.js'
 import { batchRead, type ReadClient } from './multicall.js'
-import { buildQuoteCall } from './quote-call.js'
-import { resolveDexIds } from './v3-pools.js'
+import {
+    buildQuoteCall,
+    fromAmountsOut,
+    quoteWithReference,
+    type QuoteParams,
+    type QuoteResult,
+} from './quote-call.js'
 import { enumerateHopPaths, MAX_HOPS, MAX_ROUTE_QUOTES } from './v3-routes.js'
 import type { ContractCall } from './plan-swap.js'
-import type { QuoteResult } from './v3-quote.js'
-import { fromAmountsOut } from './v2-quote.js'
 
 export interface V2RouteQuote {
     dexId: DEXType
@@ -176,4 +179,121 @@ export async function getV2Routes(
         if (a.quote.amountOut === b.quote.amountOut) return 0
         return a.quote.amountOut > b.quote.amountOut ? -1 : 1
     })
+}
+
+export type V2QuoteParams = QuoteParams
+
+export interface V2QuoteOutcome {
+    dexId: DEXType
+    quote: QuoteResult | null
+    pair: Address | null
+    priceImpact: number | undefined
+    error: Error | null
+}
+
+export async function discoverV2Pairs(
+    client: ReadClient,
+    params: Omit<V2QuoteParams, 'amountIn'>
+): Promise<Map<DEXType, Address>> {
+    const { chainId, tokenIn, tokenOut, dexId } = params
+
+    const dexIds = resolveDexIds(chainId, ProtocolType.V2, dexId)
+    const entries = dexIds.flatMap((id) => {
+        const config = getV2Config(chainId, id)
+        if (!config) return []
+        const resolvedIn = getSwapAddress(tokenIn, chainId, config.wnative)
+        const resolvedOut = getSwapAddress(tokenOut, chainId, config.wnative)
+        if (resolvedIn.toLowerCase() === resolvedOut.toLowerCase()) return []
+        return [{ dexId: id, factory: config.factory, tokenIn: resolvedIn, tokenOut: resolvedOut }]
+    })
+    if (entries.length === 0) return new Map()
+
+    const results = await batchRead(
+        client,
+        entries.map((e) => ({
+            address: e.factory,
+            abi: UNISWAP_V2_FACTORY_ABI as Abi,
+            functionName: 'getPair',
+            args: [e.tokenIn, e.tokenOut],
+        }))
+    )
+
+    const pairs = new Map<DEXType, Address>()
+    entries.forEach((e, index) => {
+        const result = results[index]
+        if (result?.status !== 'success') return
+        const pair = result.result as Address | undefined
+        if (pair && pair.toLowerCase() !== zeroAddress) pairs.set(e.dexId, pair)
+    })
+    return pairs
+}
+
+export async function quoteV2Pairs(
+    client: ReadClient,
+    params: Omit<V2QuoteParams, 'dexId'>,
+    pairs: ReadonlyMap<DEXType, Address>
+): Promise<Map<DEXType, V2QuoteOutcome>> {
+    const { chainId, tokenIn, tokenOut, amountIn } = params
+
+    const quotes = await quoteWithReference(
+        client,
+        amountIn,
+        [...pairs.entries()],
+        ([dexId], amount) =>
+            buildQuoteCall({
+                protocol: ProtocolType.V2,
+                chainId,
+                dexId,
+                tokenIn,
+                tokenOut,
+                amountIn: amount,
+            }),
+        (raw) => fromAmountsOut(raw as readonly bigint[])
+    )
+
+    const outcomes = new Map<DEXType, V2QuoteOutcome>()
+    for (const { target, quote, priceImpact, error } of quotes) {
+        const [dexId, pair] = target
+        outcomes.set(dexId, {
+            dexId,
+            quote,
+            pair,
+            priceImpact,
+            error: quote ? null : (error ?? new Error(`Quote failed for ${dexId}`)),
+        })
+    }
+    return outcomes
+}
+
+export interface V2QuoteResult {
+    direct: Map<DEXType, V2QuoteOutcome>
+    routes: V2RouteQuote[]
+}
+
+async function getDirectQuotes(
+    client: ReadClient,
+    params: V2QuoteParams
+): Promise<Map<DEXType, V2QuoteOutcome>> {
+    const pairs = await discoverV2Pairs(client, params)
+    if (pairs.size === 0) return new Map()
+
+    return quoteV2Pairs(client, params, pairs)
+}
+
+export async function getV2Quotes(
+    client: ReadClient,
+    params: V2QuoteParams
+): Promise<V2QuoteResult> {
+    const { connectors, includeDirect = true } = params
+
+    const [direct, routes] = await Promise.all([
+        includeDirect
+            ? getDirectQuotes(client, params)
+            : Promise.resolve(new Map<DEXType, V2QuoteOutcome>()),
+        connectors && connectors.length > 0
+            ? getV2Routes(client, { ...params, connectors })
+            : Promise.resolve<V2RouteQuote[]>([]),
+    ])
+
+    return { direct, routes }
 }

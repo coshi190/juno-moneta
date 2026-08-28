@@ -1,12 +1,22 @@
 import { zeroAddress, type Abi, type Address } from 'viem'
-import { UNISWAP_V3_FACTORY_ABI } from '../abis/index.js'
-import { ProtocolType, getV3Config, type DEXType } from '../configs/dex-config.js'
+import { UNISWAP_V3_FACTORY_ABI, UNISWAP_V3_POOL_ABI } from '../abis/index.js'
+import {
+    ProtocolType,
+    getFeeTiers,
+    getV3Config,
+    resolveDexIds,
+    type DEXType,
+} from '../configs/dex-config.js'
 import { getSwapAddress } from './native.js'
-import { batchRead, type ReadClient } from './multicall.js'
-import { buildQuoteCall } from './quote-call.js'
-import { getFeeTiers, poolKey, resolveDexIds } from './v3-pools.js'
+import { batchRead, type ReadClient, type ReadResult } from './multicall.js'
+import {
+    buildQuoteCall,
+    fromQuoterV2,
+    quoteWithReference,
+    type QuoteParams,
+    type QuoteResult,
+} from './quote-call.js'
 import type { ContractCall } from './plan-swap.js'
-import type { QuoteResult } from './v3-quote.js'
 
 export const MAX_HOPS = 3
 export const MAX_DEEP_CONNECTORS = 3
@@ -63,6 +73,13 @@ export function crossProduct(perLeg: number[][]): number[][] {
         (acc, fees) => acc.flatMap((combo) => fees.map((f) => [...combo, f])),
         [[]]
     )
+}
+
+export function poolKey(factory: Address, tokenA: Address, tokenB: Address, fee: number): string {
+    const a = tokenA.toLowerCase()
+    const b = tokenB.toLowerCase()
+    const [token0, token1] = a < b ? [a, b] : [b, a]
+    return `${factory.toLowerCase()}:${token0}:${token1}:${fee}`
 }
 
 export interface V3RouteCandidate {
@@ -234,4 +251,222 @@ export async function getV3Routes(
         if (a.quote.amountOut === b.quote.amountOut) return 0
         return a.quote.amountOut > b.quote.amountOut ? -1 : 1
     })
+}
+
+export type V3QuoteParams = QuoteParams
+
+export interface V3QuoteOutcome {
+    dexId: DEXType
+    quote: QuoteResult | null
+    fee: number | null
+    pool: Address | null
+    priceImpact: number | undefined
+    error: Error | null
+}
+
+export interface V3PoolCandidate {
+    dexId: DEXType
+    factory: Address
+    quoter: Address
+    fee: number
+    tokenIn: Address
+    tokenOut: Address
+}
+
+export interface BuildPoolCandidatesInput {
+    chainId: number
+    dexIds: readonly DEXType[]
+    tokenIn: Address
+    tokenOut: Address
+}
+
+export function buildPoolCandidates({
+    chainId,
+    dexIds,
+    tokenIn,
+    tokenOut,
+}: BuildPoolCandidatesInput): V3PoolCandidate[] {
+    const resolvedIn = getSwapAddress(tokenIn, chainId)
+    const resolvedOut = getSwapAddress(tokenOut, chainId)
+    if (resolvedIn.toLowerCase() === resolvedOut.toLowerCase()) return []
+
+    const candidates: V3PoolCandidate[] = []
+
+    for (const dexId of dexIds) {
+        const config = getV3Config(chainId, dexId)
+        if (!config) continue
+
+        for (const fee of getFeeTiers(config)) {
+            candidates.push({
+                dexId,
+                factory: config.factory,
+                quoter: config.quoter,
+                fee,
+                tokenIn: resolvedIn,
+                tokenOut: resolvedOut,
+            })
+        }
+    }
+
+    return candidates
+}
+
+export interface ResolvedPool {
+    candidate: V3PoolCandidate
+    pool: Address
+}
+
+export interface DiscoveredV3Pool {
+    dexId: DEXType
+    pool: Address
+    fee: number
+    liquidity: bigint
+}
+
+export function resolvePoolAddresses(
+    candidates: readonly V3PoolCandidate[],
+    results: readonly ReadResult[]
+): ResolvedPool[] {
+    const resolved: ResolvedPool[] = []
+
+    candidates.forEach((candidate, index) => {
+        const result = results[index]
+        if (result?.status !== 'success') return
+
+        const pool = result.result as Address | undefined
+        if (!pool || pool.toLowerCase() === zeroAddress) return
+
+        resolved.push({ candidate, pool })
+    })
+
+    return resolved
+}
+
+export function pickBestPools(
+    resolved: readonly ResolvedPool[],
+    liquidityResults: readonly ReadResult[]
+): Map<DEXType, DiscoveredV3Pool> {
+    const best = new Map<DEXType, DiscoveredV3Pool>()
+
+    resolved.forEach(({ candidate, pool }, index) => {
+        const result = liquidityResults[index]
+        if (result?.status !== 'success') return
+
+        const liquidity = result.result as bigint | undefined
+        if (typeof liquidity !== 'bigint' || liquidity <= 0n) return
+
+        const incumbent = best.get(candidate.dexId)
+        if (incumbent && incumbent.liquidity >= liquidity) return
+
+        best.set(candidate.dexId, { dexId: candidate.dexId, pool, fee: candidate.fee, liquidity })
+    })
+
+    return best
+}
+
+export async function discoverV3Pools(
+    client: ReadClient,
+    params: Omit<V3QuoteParams, 'amountIn'>
+): Promise<Map<DEXType, DiscoveredV3Pool>> {
+    const { chainId, tokenIn, tokenOut, dexId } = params
+
+    const dexIds = resolveDexIds(chainId, ProtocolType.V3, dexId)
+    const candidates = buildPoolCandidates({ chainId, dexIds, tokenIn, tokenOut })
+    if (candidates.length === 0) return new Map()
+
+    const poolResults = await batchRead(
+        client,
+        candidates.map((candidate) => ({
+            address: candidate.factory,
+            abi: UNISWAP_V3_FACTORY_ABI as Abi,
+            functionName: 'getPool',
+            args: [candidate.tokenIn, candidate.tokenOut, candidate.fee],
+        }))
+    )
+    const resolved = resolvePoolAddresses(candidates, poolResults)
+    if (resolved.length === 0) return new Map()
+
+    const liquidityResults = await batchRead(
+        client,
+        resolved.map(({ pool }) => ({
+            address: pool,
+            abi: UNISWAP_V3_POOL_ABI as Abi,
+            functionName: 'liquidity',
+            args: [],
+        }))
+    )
+
+    return pickBestPools(resolved, liquidityResults)
+}
+
+export async function quoteV3Pools(
+    client: ReadClient,
+    params: Omit<V3QuoteParams, 'dexId'>,
+    pools: ReadonlyMap<DEXType, DiscoveredV3Pool>
+): Promise<Map<DEXType, V3QuoteOutcome>> {
+    const { chainId, tokenIn, tokenOut, amountIn } = params
+
+    const quotes = await quoteWithReference(
+        client,
+        amountIn,
+        [...pools.entries()],
+        ([dexId, pool], amount) =>
+            buildQuoteCall({
+                protocol: ProtocolType.V3,
+                chainId,
+                dexId,
+                tokenIn,
+                tokenOut,
+                fee: pool.fee,
+                amountIn: amount,
+            }),
+        (raw) => fromQuoterV2(raw as [bigint, bigint, number | bigint, bigint])
+    )
+
+    const outcomes = new Map<DEXType, V3QuoteOutcome>()
+    for (const { target, quote, priceImpact, error } of quotes) {
+        const [dexId, pool] = target
+        outcomes.set(dexId, {
+            dexId,
+            quote,
+            fee: pool.fee,
+            pool: pool.pool,
+            priceImpact,
+            error: quote ? null : (error ?? new Error(`Quote failed for ${dexId}`)),
+        })
+    }
+    return outcomes
+}
+
+export interface V3QuoteResult {
+    direct: Map<DEXType, V3QuoteOutcome>
+    routes: V3RouteQuote[]
+}
+
+async function getDirectQuotes(
+    client: ReadClient,
+    params: V3QuoteParams
+): Promise<Map<DEXType, V3QuoteOutcome>> {
+    const pools = await discoverV3Pools(client, params)
+    if (pools.size === 0) return new Map()
+
+    return quoteV3Pools(client, params, pools)
+}
+
+export async function getV3Quotes(
+    client: ReadClient,
+    params: V3QuoteParams
+): Promise<V3QuoteResult> {
+    const { connectors, includeDirect = true } = params
+
+    const [direct, routes] = await Promise.all([
+        includeDirect
+            ? getDirectQuotes(client, params)
+            : Promise.resolve(new Map<DEXType, V3QuoteOutcome>()),
+        connectors && connectors.length > 0
+            ? getV3Routes(client, { ...params, connectors })
+            : Promise.resolve<V3RouteQuote[]>([]),
+    ])
+
+    return { direct, routes }
 }

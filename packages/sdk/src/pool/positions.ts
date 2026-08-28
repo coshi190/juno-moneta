@@ -4,7 +4,7 @@ import {
     UNISWAP_V3_FACTORY_ABI,
     UNISWAP_V3_POOL_ABI,
 } from '../abis/index.js'
-import { getV3Config, type DEXType } from '../configs/dex-config.js'
+import { getTickSpacing, getV3Config, type DEXType } from '../configs/dex-config.js'
 import {
     batchRead,
     type ReadClient,
@@ -14,7 +14,6 @@ import {
 import type { ContractCall } from '../dex/plan-swap.js'
 import type { PonderClient } from '../ponder/client.js'
 import { fetchPositionsByTokenIds, fetchUserPositions } from '../ponder/queries/positions.js'
-import { getTickSpacing } from './fee-tiers.js'
 import { getAmountsForLiquidity } from './liquidity-math.js'
 import { computeTickPrice } from './pool-price.js'
 import { computeValueFromPrices } from './pool-usd-math.js'

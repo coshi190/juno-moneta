@@ -1,16 +1,22 @@
 import { describe, it, expect } from 'vitest'
 import { zeroAddress, type Address, type PublicClient } from 'viem'
-import { CHAIN_IDS } from '../configs/chains.js'
+import { CHAIN_IDS, WRAPPED_NATIVE_ADDRESSES } from '../configs/chains.js'
 import type { ContractCall } from '../dex/plan-swap.js'
 import type { ReadResult } from '../dex/multicall.js'
-import { poolKey } from '../dex/v3-pools.js'
+import { NATIVE_TOKEN_ADDRESS } from '../dex/native.js'
 import {
     MAX_DEEP_CONNECTORS,
+    buildPoolCandidates,
     buildRouteCandidates,
     buildRouteMetas,
     crossProduct,
     enumerateHopPaths,
     getV3Routes,
+    pickBestPools,
+    poolKey,
+    resolvePoolAddresses,
+    type ResolvedPool,
+    type V3PoolCandidate,
     type V3RouteCandidate,
 } from '../dex/v3-routes.js'
 
@@ -23,7 +29,22 @@ const C4 = '0xc444444444444444444444444444444444444444' as Address
 const POOL_1 = '0xdead111111111111111111111111111111111111' as Address
 const POOL_2 = '0xdead222222222222222222222222222222222222' as Address
 
+const KKUB = WRAPPED_NATIVE_ADDRESSES[CHAIN_IDS.bitkub]!
+
 const ok = (result: unknown): ReadResult => ({ status: 'success', result })
+const fail = (message: string): ReadResult => ({ status: 'failure', error: new Error(message) })
+
+function candidate(overrides: Partial<V3PoolCandidate> = {}): V3PoolCandidate {
+    return {
+        dexId: 'junoswap',
+        factory: '0xffffffffffffffffffffffffffffffffffffffff' as Address,
+        quoter: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' as Address,
+        fee: 3000,
+        tokenIn: IN,
+        tokenOut: OUT,
+        ...overrides,
+    }
+}
 
 function stubClient(phases: ReadResult[][]) {
     const batches: ContractCall[][] = []
@@ -217,6 +238,115 @@ describe('dex/v3-routes', () => {
                 connectors: [C1],
             })
             expect(routes).toEqual([])
+        })
+    })
+
+    describe('poolKey', () => {
+        const FACTORY = '0xffff000000000000000000000000000000000000' as Address
+
+        it('is order-independent for the token pair', () => {
+            expect(poolKey(FACTORY, IN, OUT, 3000)).toBe(poolKey(FACTORY, OUT, IN, 3000))
+        })
+
+        it('distinguishes fee tiers and factories', () => {
+            const other = '0xeeee000000000000000000000000000000000000' as Address
+            expect(poolKey(FACTORY, IN, OUT, 3000)).not.toBe(poolKey(FACTORY, IN, OUT, 500))
+            expect(poolKey(FACTORY, IN, OUT, 3000)).not.toBe(poolKey(other, IN, OUT, 3000))
+        })
+
+        it('normalizes address casing', () => {
+            expect(poolKey(FACTORY, IN.toUpperCase() as Address, OUT, 3000)).toBe(
+                poolKey(FACTORY, IN, OUT, 3000)
+            )
+        })
+    })
+
+    describe('buildPoolCandidates', () => {
+        it('produces one candidate per (dex, configured fee tier)', () => {
+            const candidates = buildPoolCandidates({
+                chainId: CHAIN_IDS.bsc,
+                dexIds: ['pancakeswap'],
+                tokenIn: IN,
+                tokenOut: OUT,
+            })
+            expect(candidates.map((c) => c.fee)).toEqual([100, 500, 2500, 10000])
+        })
+
+        it('resolves the native sentinel to the chain wrapped native', () => {
+            const [first] = buildPoolCandidates({
+                chainId: CHAIN_IDS.bitkub,
+                dexIds: ['junoswap'],
+                tokenIn: NATIVE_TOKEN_ADDRESS,
+                tokenOut: OUT,
+            })
+            expect(first?.tokenIn).toBe(KKUB)
+        })
+
+        it('skips a pair that collapses to one token once resolved', () => {
+            expect(
+                buildPoolCandidates({
+                    chainId: CHAIN_IDS.bitkub,
+                    dexIds: ['junoswap'],
+                    tokenIn: NATIVE_TOKEN_ADDRESS,
+                    tokenOut: KKUB,
+                })
+            ).toEqual([])
+        })
+    })
+
+    describe('resolvePoolAddresses', () => {
+        it('drops tiers with no pool so the liquidity batch stays index-aligned', () => {
+            const candidates = [
+                candidate({ fee: 100 }),
+                candidate({ fee: 500 }),
+                candidate({ fee: 3000 }),
+            ]
+            const resolved = resolvePoolAddresses(candidates, [
+                ok(zeroAddress),
+                ok(POOL_1),
+                ok(POOL_2),
+            ])
+
+            expect(resolved).toHaveLength(2)
+            expect(resolved.map((r) => r.pool)).toEqual([POOL_1, POOL_2])
+            expect(resolved.map((r) => r.candidate.fee)).toEqual([500, 3000])
+        })
+    })
+
+    describe('pickBestPools', () => {
+        const resolved = (fee: number, pool: Address, dexId = 'junoswap'): ResolvedPool => ({
+            candidate: candidate({ fee, dexId }),
+            pool,
+        })
+
+        it('picks the deepest pool', () => {
+            const best = pickBestPools(
+                [resolved(500, POOL_1), resolved(3000, POOL_2)],
+                [ok(100n), ok(900n)]
+            )
+            expect(best.get('junoswap')).toMatchObject({ pool: POOL_2, fee: 3000, liquidity: 900n })
+        })
+
+        it('ignores pools with zero liquidity', () => {
+            const best = pickBestPools([resolved(500, POOL_1)], [ok(0n)])
+            expect(best.size).toBe(0)
+        })
+
+        it('treats a reverting liquidity read as no pool rather than crashing', () => {
+            const best = pickBestPools(
+                [resolved(500, POOL_1), resolved(3000, POOL_2)],
+                [fail('reverted'), ok(5n)]
+            )
+            expect(best.get('junoswap')?.pool).toBe(POOL_2)
+        })
+
+        it('keeps a separate best pool per DEX', () => {
+            const best = pickBestPools(
+                [resolved(500, POOL_1, 'junoswap'), resolved(3000, POOL_2, 'kublerx')],
+                [ok(10n), ok(20n)]
+            )
+            expect(best.get('junoswap')?.pool).toBe(POOL_1)
+            expect(best.get('kublerx')?.pool).toBe(POOL_2)
         })
     })
 })

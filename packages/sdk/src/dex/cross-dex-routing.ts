@@ -2,11 +2,12 @@ import type { Address } from 'viem'
 import {
     ProtocolType,
     getDexsByProtocol,
+    getFeeTiers,
     getV2Config,
     getV3Config,
     type DEXType,
 } from '../configs/dex-config.js'
-import { getFeeTiers, poolKey } from './v3-pools.js'
+import { poolKey } from './v3-routes.js'
 import { getSwapAddress } from './native.js'
 import { buildQuoteCall } from './quote-call.js'
 import { parseQuoteAmountOut } from './split-routing.js'

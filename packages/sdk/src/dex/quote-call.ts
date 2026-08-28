@@ -9,6 +9,7 @@ import {
 } from '../configs/dex-config.js'
 import { encodeV3Path, type ContractCall } from './plan-swap.js'
 import { getSwapAddress, resolveSwapPath } from './native.js'
+import { batchRead, type ReadClient } from './multicall.js'
 
 export interface QuoteCallInput {
     protocol: ProtocolType
@@ -65,4 +66,121 @@ export function buildQuoteCall(input: QuoteCallInput): ContractCall | undefined 
             },
         ],
     }
+}
+
+export interface QuoteResult {
+    amountOut: bigint
+    sqrtPriceX96After: bigint
+    initializedTicksCrossed: number
+    gasEstimate: bigint
+}
+
+export function fromQuoterV2(
+    tuple: readonly [bigint, bigint, number | bigint, bigint]
+): QuoteResult {
+    return {
+        amountOut: tuple[0],
+        sqrtPriceX96After: tuple[1],
+        initializedTicksCrossed: Number(tuple[2]),
+        gasEstimate: tuple[3],
+    }
+}
+
+export function fromAmountsOut(amounts: readonly bigint[], gasEstimate = 150000n): QuoteResult {
+    return {
+        amountOut: amounts[amounts.length - 1] ?? 0n,
+        sqrtPriceX96After: 0n,
+        initializedTicksCrossed: 0,
+        gasEstimate,
+    }
+}
+
+export function wrapQuoteResult(amountIn: bigint, operation: 'wrap' | 'unwrap'): QuoteResult {
+    return {
+        amountOut: amountIn,
+        sqrtPriceX96After: 0n,
+        initializedTicksCrossed: 0,
+        gasEstimate: operation === 'wrap' ? 50000n : 40000n,
+    }
+}
+
+const REFERENCE_DIVISOR = 1000n
+
+export function computePriceImpactPercent(
+    fullAmountOut: bigint,
+    amountIn: bigint,
+    referenceAmountOut: bigint,
+    referenceAmountIn: bigint
+): number | undefined {
+    if (referenceAmountOut <= 0n || referenceAmountIn <= 0n || amountIn <= 0n) return undefined
+    const num = fullAmountOut * referenceAmountIn
+    const den = amountIn * referenceAmountOut
+    const ratioBps = Number((num * 10000n) / den)
+    return Math.max(0, (10000 - ratioBps) / 100)
+}
+
+interface ReferencedQuote<T> {
+    target: T
+    quote: QuoteResult | null
+    priceImpact: number | undefined
+    error: Error | null
+}
+
+export async function quoteWithReference<T>(
+    client: ReadClient,
+    amountIn: bigint,
+    targets: readonly T[],
+    buildCall: (target: T, amount: bigint) => ContractCall | undefined,
+    decode: (raw: unknown) => QuoteResult
+): Promise<ReferencedQuote<T>[]> {
+    const referenceAmountIn = amountIn / REFERENCE_DIVISOR
+    const withReference = referenceAmountIn > 0n
+
+    const calls: ContractCall[] = []
+    const entries = targets.flatMap((target) => {
+        const call = buildCall(target, amountIn)
+        if (!call) return []
+        const index = calls.length
+        calls.push(call)
+        if (withReference) calls.push(buildCall(target, referenceAmountIn)!)
+        return [{ target, index }]
+    })
+
+    const results = await batchRead(client, calls)
+
+    return entries.map(({ target, index }) => {
+        const result = results[index]
+        if (result?.status !== 'success') {
+            return { target, quote: null, priceImpact: undefined, error: result?.error ?? null }
+        }
+
+        const refResult = withReference ? results[index + 1] : undefined
+        const quote = decode(result.result)
+        const referenceAmountOut =
+            refResult?.status === 'success' ? decode(refResult.result).amountOut : 0n
+
+        return {
+            target,
+            quote,
+            priceImpact: computePriceImpactPercent(
+                quote.amountOut,
+                amountIn,
+                referenceAmountOut,
+                referenceAmountIn
+            ),
+            error: null,
+        }
+    })
+}
+
+export interface QuoteParams {
+    chainId: number
+    tokenIn: Address
+    tokenOut: Address
+    amountIn: bigint
+    dexId?: DEXType | DEXType[]
+    connectors?: Address[]
+    maxHops?: number
+    maxRouteQuotes?: number
+    includeDirect?: boolean
 }
