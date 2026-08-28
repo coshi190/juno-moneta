@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { zeroAddress, type Address, type PublicClient } from 'viem'
-import { CHAIN_IDS } from '../configs/chains.js'
+import { getChains } from '../configs/chains.js'
 import type { ContractCall } from '../dex/plan-swap.js'
 import type { ReadResult } from '../dex/multicall.js'
 import {
@@ -10,6 +10,8 @@ import {
     pairKey,
     type V2RouteCandidate,
 } from '../dex/v2-routes.js'
+
+const CHAINS = getChains()
 
 const IN = '0x1111111111111111111111111111111111111111' as Address
 const OUT = '0x2222222222222222222222222222222222222222' as Address
@@ -56,7 +58,7 @@ describe('dex/v2-routes', () => {
     describe('buildV2RouteCandidates', () => {
         it('builds one candidate per (V2 dex, enumerated path)', () => {
             const candidates = buildV2RouteCandidates({
-                chainId: CHAIN_IDS.bitkub,
+                chainId: CHAINS.bitkub,
                 dexId: 'udonswap',
                 tokenIn: IN,
                 tokenOut: OUT,
@@ -70,7 +72,7 @@ describe('dex/v2-routes', () => {
         it('is empty when there are no connectors to route through', () => {
             expect(
                 buildV2RouteCandidates({
-                    chainId: CHAIN_IDS.bitkub,
+                    chainId: CHAINS.bitkub,
                     dexId: 'udonswap',
                     tokenIn: IN,
                     tokenOut: OUT,
@@ -118,7 +120,7 @@ describe('dex/v2-routes', () => {
             const { client, batches } = stubClient(phases)
 
             const routes = await getV2Routes(client, {
-                chainId: CHAIN_IDS.bitkub,
+                chainId: CHAINS.bitkub,
                 dexId: 'udonswap',
                 tokenIn: IN,
                 tokenOut: OUT,
@@ -147,7 +149,7 @@ describe('dex/v2-routes', () => {
             const { client } = stubClient(phases)
 
             const routes = await getV2Routes(client, {
-                chainId: CHAIN_IDS.bitkub,
+                chainId: CHAINS.bitkub,
                 dexId: 'udonswap',
                 tokenIn: IN,
                 tokenOut: OUT,
@@ -165,7 +167,7 @@ describe('dex/v2-routes', () => {
             const { client } = stubClient(phases)
 
             const routes = await getV2Routes(client, {
-                chainId: CHAIN_IDS.bitkub,
+                chainId: CHAINS.bitkub,
                 dexId: 'udonswap',
                 tokenIn: IN,
                 tokenOut: OUT,

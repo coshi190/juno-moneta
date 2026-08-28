@@ -1,12 +1,7 @@
 import type { Abi, Address } from 'viem'
-import { UNISWAP_V2_ROUTER_ABI, UNISWAP_V3_QUOTER_V2_ABI } from '../abis/index.js'
-import {
-    DEFAULT_FEE_TIER,
-    ProtocolType,
-    getV2Config,
-    getV3Config,
-    type DEXType,
-} from '../configs/dex-config.js'
+import { UNISWAP_V2_ROUTER_ABI } from '../abis/uniswap-v2-router.js'
+import { UNISWAP_V3_QUOTER_V2_ABI } from '../abis/uniswap-v3-quoter.js'
+import { getDexConfig, ProtocolType, type DEXType } from '../configs/dex.js'
 import { encodeV3Path, type ContractCall } from './plan-swap.js'
 import { getSwapAddress, resolveSwapPath } from './native.js'
 import { batchRead, type ReadClient } from './multicall.js'
@@ -27,7 +22,7 @@ export function buildQuoteCall(input: QuoteCallInput): ContractCall | undefined 
     const { protocol, chainId, dexId, tokenIn, tokenOut, amountIn } = input
 
     if (protocol === ProtocolType.V2) {
-        const config = getV2Config(chainId, dexId)
+        const config = getDexConfig(chainId, dexId, ProtocolType.V2)
         if (!config) return undefined
         return {
             address: config.router,
@@ -40,7 +35,7 @@ export function buildQuoteCall(input: QuoteCallInput): ContractCall | undefined 
         }
     }
 
-    const config = getV3Config(chainId, dexId)
+    const config = getDexConfig(chainId, dexId, ProtocolType.V3)
     if (!config) return undefined
 
     if (input.path && input.path.length > 2 && input.fees) {
@@ -52,6 +47,9 @@ export function buildQuoteCall(input: QuoteCallInput): ContractCall | undefined 
         }
     }
 
+    const fee = input.fee ?? input.fees?.[0]
+    if (fee === undefined) return undefined
+
     return {
         address: config.quoter,
         abi: UNISWAP_V3_QUOTER_V2_ABI as Abi,
@@ -61,7 +59,7 @@ export function buildQuoteCall(input: QuoteCallInput): ContractCall | undefined 
                 tokenIn: getSwapAddress(tokenIn, chainId),
                 tokenOut: getSwapAddress(tokenOut, chainId),
                 amountIn,
-                fee: input.fee ?? config.defaultFeeTier ?? DEFAULT_FEE_TIER,
+                fee,
                 sqrtPriceLimitX96: 0n,
             },
         ],

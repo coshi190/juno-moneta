@@ -1,4 +1,4 @@
-import { STABLECOIN_ADDRESSES, WRAPPED_NATIVE_ADDRESSES } from '../configs/chains.js'
+import { getStablecoins, getWrappedNativeAddress } from '../configs/chains.js'
 import { priceFromSqrtPriceX96 } from './pool-usd-math.js'
 import { nearestUsableTick, priceToTick, tickToSqrtPriceX96 } from './tick-math.js'
 
@@ -69,8 +69,8 @@ export function getPoolDisplayOrder(
     token0: string,
     token1: string
 ): PoolDisplayOrder {
-    const stables = STABLECOIN_ADDRESSES[chainId]
-    const wrapped = WRAPPED_NATIVE_ADDRESSES[chainId]?.toLowerCase()
+    const stables = getStablecoins(chainId)
+    const wrapped = getWrappedNativeAddress(chainId)?.toLowerCase()
     const a = token0.toLowerCase()
     const b = token1.toLowerCase()
 

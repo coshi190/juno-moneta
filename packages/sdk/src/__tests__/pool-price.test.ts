@@ -8,7 +8,7 @@ import {
 } from '../pool/pool-price'
 import { priceFromSqrtPriceX96 } from '../pool/pool-usd-math'
 import { tickToSqrtPriceX96 } from '../pool/tick-math'
-import { CHAIN_IDS, STABLECOIN_ADDRESSES, WRAPPED_NATIVE_ADDRESSES } from '../configs/chains'
+import { getChains, getStablecoins, getWrappedNativeAddress } from '../configs/chains'
 
 const Q96 = 2n ** 96n
 
@@ -114,9 +114,9 @@ describe('invertSqrtPriceX96', () => {
 })
 
 describe('getPoolDisplayOrder', () => {
-    const chainId = CHAIN_IDS.bitkub
-    const stable = [...(STABLECOIN_ADDRESSES[chainId] ?? [])][0]!
-    const wrapped = WRAPPED_NATIVE_ADDRESSES[chainId]!
+    const chainId = getChains().bitkub
+    const stable = [...(getStablecoins(chainId) ?? [])][0]!
+    const wrapped = getWrappedNativeAddress(chainId)!
     const other = '0x1111111111111111111111111111111111111111'
 
     it('prefers the stablecoin as quote', () => {

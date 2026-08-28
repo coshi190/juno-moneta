@@ -4,7 +4,7 @@ import {
     parseTrackingTag,
     resolveBinding,
     parseV2Swap,
-    WRAPPED_NATIVE_ADDRESSES,
+    getWrappedNativeAddress,
 } from '@coshi190/juno-moneta-sdk'
 import { upsertToken } from './v3-pools.js'
 import { getSeedV2Pool, getSeedV2Dex } from './seed.js'
@@ -119,7 +119,7 @@ async function recordV2SwapEvent(context: any, chainId: number, event: any, dex:
             .onConflictDoNothing()
     }
 
-    const wn = WRAPPED_NATIVE_ADDRESSES[chainId]
+    const wn = getWrappedNativeAddress(chainId)
     const parsed = wn
         ? parseV2Swap(
               {

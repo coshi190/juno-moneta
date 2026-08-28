@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { zeroAddress, type Address, type PublicClient } from 'viem'
-import { CHAIN_IDS, WRAPPED_NATIVE_ADDRESSES } from '../configs/chains.js'
-import { ProtocolType, resolveDexIds, type DEXType } from '../configs/dex-config.js'
+import { getChains, getWrappedNativeAddress } from '../configs/chains.js'
+import { ProtocolType, getSupportedDexs, type DEXType } from '../configs/dex.js'
 import { NATIVE_TOKEN_ADDRESS } from '../dex/native.js'
 import type { ContractCall } from '../dex/plan-swap.js'
 import type { ReadResult } from '../dex/multicall.js'
@@ -9,12 +9,14 @@ import { computePriceImpactPercent, fromAmountsOut, wrapQuoteResult } from '../d
 import { discoverV2Pairs, getV2Quotes, quoteV2Pairs } from '../dex/v2-routes.js'
 import { getV3Quotes, quoteV3Pools, type DiscoveredV3Pool } from '../dex/v3-routes.js'
 
+const CHAINS = getChains()
+
 const TOKEN_A = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as Address
 const TOKEN_B = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' as Address
 const PAIR_1 = '0x3333333333333333333333333333333333333333' as Address
 const POOL_1 = '0x1111111111111111111111111111111111111111' as Address
 const POOL_2 = '0x2222222222222222222222222222222222222222' as Address
-const KKUB = WRAPPED_NATIVE_ADDRESSES[CHAIN_IDS.bitkub]!
+const KKUB = getWrappedNativeAddress(CHAINS.bitkub)!
 
 const ok = (result: unknown): ReadResult => ({ status: 'success', result })
 const fail = (message: string): ReadResult => ({ status: 'failure', error: new Error(message) })
@@ -70,7 +72,7 @@ describe('quote-call — V2', () => {
             const { client, batches } = stubClient([[ok(PAIR_1)]])
 
             const pairs = await discoverV2Pairs(client, {
-                chainId: CHAIN_IDS.bitkub,
+                chainId: CHAINS.bitkub,
                 dexId: 'udonswap',
                 tokenIn: NATIVE_TOKEN_ADDRESS,
                 tokenOut: TOKEN_B,
@@ -84,7 +86,7 @@ describe('quote-call — V2', () => {
             const { client, batches } = stubClient([[]])
 
             const pairs = await discoverV2Pairs(client, {
-                chainId: CHAIN_IDS.bitkub,
+                chainId: CHAINS.bitkub,
                 dexId: 'udonswap',
                 tokenIn: NATIVE_TOKEN_ADDRESS,
                 tokenOut: KKUB,
@@ -98,7 +100,7 @@ describe('quote-call — V2', () => {
             const { client } = stubClient([[ok(zeroAddress)]])
 
             const pairs = await discoverV2Pairs(client, {
-                chainId: CHAIN_IDS.bitkub,
+                chainId: CHAINS.bitkub,
                 dexId: 'udonswap',
                 tokenIn: TOKEN_A,
                 tokenOut: TOKEN_B,
@@ -108,13 +110,13 @@ describe('quote-call — V2', () => {
         })
 
         it('keeps every requested DEX in a single batched call', async () => {
-            const ids = resolveDexIds(CHAIN_IDS.bitkub, ProtocolType.V2)
+            const ids = getSupportedDexs(CHAINS.bitkub, ProtocolType.V2)
             expect(ids.length).toBeGreaterThan(1)
 
             const { client, batches } = stubClient([ids.map(() => ok(PAIR_1))])
 
             const pairs = await discoverV2Pairs(client, {
-                chainId: CHAIN_IDS.bitkub,
+                chainId: CHAINS.bitkub,
                 tokenIn: TOKEN_A,
                 tokenOut: TOKEN_B,
             })
@@ -131,7 +133,7 @@ describe('quote-call — V2', () => {
 
             const outcomes = await quoteV2Pairs(
                 client,
-                { chainId: CHAIN_IDS.bitkub, tokenIn: TOKEN_A, tokenOut: TOKEN_B, amountIn: 1000n },
+                { chainId: CHAINS.bitkub, tokenIn: TOKEN_A, tokenOut: TOKEN_B, amountIn: 1000n },
                 pairs
             )
 
@@ -152,7 +154,7 @@ describe('quote-call — V2', () => {
 
             const outcomes = await quoteV2Pairs(
                 client,
-                { chainId: CHAIN_IDS.bitkub, tokenIn: TOKEN_A, tokenOut: TOKEN_B, amountIn: 1000n },
+                { chainId: CHAINS.bitkub, tokenIn: TOKEN_A, tokenOut: TOKEN_B, amountIn: 1000n },
                 pairs
             )
 
@@ -167,7 +169,7 @@ describe('quote-call — V2', () => {
             const { client, batches } = stubClient([[ok(PAIR_1)], [ok([1000n, 1234n])]])
 
             const result = await getV2Quotes(client, {
-                chainId: CHAIN_IDS.bitkub,
+                chainId: CHAINS.bitkub,
                 dexId: 'udonswap',
                 tokenIn: TOKEN_A,
                 tokenOut: TOKEN_B,
@@ -183,7 +185,7 @@ describe('quote-call — V2', () => {
             const { client } = stubClient([[ok(zeroAddress)]])
 
             const result = await getV2Quotes(client, {
-                chainId: CHAIN_IDS.bitkub,
+                chainId: CHAINS.bitkub,
                 dexId: 'udonswap',
                 tokenIn: TOKEN_A,
                 tokenOut: TOKEN_B,
@@ -197,7 +199,7 @@ describe('quote-call — V2', () => {
             const { client, batches } = stubClient([])
 
             const result = await getV2Quotes(client, {
-                chainId: CHAIN_IDS.bitkub,
+                chainId: CHAINS.bitkub,
                 dexId: 'udonswap',
                 tokenIn: TOKEN_A,
                 tokenOut: TOKEN_B,
@@ -211,7 +213,7 @@ describe('quote-call — V2', () => {
 
         it('produces the same answer on a chain with no multicall3', async () => {
             const result = await getV2Quotes(fallbackClient([[ok(PAIR_1)], [ok([1000n, 1234n])]]), {
-                chainId: CHAIN_IDS.bitkub,
+                chainId: CHAINS.bitkub,
                 dexId: 'udonswap',
                 tokenIn: TOKEN_A,
                 tokenOut: TOKEN_B,
@@ -252,7 +254,7 @@ describe('quote-call — V3', () => {
             const { client, batches } = stubClient(phases)
 
             await getV3Quotes(client, {
-                chainId: CHAIN_IDS.bitkub,
+                chainId: CHAINS.bitkub,
                 dexId: 'junoswap',
                 tokenIn: TOKEN_A,
                 tokenOut: TOKEN_B,
@@ -269,7 +271,7 @@ describe('quote-call — V3', () => {
             const { client, batches } = stubClient(phases)
 
             const result = await getV3Quotes(client, {
-                chainId: CHAIN_IDS.bitkub,
+                chainId: CHAINS.bitkub,
                 dexId: 'junoswap',
                 tokenIn: TOKEN_A,
                 tokenOut: TOKEN_B,
@@ -290,7 +292,7 @@ describe('quote-call — V3', () => {
             ])
 
             const result = await getV3Quotes(client, {
-                chainId: CHAIN_IDS.bitkub,
+                chainId: CHAINS.bitkub,
                 dexId: 'junoswap',
                 tokenIn: TOKEN_A,
                 tokenOut: TOKEN_B,
@@ -308,7 +310,7 @@ describe('quote-call — V3', () => {
             ])
 
             const result = await getV3Quotes(client, {
-                chainId: CHAIN_IDS.bitkub,
+                chainId: CHAINS.bitkub,
                 dexId: 'junoswap',
                 tokenIn: TOKEN_A,
                 tokenOut: TOKEN_B,
@@ -321,7 +323,7 @@ describe('quote-call — V3', () => {
 
         it('produces the same answer on a chain with no multicall3', async () => {
             const result = await getV3Quotes(fallbackClient(phases), {
-                chainId: CHAIN_IDS.bitkub,
+                chainId: CHAINS.bitkub,
                 dexId: 'junoswap',
                 tokenIn: TOKEN_A,
                 tokenOut: TOKEN_B,
@@ -348,7 +350,7 @@ describe('quoteV3Pools — price impact', () => {
         new Map([['junoswap', { dexId: 'junoswap', pool: POOL_1, fee: 3000, liquidity: 1n }]])
 
     const params = (amountIn: bigint) => ({
-        chainId: CHAIN_IDS.bitkub,
+        chainId: CHAINS.bitkub,
         tokenIn: TOKEN_A,
         tokenOut: TOKEN_B,
         amountIn,

@@ -1,12 +1,5 @@
 import type { Address } from 'viem'
-import {
-    ProtocolType,
-    getDexsByProtocol,
-    getFeeTiers,
-    getV2Config,
-    getV3Config,
-    type DEXType,
-} from '../configs/dex-config.js'
+import { getDexConfig, ProtocolType, getSupportedDexs, type DEXType } from '../configs/dex.js'
 import { poolKey } from './v3-routes.js'
 import { getSwapAddress } from './native.js'
 import { buildQuoteCall } from './quote-call.js'
@@ -49,8 +42,8 @@ export function candidateHopOptions(
     if (tokenInW.toLowerCase() === tokenOutW.toLowerCase()) return []
     const options: HopOption[] = []
 
-    for (const dexId of getDexsByProtocol(chainId, ProtocolType.V2)) {
-        const cfg = getV2Config(chainId, dexId)
+    for (const dexId of getSupportedDexs(chainId, ProtocolType.V2)) {
+        const cfg = getDexConfig(chainId, dexId, ProtocolType.V2)
         if (!cfg?.factory || !cfg.router) continue
         options.push({
             dexId,
@@ -62,10 +55,10 @@ export function candidateHopOptions(
         })
     }
 
-    for (const dexId of getDexsByProtocol(chainId, ProtocolType.V3)) {
-        const cfg = getV3Config(chainId, dexId)
+    for (const dexId of getSupportedDexs(chainId, ProtocolType.V3)) {
+        const cfg = getDexConfig(chainId, dexId, ProtocolType.V3)
         if (!cfg?.factory || !cfg.quoter) continue
-        for (const fee of getFeeTiers(cfg)) {
+        for (const fee of cfg.feeTiers) {
             options.push({
                 dexId,
                 protocol: ProtocolType.V3,

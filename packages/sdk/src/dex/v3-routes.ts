@@ -1,12 +1,7 @@
 import { zeroAddress, type Abi, type Address } from 'viem'
-import { UNISWAP_V3_FACTORY_ABI, UNISWAP_V3_POOL_ABI } from '../abis/index.js'
-import {
-    ProtocolType,
-    getFeeTiers,
-    getV3Config,
-    resolveDexIds,
-    type DEXType,
-} from '../configs/dex-config.js'
+import { UNISWAP_V3_FACTORY_ABI } from '../abis/uniswap-v3-factory.js'
+import { UNISWAP_V3_POOL_ABI } from '../abis/uniswap-v3-pool.js'
+import { getDexConfig, ProtocolType, getSupportedDexs, type DEXType } from '../configs/dex.js'
 import { getSwapAddress } from './native.js'
 import { batchRead, type ReadClient, type ReadResult } from './multicall.js'
 import {
@@ -94,7 +89,7 @@ export function buildRouteCandidates(
 ): V3RouteCandidate[] {
     const { chainId, tokenIn, tokenOut, connectors, dexId, maxHops = MAX_HOPS } = params
 
-    const dexIds = resolveDexIds(chainId, ProtocolType.V3, dexId)
+    const dexIds = dexId === undefined ? getSupportedDexs(chainId, ProtocolType.V3) : [dexId].flat()
     if (dexIds.length === 0) return []
 
     const rawPaths = enumerateHopPaths(tokenIn, tokenOut, connectors, maxHops)
@@ -102,9 +97,9 @@ export function buildRouteCandidates(
 
     const candidates: V3RouteCandidate[] = []
     for (const id of dexIds) {
-        const cfg = getV3Config(chainId, id)
+        const cfg = getDexConfig(chainId, id, ProtocolType.V3)
         if (!cfg?.factory || !cfg?.quoter) continue
-        const feeTiers = getFeeTiers(cfg)
+        const feeTiers = cfg.feeTiers
 
         for (const rawPath of rawPaths) {
             const tokens = rawPath.map((a) => getSwapAddress(a, chainId))
@@ -293,10 +288,10 @@ export function buildPoolCandidates({
     const candidates: V3PoolCandidate[] = []
 
     for (const dexId of dexIds) {
-        const config = getV3Config(chainId, dexId)
+        const config = getDexConfig(chainId, dexId, ProtocolType.V3)
         if (!config) continue
 
-        for (const fee of getFeeTiers(config)) {
+        for (const fee of config.feeTiers) {
             candidates.push({
                 dexId,
                 factory: config.factory,
@@ -370,7 +365,7 @@ export async function discoverV3Pools(
 ): Promise<Map<DEXType, DiscoveredV3Pool>> {
     const { chainId, tokenIn, tokenOut, dexId } = params
 
-    const dexIds = resolveDexIds(chainId, ProtocolType.V3, dexId)
+    const dexIds = dexId === undefined ? getSupportedDexs(chainId, ProtocolType.V3) : [dexId].flat()
     const candidates = buildPoolCandidates({ chainId, dexIds, tokenIn, tokenOut })
     if (candidates.length === 0) return new Map()
 

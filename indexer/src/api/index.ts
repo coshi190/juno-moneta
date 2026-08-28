@@ -10,7 +10,7 @@ import {
     parseV3Swap,
     calculatePrice,
     calculatePriceFromSqrtPrice,
-    WRAPPED_NATIVE_ADDRESSES,
+    getWrappedNativeAddress,
     type TokenPnl,
 } from '@coshi190/juno-moneta-sdk'
 import { finalizeTokenPnl, finalizePortfolioPnl, type PnlFold } from '../pnl-math.js'
@@ -122,7 +122,7 @@ app.get('/user-pnl', async (c) => {
 const PERIOD_SECONDS: Record<string, number> = { '24h': 86400, '7d': 604800, '30d': 2592000 }
 
 async function windowedLeaderboardTraders(chainId: number, since: number) {
-    const wn = WRAPPED_NATIVE_ADDRESSES[chainId]?.toLowerCase() ?? null
+    const wn = getWrappedNativeAddress(chainId)?.toLowerCase() ?? null
 
     const [bcRows, v2Rows, v3Rows] = await Promise.all([
         db

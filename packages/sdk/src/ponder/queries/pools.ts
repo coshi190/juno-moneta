@@ -8,7 +8,7 @@ import type {
     V3Token,
     V3TokenSnapshot,
 } from '../entities.js'
-import { STABLECOIN_ADDRESSES, WRAPPED_NATIVE_ADDRESSES } from '../../configs/chains.js'
+import { getStablecoins, getWrappedNativeAddress } from '../../configs/chains.js'
 import {
     computePoolTvlUsd,
     computePoolVolumesUsd,
@@ -341,8 +341,8 @@ export async function fetchPoolMetrics(
         }
     }
 
-    const wrappedNative = WRAPPED_NATIVE_ADDRESSES[chainId]
-    const usdStable = [...(STABLECOIN_ADDRESSES[chainId] ?? [])][0]
+    const wrappedNative = getWrappedNativeAddress(chainId)
+    const usdStable = [...(getStablecoins(chainId) ?? [])][0]
 
     const tvl = computePoolTvlUsd({
         pools: meta,

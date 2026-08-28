@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { parse, type DocumentNode, type OperationDefinitionNode, type FieldNode } from 'graphql'
 import type { PonderClient, PonderPageInfo } from '../ponder/client'
-import * as q from '../ponder/queries'
+import * as q from '../index.js'
 
 interface Captured {
     query: string

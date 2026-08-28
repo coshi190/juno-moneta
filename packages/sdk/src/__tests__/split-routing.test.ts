@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { Address, PublicClient } from 'viem'
-import { CHAIN_IDS } from '../configs/chains.js'
-import { ProtocolType } from '../configs/dex-config.js'
+import { getChains } from '../configs/chains.js'
+import { ProtocolType } from '../configs/dex.js'
 import type { ContractCall } from '../dex/plan-swap.js'
 import type { ReadResult } from '../dex/multicall.js'
 import {
@@ -202,7 +202,7 @@ describe('dex/split-routing', () => {
 
     describe('getSplitQuote', () => {
         const params = {
-            chainId: CHAIN_IDS.bitkub,
+            chainId: getChains().bitkub,
             tokenIn: TOKEN_IN,
             tokenOut: TOKEN_OUT,
             amountIn: 100n,
@@ -254,7 +254,7 @@ describe('dex/split-routing', () => {
 
             const res = await getSplitQuote(client, {
                 ...params,
-                chainId: CHAIN_IDS.kubTestnet,
+                chainId: getChains().kubTestnet,
             })
 
             expect(batches).toHaveLength(0)

@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import { computeFeeAprPercent, fetchPoolMetrics } from '../ponder/queries/pools'
 import type { PonderClient, PonderPageInfo } from '../ponder/client'
-import { CHAIN_IDS, STABLECOIN_ADDRESSES, WRAPPED_NATIVE_ADDRESSES } from '../configs/chains'
+import { getChains, getStablecoins, getWrappedNativeAddress } from '../configs/chains'
 
 const Q96 = 2n ** 96n
 const E18 = 10n ** 18n
-const CHAIN = CHAIN_IDS.bitkub
-const WRAPPED = WRAPPED_NATIVE_ADDRESSES[CHAIN]!
-const STABLE = [...(STABLECOIN_ADDRESSES[CHAIN] ?? [])][0]!
+const CHAIN = getChains().bitkub
+const WRAPPED = getWrappedNativeAddress(CHAIN)!
+const STABLE = [...(getStablecoins(CHAIN) ?? [])][0]!
 const OTHER = '0xcccc000000000000000000000000000000000000'
 const TOKEN_D = '0xdddd000000000000000000000000000000000000'
 const POOL = '0x1111111111111111111111111111111111111111'

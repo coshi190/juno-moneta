@@ -14,10 +14,5 @@
             "address": "0x869A40921A332e0D79300F91361A3DC77F2a0ebc",
             "startBlock": 32685221
         }
-    },
-    "v3StakerStartBlocks": {
-        "kubTestnet": 25824963,
-        "bitkub": 28844994,
-        "jbc": 4990196
     }
 }

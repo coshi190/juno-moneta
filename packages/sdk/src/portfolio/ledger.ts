@@ -1,5 +1,5 @@
 import { formatUnits, type Address } from 'viem'
-import { STABLECOIN_ADDRESSES, WRAPPED_NATIVE_ADDRESSES } from '../configs/chains.js'
+import { getStablecoins, getWrappedNativeAddress } from '../configs/chains.js'
 import { isNativeToken } from '../dex/native.js'
 
 export interface TokenPnl {
@@ -223,9 +223,9 @@ export function buildLedgerNetWorthSeries(params: BuildLedgerParams): NetWorthPo
 export function classifyPriceKind(address: string, chainId: number): PriceKind {
     if (isNativeToken(address as Address)) return 'native'
     const lower = address.toLowerCase()
-    const wrapped = WRAPPED_NATIVE_ADDRESSES[chainId]
+    const wrapped = getWrappedNativeAddress(chainId)
     if (wrapped && lower === wrapped.toLowerCase()) return 'native'
-    if (STABLECOIN_ADDRESSES[chainId]?.has(lower)) return 'stable'
+    if (getStablecoins(chainId)?.has(lower)) return 'stable'
     return 'reconstructed'
 }
 

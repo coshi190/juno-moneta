@@ -50,7 +50,7 @@ V3_SWAP_ROUTER  0x3F7582E36843FF79F173c7DC19f517832496f2D8
 `wrappedNative` (KKUB) is read from the bonding curve, not hardcoded. Fee tier is
 `10000`; full range is ticks `-887200` … `887200`.
 
-Use `viem` with ABIs imported from `packages/sdk/src/abis/index.js`:
+Use `viem` with ABIs imported from `packages/sdk/src/index.js`:
 `BONDING_CURVE_JUNOSWAP_ABI`, `UNISWAP_V3_FACTORY_ABI`, `UNISWAP_V3_POOL_ABI`,
 `NONFUNGIBLE_POSITION_MANAGER_ABI`, `UNISWAP_V3_SWAP_ROUTER_ABI`, `WETH9_ABI`,
 `ERC20_ABI`. If contracts changed, run the `codegen` skill first.

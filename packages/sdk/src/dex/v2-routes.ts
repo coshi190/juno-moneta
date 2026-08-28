@@ -1,6 +1,6 @@
 import { zeroAddress, type Abi, type Address } from 'viem'
-import { UNISWAP_V2_FACTORY_ABI } from '../abis/index.js'
-import { ProtocolType, getV2Config, resolveDexIds, type DEXType } from '../configs/dex-config.js'
+import { UNISWAP_V2_FACTORY_ABI } from '../abis/uniswap-v2-factory.js'
+import { getDexConfig, getSupportedDexs, ProtocolType, type DEXType } from '../configs/dex.js'
 import { getSwapAddress } from './native.js'
 import { batchRead, type ReadClient } from './multicall.js'
 import {
@@ -48,7 +48,7 @@ export function buildV2RouteCandidates(
 ): V2RouteCandidate[] {
     const { chainId, tokenIn, tokenOut, connectors, dexId, maxHops = MAX_HOPS } = params
 
-    const dexIds = resolveDexIds(chainId, ProtocolType.V2, dexId)
+    const dexIds = dexId === undefined ? getSupportedDexs(chainId, ProtocolType.V2) : [dexId].flat()
     if (dexIds.length === 0) return []
 
     const rawPaths = enumerateHopPaths(tokenIn, tokenOut, connectors, maxHops)
@@ -56,7 +56,7 @@ export function buildV2RouteCandidates(
 
     const candidates: V2RouteCandidate[] = []
     for (const id of dexIds) {
-        const cfg = getV2Config(chainId, id)
+        const cfg = getDexConfig(chainId, id, ProtocolType.V2)
         if (!cfg?.factory) continue
 
         for (const rawPath of rawPaths) {
@@ -197,9 +197,9 @@ export async function discoverV2Pairs(
 ): Promise<Map<DEXType, Address>> {
     const { chainId, tokenIn, tokenOut, dexId } = params
 
-    const dexIds = resolveDexIds(chainId, ProtocolType.V2, dexId)
+    const dexIds = dexId === undefined ? getSupportedDexs(chainId, ProtocolType.V2) : [dexId].flat()
     const entries = dexIds.flatMap((id) => {
-        const config = getV2Config(chainId, id)
+        const config = getDexConfig(chainId, id, ProtocolType.V2)
         if (!config) return []
         const resolvedIn = getSwapAddress(tokenIn, chainId, config.wnative)
         const resolvedOut = getSwapAddress(tokenOut, chainId, config.wnative)

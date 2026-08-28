@@ -1,10 +1,8 @@
 import { zeroAddress, type Abi, type Address } from 'viem'
-import {
-    NONFUNGIBLE_POSITION_MANAGER_ABI,
-    UNISWAP_V3_FACTORY_ABI,
-    UNISWAP_V3_POOL_ABI,
-} from '../abis/index.js'
-import { getTickSpacing, getV3Config, type DEXType } from '../configs/dex-config.js'
+import { NONFUNGIBLE_POSITION_MANAGER_ABI } from '../abis/nonfungible-position-manager.js'
+import { UNISWAP_V3_FACTORY_ABI } from '../abis/uniswap-v3-factory.js'
+import { UNISWAP_V3_POOL_ABI } from '../abis/uniswap-v3-pool.js'
+import { ProtocolType, getDexConfig, getTickSpacing, type DEXType } from '../configs/dex.js'
 import {
     batchRead,
     type ReadClient,
@@ -262,7 +260,7 @@ export async function fetchPositions(
     client: ReadClient,
     params: FetchPositionsParams
 ): Promise<DescribedPosition[]> {
-    const config = getV3Config(params.chainId, params.dexId)
+    const config = getDexConfig(params.chainId, params.dexId, ProtocolType.V3)
     if (!config) return []
 
     const rows = params.positions

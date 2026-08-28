@@ -3,16 +3,12 @@ import schema from 'ponder:schema'
 import { formatEther, zeroAddress } from 'viem'
 import { readERC20Metadata } from './erc20-read.js'
 import { creatorFeeShareForSwap, VIRTUAL_AMOUNT } from './creator-fee.js'
-import {
-    BONDING_CURVE_ADDRESS_BY_CHAIN,
-    CHAIN_IDS,
-    isLaunchpadChain,
-} from '@coshi190/juno-moneta-sdk'
+import { getChains, getBondingCurveDeployment } from '@coshi190/juno-moneta-sdk'
 import { sanitizeUsdPrice, MAX_TOKEN_USD_PRICE } from './price-history.js'
 import { recordUserSwap } from './user-pnl.js'
 import { foldTokenCandle } from './candles.js'
 
-const MAINNET_ENABLED = isLaunchpadChain(CHAIN_IDS.bitkub)
+const MAINNET_ENABLED = getBondingCurveDeployment(getChains().bitkub) !== undefined
 
 type HandlerArgs = { event: any; context: any }
 
@@ -314,7 +310,7 @@ async function handleTransfer({ event, context }: HandlerArgs, chainId: number) 
     const fromLower = from.toLowerCase()
     const toLower = to.toLowerCase()
     const tokenAddrLower = event.log.address.toLowerCase()
-    const bondingCurveLower = BONDING_CURVE_ADDRESS_BY_CHAIN[chainId]
+    const bondingCurveLower = getBondingCurveDeployment(chainId)?.address.toLowerCase()
 
     if (fromLower === zeroAddress || toLower === zeroAddress) return
     if (fromLower === bondingCurveLower || toLower === bondingCurveLower) return

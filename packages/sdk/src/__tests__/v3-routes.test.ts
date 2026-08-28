@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { zeroAddress, type Address, type PublicClient } from 'viem'
-import { CHAIN_IDS, WRAPPED_NATIVE_ADDRESSES } from '../configs/chains.js'
+import { getChains, getWrappedNativeAddress } from '../configs/chains.js'
 import type { ContractCall } from '../dex/plan-swap.js'
 import type { ReadResult } from '../dex/multicall.js'
 import { NATIVE_TOKEN_ADDRESS } from '../dex/native.js'
@@ -20,6 +20,8 @@ import {
     type V3RouteCandidate,
 } from '../dex/v3-routes.js'
 
+const CHAINS = getChains()
+
 const IN = '0x1111111111111111111111111111111111111111' as Address
 const OUT = '0x2222222222222222222222222222222222222222' as Address
 const C1 = '0xc111111111111111111111111111111111111111' as Address
@@ -29,7 +31,7 @@ const C4 = '0xc444444444444444444444444444444444444444' as Address
 const POOL_1 = '0xdead111111111111111111111111111111111111' as Address
 const POOL_2 = '0xdead222222222222222222222222222222222222' as Address
 
-const KKUB = WRAPPED_NATIVE_ADDRESSES[CHAIN_IDS.bitkub]!
+const KKUB = getWrappedNativeAddress(CHAINS.bitkub)!
 
 const ok = (result: unknown): ReadResult => ({ status: 'success', result })
 const fail = (message: string): ReadResult => ({ status: 'failure', error: new Error(message) })
@@ -109,7 +111,7 @@ describe('dex/v3-routes', () => {
     describe('buildRouteCandidates', () => {
         it('builds one candidate per (V3 dex, enumerated path) with fees resolved', () => {
             const candidates = buildRouteCandidates({
-                chainId: CHAIN_IDS.bitkub,
+                chainId: CHAINS.bitkub,
                 dexId: 'junoswap',
                 tokenIn: IN,
                 tokenOut: OUT,
@@ -121,10 +123,20 @@ describe('dex/v3-routes', () => {
             expect(candidates[0]?.feeTiers.length).toBeGreaterThan(0)
         })
 
+        it('fans out to every V3 dex in registry order when no dexId is given', () => {
+            const candidates = buildRouteCandidates({
+                chainId: CHAINS.bitkub,
+                tokenIn: IN,
+                tokenOut: OUT,
+                connectors: [C1],
+            })
+            expect(candidates.map((c) => c.dexId)).toEqual(['junoswap', 'kublerx'])
+        })
+
         it('is empty when there are no connectors to route through', () => {
             expect(
                 buildRouteCandidates({
-                    chainId: CHAIN_IDS.bitkub,
+                    chainId: CHAINS.bitkub,
                     dexId: 'junoswap',
                     tokenIn: IN,
                     tokenOut: OUT,
@@ -189,7 +201,7 @@ describe('dex/v3-routes', () => {
             const { client, batches } = stubClient(phases)
 
             const routes = await getV3Routes(client, {
-                chainId: CHAIN_IDS.bitkub,
+                chainId: CHAINS.bitkub,
                 dexId: 'junoswap',
                 tokenIn: IN,
                 tokenOut: OUT,
@@ -230,7 +242,7 @@ describe('dex/v3-routes', () => {
             const { client } = stubClient(phases)
 
             const routes = await getV3Routes(client, {
-                chainId: CHAIN_IDS.bitkub,
+                chainId: CHAINS.bitkub,
                 dexId: 'junoswap',
                 tokenIn: IN,
                 tokenOut: OUT,
@@ -264,7 +276,7 @@ describe('dex/v3-routes', () => {
     describe('buildPoolCandidates', () => {
         it('produces one candidate per (dex, configured fee tier)', () => {
             const candidates = buildPoolCandidates({
-                chainId: CHAIN_IDS.bsc,
+                chainId: CHAINS.bsc,
                 dexIds: ['pancakeswap'],
                 tokenIn: IN,
                 tokenOut: OUT,
@@ -274,7 +286,7 @@ describe('dex/v3-routes', () => {
 
         it('resolves the native sentinel to the chain wrapped native', () => {
             const [first] = buildPoolCandidates({
-                chainId: CHAIN_IDS.bitkub,
+                chainId: CHAINS.bitkub,
                 dexIds: ['junoswap'],
                 tokenIn: NATIVE_TOKEN_ADDRESS,
                 tokenOut: OUT,
@@ -285,7 +297,7 @@ describe('dex/v3-routes', () => {
         it('skips a pair that collapses to one token once resolved', () => {
             expect(
                 buildPoolCandidates({
-                    chainId: CHAIN_IDS.bitkub,
+                    chainId: CHAINS.bitkub,
                     dexIds: ['junoswap'],
                     tokenIn: NATIVE_TOKEN_ADDRESS,
                     tokenOut: KKUB,

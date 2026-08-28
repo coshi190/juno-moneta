@@ -91,12 +91,18 @@ Generated 24 entity types → packages/sdk/src/ponder/entities.ts
 - `packages/sdk/src/abis/<name>.ts` — one per artifact in the target table below,
   each `export const <NAME>_ABI = [...] as const` with `constructor` entries
   stripped.
-- `packages/sdk/src/abis/index.ts` — fully regenerated barrel.
 - `packages/sdk/src/ponder/entities.ts` — one interface per Ponder table plus
   `PonderRootFields`.
 
 All committed to git. The published SDK builds from them without regenerating,
 so a stale commit ships stale types.
+
+`packages/sdk/src/index.ts` is not generated; its `export * from './abis/…'`
+lines are hand-maintained. Five ABI files are hand-written too — `erc20`,
+`uniswap-v2-router`, `uniswap-v3-quoter`, `uniswap-v3-swap-router`,
+`uniswap-v3-staker`. Three are deliberately not re-exported from `index.ts`:
+`erc20-token` (folded into `erc20`), and `uniswap-v2-router` /
+`uniswap-v3-quoter` (internal to the quote and plan paths).
 
 ## Spec
 
@@ -120,9 +126,6 @@ trailing newline.
 | `INonfungiblePositionManager` | `nonfungible-position-manager` | `NONFUNGIBLE_POSITION_MANAGER_ABI` |
 | `IWETH9`                      | `weth9`                        | `WETH9_ABI`                        |
 
-**Barrel** — generated names sorted, then the hand-written ones, each as
-`export * from './<file>.js'`.
-
 **Entities** — per table, `export interface <Pascal(tsName)>`; each column is
 `number` when `dataType === 'number'` else `string`, suffixed `| null` when not
 `notNull`. Then `PonderRootFields` mapping `<tsName>s: '<TypeName>'`.
@@ -134,23 +137,11 @@ published surface. The style comes from `packages/sdk/.prettierrc`; if that file
 goes missing, prettier silently falls back to its defaults (2-space, semicolons,
 double quotes) and reformats every generated file.
 
-## Gotcha: hand-written ABIs live in the generated barrel
-
-`packages/sdk/src/abis/index.ts` is regenerated every run, but it also
-re-exports five ABIs that are **not** generated and are maintained by hand:
-
-`erc20`, `uniswap-v2-router`, `uniswap-v3-quoter`, `uniswap-v3-swap-router`,
-`uniswap-v3-staker`
-
-They survive only because they are listed in `HAND_WRITTEN` in the generator
-below. Adding a new hand-written ABI file without adding it there means the next
-run silently drops its export.
-
 ## Adding a contract
 
 Add a row to the target table above and the matching entry in `TARGETS` in the
-generator source. Then rebuild, regenerate, and commit the new file plus the
-updated `index.ts`.
+generator source. Then rebuild, regenerate, and add the
+`export * from './abis/<file>.js'` line to `packages/sdk/src/index.ts` by hand.
 
 ## Generators
 
@@ -180,14 +171,6 @@ const TARGETS: Record<string, [string, string]> = {
     ],
     IWETH9: ['weth9', 'WETH9_ABI'],
 }
-
-const HAND_WRITTEN = [
-    'erc20',
-    'uniswap-v2-router',
-    'uniswap-v3-quoter',
-    'uniswap-v3-swap-router',
-    'uniswap-v3-staker',
-]
 
 type AbiEntry = { type: string; name?: string }
 
@@ -219,13 +202,6 @@ async function main() {
         await writeFile(path.join(ABI_DIR, `${file}.ts`), body)
         generated.push(file)
     }
-
-    const index = [
-        ...generated.sort().map((f) => `export * from './${f}.js'`),
-        ...HAND_WRITTEN.map((f) => `export * from './${f}.js'`),
-        ``,
-    ].join('\n')
-    await writeFile(path.join(ABI_DIR, 'index.ts'), index)
 
     await $`${PRETTIER} --write ${ABI_DIR}`.quiet()
     console.log(`Generated ${generated.length} ABIs → packages/sdk/src/abis`)

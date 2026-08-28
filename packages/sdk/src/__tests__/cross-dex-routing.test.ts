@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { Address, PublicClient } from 'viem'
-import { CHAIN_IDS } from '../configs/chains.js'
-import { ProtocolType } from '../configs/dex-config.js'
+import { getChains } from '../configs/chains.js'
+import { ProtocolType } from '../configs/dex.js'
 import type { ContractCall } from '../dex/plan-swap.js'
 import type { ReadResult } from '../dex/multicall.js'
 import { poolKey } from '../dex/v3-routes.js'
@@ -13,7 +13,7 @@ import {
     selectConnectors,
 } from '../dex/cross-dex-routing.js'
 
-const CHAIN = CHAIN_IDS.jbc
+const CHAIN = getChains().jbc
 
 const JIBSWAP_FACTORY = '0x4BBdA880C5A0cDcEc6510f0450c6C8bC5773D499' as Address
 const JIBSWAP_ROUTER = '0x766F8C9321704DC228D43271AF9b7aAB0E529D38' as Address

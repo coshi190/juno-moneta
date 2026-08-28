@@ -1,6 +1,6 @@
 import { isPonderError, type PonderClient } from '../client.js'
-import { WRAPPED_NATIVE_ADDRESSES } from '../../configs/chains.js'
-import { isLaunchpadChain } from '../../configs/deployments.js'
+import { getWrappedNativeAddress } from '../../configs/chains.js'
+import { getBondingCurveDeployment } from '../../configs/deployments.js'
 import { parseV2Swap, parseV3Swap, type ParsedSwap } from '../parse-swaps.js'
 import type {
     AggSwapEvent,
@@ -230,14 +230,14 @@ export async function fetchUserSwapEvents(
     params: { chainId: number; address: string }
 ): Promise<ParsedSwap[]> {
     const { chainId } = params
-    const wrappedNative = WRAPPED_NATIVE_ADDRESSES[chainId]?.toLowerCase()
+    const wrappedNative = getWrappedNativeAddress(chainId)?.toLowerCase()
     if (!wrappedNative) return []
     const sender = params.address.toLowerCase()
     const filter: SwapScanFilter = { chainId, sender }
 
     try {
         const [bondingCurveEvents, v3Rows, v2Rows] = await Promise.all([
-            isLaunchpadChain(chainId)
+            getBondingCurveDeployment(chainId) !== undefined
                 ? fetchBondingCurveSwaps(client, filter)
                 : Promise.resolve([] as BondingCurveSwap[]),
             fetchV3Swaps(client, filter),

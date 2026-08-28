@@ -7,8 +7,8 @@ import {
     parseTrackingTag,
     resolveBinding,
     parseV3Swap,
-    WRAPPED_NATIVE_ADDRESSES,
-    STABLECOIN_ADDRESSES,
+    getWrappedNativeAddress,
+    getStablecoins,
 } from '@coshi190/juno-moneta-sdk'
 import { sanitizeUsdPrice, MAX_NATIVE_USD_PRICE, MAX_TOKEN_USD_PRICE } from './price-history.js'
 import { recordUserSwap } from './user-pnl.js'
@@ -212,8 +212,8 @@ async function updateNativeUsdPrice(
     blockNumber: number,
     logIndex: number
 ) {
-    const wn = WRAPPED_NATIVE_ADDRESSES[chainId]
-    const stables = STABLECOIN_ADDRESSES[chainId]
+    const wn = getWrappedNativeAddress(chainId)
+    const stables = getStablecoins(chainId)
     if (!wn || !stables) return
 
     const { token0, token1 } = poolRecord
@@ -271,7 +271,7 @@ async function updateV3TokenSnapshot(
     sqrtPriceX96: bigint,
     timestamp: number
 ) {
-    const wn = WRAPPED_NATIVE_ADDRESSES[chainId]
+    const wn = getWrappedNativeAddress(chainId)
     if (!wn) return
 
     const { token0, token1 } = poolRecord
@@ -328,7 +328,7 @@ export async function recordV3SwapEvent(
     protocol = 'junoswap'
 ) {
     const { sender, recipient, amount0, amount1, sqrtPriceX96, liquidity, tick } = event.args
-    const wn = WRAPPED_NATIVE_ADDRESSES[chainId]
+    const wn = getWrappedNativeAddress(chainId)
     const { token0, token1 } = poolRecord
 
     let tokenAddr: string
@@ -389,19 +389,21 @@ export async function recordV3SwapEvent(
             .onConflictDoNothing()
     }
 
-    const parsed = parseV3Swap(
-        {
-            tokenAddr,
-            txFrom: event.transaction.from.toLowerCase(),
-            amount0: amount0.toString(),
-            amount1: amount1.toString(),
-            token0Addr: token0,
-            token1Addr: token1,
-            timestamp,
-            protocol,
-        },
-        wn
-    )
+    const parsed = wn
+        ? parseV3Swap(
+              {
+                  tokenAddr,
+                  txFrom: event.transaction.from.toLowerCase(),
+                  amount0: amount0.toString(),
+                  amount1: amount1.toString(),
+                  token0Addr: token0,
+                  token1Addr: token1,
+                  timestamp,
+                  protocol,
+              },
+              wn
+          )
+        : null
     if (parsed) {
         const nativePriceRecord = await context.db.find(schema.nativeUsdPrice, { chainId })
         const nativeUsd = nativePriceRecord ? parseFloat(nativePriceRecord.price) : 0

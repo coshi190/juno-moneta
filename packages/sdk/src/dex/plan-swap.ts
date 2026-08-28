@@ -1,17 +1,13 @@
 import { encodeFunctionData, concat, pad, toHex, type Abi, type Address, type Hex } from 'viem'
-import { UNISWAP_V2_ROUTER_ABI, UNISWAP_V3_SWAP_ROUTER_ABI, WETH9_ABI } from '../abis/index.js'
-import {
-    DEFAULT_FEE_TIER,
-    ProtocolType,
-    getV2Config,
-    getV3Config,
-    type DEXType,
-} from '../configs/dex-config.js'
+import { UNISWAP_V2_ROUTER_ABI } from '../abis/uniswap-v2-router.js'
+import { UNISWAP_V3_SWAP_ROUTER_ABI } from '../abis/uniswap-v3-swap-router.js'
+import { WETH9_ABI } from '../abis/weth9.js'
+import { getDexConfig, ProtocolType, type DEXType } from '../configs/dex.js'
 import { appendTrackingTag } from '../rewards/tracking.js'
+import { getWrappedNativeAddress } from '../configs/chains.js'
 import {
     getSwapAddress,
     getWrapOperation,
-    getWrappedNativeAddress,
     isNativeToken,
     resolveSwapPath,
     shouldSkipUnwrap,
@@ -152,7 +148,7 @@ function planWrap(operation: 'wrap' | 'unwrap', chainId: number, amountIn: bigin
 function planV2Swap(input: PlanSwapInput): SwapPlan {
     const { chainId, dexId, tokenIn, tokenOut, amountIn, amountOutMin, recipient, deadline } = input
 
-    const config = getV2Config(chainId, dexId)
+    const config = getDexConfig(chainId, dexId, ProtocolType.V2)
     if (!config) {
         throw new SwapPlanError(`No V2 config for dex "${dexId ?? 'junoswap'}" on chain ${chainId}`)
     }
@@ -202,14 +198,13 @@ function planV2Swap(input: PlanSwapInput): SwapPlan {
 function planV3Swap(input: PlanSwapInput): SwapPlan {
     const { chainId, dexId, tokenIn, tokenOut, amountIn, amountOutMin, recipient } = input
 
-    const config = getV3Config(chainId, dexId)
+    const config = getDexConfig(chainId, dexId, ProtocolType.V3)
     if (!config) {
         throw new SwapPlanError(`No V3 config for dex "${dexId ?? 'junoswap'}" on chain ${chainId}`)
     }
 
     const unwrapOut = isNativeToken(tokenOut) && !skipsUnwrap(input)
     const value = isNativeToken(tokenIn) ? amountIn : undefined
-    const fee = input.fee ?? config.defaultFeeTier ?? DEFAULT_FEE_TIER
 
     const swapRecipient = unwrapOut ? ADDRESS_THIS : recipient
     const base = { address: config.swapRouter, abi: UNISWAP_V3_SWAP_ROUTER_ABI as Abi, value }
@@ -233,10 +228,14 @@ function planV3Swap(input: PlanSwapInput): SwapPlan {
         return { kind: 'swap', taggable: true, call }
     }
 
+    if (input.fee === undefined) {
+        throw new SwapPlanError('V3 single-hop swap requires a fee tier')
+    }
+
     const params = {
         tokenIn: getSwapAddress(tokenIn, chainId),
         tokenOut: getSwapAddress(tokenOut, chainId),
-        fee,
+        fee: input.fee,
         recipient: swapRecipient,
         amountIn,
         amountOutMinimum: amountOutMin,

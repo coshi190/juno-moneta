@@ -1,8 +1,9 @@
 import {
+    ProtocolType,
+    getDexConfig,
     ERC20_ABI,
     NONFUNGIBLE_POSITION_MANAGER_ABI,
     UNISWAP_V3_POOL_ABI,
-    getV3Config,
 } from '@coshi190/juno-moneta-sdk'
 
 export async function readERC20Metadata(
@@ -92,7 +93,7 @@ export async function readPosition(
     tickLower: number
     tickUpper: number
 } | null> {
-    const manager = getV3Config(chainId, 'junoswap')?.positionManager
+    const manager = getDexConfig(chainId, 'junoswap', ProtocolType.V3)?.positionManager
     if (!manager) return null
     try {
         const pos = (await client.readContract({

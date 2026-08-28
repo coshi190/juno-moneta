@@ -13,13 +13,13 @@ import {
 } from '../pool/positions'
 import type { ReadResult } from '../dex/multicall'
 import type { PonderClient } from '../ponder/client'
-import { CHAIN_IDS } from '../configs/chains'
-import { getV3Config } from '../configs/dex-config'
+import { getChains } from '../configs/chains'
+import { getDexConfig, ProtocolType } from '../configs/dex'
 import { getAmountsForLiquidity } from '../pool/liquidity-math'
 import { tickToSqrtPriceX96 } from '../pool/tick-math'
 
 const Q96 = 2n ** 96n
-const CHAIN = CHAIN_IDS.bitkub
+const CHAIN = getChains().bitkub
 const TOKEN_A = '0xaaaa000000000000000000000000000000000000'
 const TOKEN_B = '0xbbbb000000000000000000000000000000000000'
 const POOL_ONE = '0x1111111111111111111111111111111111111111'
@@ -210,7 +210,7 @@ describe('computePositionValueUsd', () => {
 })
 
 describe('fetchPositions', () => {
-    const config = getV3Config(CHAIN)!
+    const config = getDexConfig(CHAIN, undefined, ProtocolType.V3)!
 
     function ponderStub(rows: unknown[]): PonderClient {
         return {

@@ -1,6 +1,6 @@
 import type { Abi, Address } from 'viem'
-import { ProtocolType, type DEXType } from '../configs/dex-config.js'
-import { getAggRouterAddress } from '../configs/deployments.js'
+import { ProtocolType, type DEXType } from '../configs/dex.js'
+import { getAggRouterDeployment } from '../configs/deployments.js'
 import { AGG_ROUTER_JUNOSWAP_ABI } from '../abis/agg-router-junoswap.js'
 import { buildQuoteCall } from './quote-call.js'
 import { batchRead, type ReadClient, type ReadResult } from './multicall.js'
@@ -170,7 +170,7 @@ export async function getSplitQuote<T extends SplitRouteInput>(
         aggFeeBps: 0,
     }
 
-    const router = getAggRouterAddress(chainId)
+    const router = getAggRouterDeployment(chainId)?.address
     if (!router || amountIn <= 0n) return empty
 
     const feeBpsCall: ContractCall = {
