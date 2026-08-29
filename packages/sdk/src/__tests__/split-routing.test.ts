@@ -43,7 +43,11 @@ function route(
         dexId,
         protocolType: protocol,
         quote: { amountOut },
-        route: { isMultiHop, fees: protocol === ProtocolType.V3 ? [3000] : undefined },
+        route: {
+            path: [TOKEN_IN, TOKEN_OUT],
+            isMultiHop,
+            fees: protocol === ProtocolType.V3 ? [3000] : undefined,
+        },
     }
 }
 

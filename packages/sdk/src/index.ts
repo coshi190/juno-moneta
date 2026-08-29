@@ -30,6 +30,16 @@ export {
 } from './dex/native.js'
 export { SwapPlanError, planSwap, encodeSwapCalldata } from './dex/plan-swap.js'
 export type { ContractCall, SwapKind, SwapPlan, PlanSwapInput } from './dex/plan-swap.js'
+export { planAggregateSwap, pickAggregatePlan } from './dex/aggregate-plan.js'
+export type {
+    AggregatePlan,
+    AggregateLeg,
+    PlanAggregateInput,
+    PlanDisplayLeg,
+    PlanDisplayHop,
+    PickAggregatePlanInput,
+    PickedAggregatePlan,
+} from './dex/aggregate-plan.js'
 export type { ReadResult, ReadClient, SimulateClient } from './dex/multicall.js'
 export { getV3Quotes } from './dex/v3-routes.js'
 export type { V3RouteQuote, V3QuoteParams, V3QuoteOutcome, V3QuoteResult } from './dex/v3-routes.js'

@@ -38,6 +38,7 @@ import {
     type TokenHolder,
     type TokenSnapshot,
 } from '@coshi190/juno-moneta-sdk'
+import { resolveAggregatePlan } from './chain.js'
 import {
     optionalAddress,
     optionalAddressList,
@@ -50,8 +51,10 @@ import {
     parseAddress,
     parseAddressList,
     parseChainId,
+    parseDecimalAmount,
     parseFields,
     parsePonderUrl,
+    parseRpcUrl,
     parseTokenIds,
 } from './args.js'
 
@@ -66,6 +69,10 @@ export interface CommandArgs {
     referrer?: string | undefined
     tokenAddr?: string | undefined
     tokenAddrs?: string | undefined
+    tokenIn?: string | undefined
+    tokenOut?: string | undefined
+    amountIn?: string | undefined
+    rpcUrl?: string | undefined
     creator?: string | undefined
     address?: string | undefined
     isGraduated?: string | undefined
@@ -167,6 +174,37 @@ export const COMMANDS: Record<string, Command> = {
         describe: 'Dex ids with an enabled protocol on a chain',
         run: (args) =>
             getSupportedDexs(parseChainId(args.chainId), optionalProtocolType(args.protocolType)),
+    },
+
+    pickAggregatePlan: {
+        group: DEX,
+        flags: `${CHAIN_FLAG} --tokenIn <addr> --tokenOut <addr> --amountIn <decimal> [--rpcUrl <url>]`,
+        describe:
+            'Best aggregated route for a pair, split across dexes or hopped through a connector',
+        run: async (args) => {
+            const chainId = parseChainId(args.chainId)
+            const picked = await resolveAggregatePlan({
+                chainId,
+                tokenIn: parseAddress(args.tokenIn, 'tokenIn'),
+                tokenOut: parseAddress(args.tokenOut, 'tokenOut'),
+                amount: parseDecimalAmount(args.amountIn, 'amountIn'),
+                rpcUrl: parseRpcUrl(args.rpcUrl, chainId),
+            })
+            if (!picked || args.json) return picked
+            return {
+                kind: picked.plan.kind,
+                predictedNetOut: picked.plan.predictedNetOut,
+                bestSingleOut: picked.bestSingleOut,
+                beatsSingle: picked.plan.predictedNetOut > picked.bestSingleOut,
+                legs: picked.legs.map((leg) => ({
+                    percent: leg.percent,
+                    route: [
+                        leg.hops[0]!.symbolIn,
+                        ...leg.hops.map((h) => `${h.dexId} → ${h.symbolOut}`),
+                    ].join(' → '),
+                })),
+            }
+        },
     },
 
     getBondingCurveDeployment: chainCommand(

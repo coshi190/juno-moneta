@@ -12,7 +12,7 @@ export interface SplitRouteInput {
     dexId: DEXType
     protocolType: ProtocolType
     quote: { amountOut: bigint }
-    route: { fees?: number[]; isMultiHop: boolean }
+    route: { path: Address[]; fees?: number[]; isMultiHop: boolean }
 }
 
 export interface SplitAllocation<T extends SplitRouteInput = SplitRouteInput> {

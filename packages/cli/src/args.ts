@@ -172,3 +172,28 @@ export function optionalOrder<TEntity>(
     }
     return { orderBy: orderBy as keyof TEntity, orderDirection }
 }
+
+const DEFAULT_RPC_URLS: Record<number, string> = {
+    [CHAINS.kubTestnet]: 'https://rpc-testnet.bitkubchain.io',
+    [CHAINS.bitkub]: 'https://rpc.bitkubchain.io',
+    [CHAINS.jbc]: 'https://rpc-l1.jibchain.net',
+}
+
+export function parseRpcUrl(value: string | undefined, chainId: number): string {
+    const url = value ?? process.env.JUNO_MONETA_RPC_URL ?? DEFAULT_RPC_URLS[chainId]
+    if (!url) {
+        throw new UsageError(
+            `no rpc endpoint for chain ${chainId} (pass --rpcUrl or set JUNO_MONETA_RPC_URL)`
+        )
+    }
+    return url
+}
+
+export function parseDecimalAmount(value: string | undefined, flag: string): string {
+    if (value === undefined) throw new UsageError(`missing required flag --${flag}`)
+    const amount = value.trim()
+    if (!/^\d+(\.\d+)?$/.test(amount)) {
+        throw new UsageError(`invalid --${flag} "${value}" (expected a decimal amount like 1.5)`)
+    }
+    return amount
+}
