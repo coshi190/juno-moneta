@@ -33,14 +33,14 @@ export interface PositionInput {
     tokensOwed1: bigint
 }
 
-export interface PositionPoolKey {
+interface PositionPoolKey {
     key: string
     token0: string
     token1: string
     fee: number
 }
 
-export interface PoolStateInput {
+interface PoolStateInput {
     sqrtPriceX96: bigint
     tick: number
     liquidity: bigint
@@ -145,7 +145,7 @@ export function decodePoolStates(
     return map
 }
 
-export interface FoldPositionsParams {
+interface FoldPositionsParams {
     positions: readonly PositionInput[]
     poolAddresses: Map<string, Address>
     poolStates: Map<string, PoolStateInput>

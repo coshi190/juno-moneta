@@ -26,7 +26,7 @@ export interface TickForPriceParams {
     tickSpacing?: number
 }
 
-export interface PoolDisplayOrder {
+interface PoolDisplayOrder {
     base: string
     quote: string
     invert: boolean

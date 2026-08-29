@@ -15,7 +15,7 @@ export function userStatPoints(row: UserStatVolumes): number {
     return computePoints(row.junoVolumeNative, row.externalVolumeNative)
 }
 
-export interface RefereeStat {
+interface RefereeStat {
     user: string
     points: number
     volumeUsd: number

@@ -137,7 +137,7 @@ export function calculateGraduationSqrtPriceX96(
     return sqrtPriceX96 > MAX_UINT160 ? MAX_UINT160 : sqrtPriceX96
 }
 
-export const VIRTUAL_AMOUNT = 3400n * 10n ** 18n
+const VIRTUAL_AMOUNT = 3400n * 10n ** 18n
 
 export interface CurveSwapEvent {
     timestamp: number

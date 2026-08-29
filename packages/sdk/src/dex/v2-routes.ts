@@ -19,7 +19,7 @@ export interface V2RouteQuote {
     quote: QuoteResult
 }
 
-export interface V2RouteParams {
+interface V2RouteParams {
     chainId: number
     tokenIn: Address
     tokenOut: Address

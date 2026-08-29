@@ -47,9 +47,9 @@ export interface PlanSwapInput {
 
 export class SwapPlanError extends Error {}
 
-export const ADDRESS_THIS: Address = '0x0000000000000000000000000000000000000002'
+const ADDRESS_THIS: Address = '0x0000000000000000000000000000000000000002'
 
-export interface V3ExactInputSingleParams {
+interface V3ExactInputSingleParams {
     tokenIn: Address
     tokenOut: Address
     fee: number
@@ -59,7 +59,7 @@ export interface V3ExactInputSingleParams {
     sqrtPriceLimitX96: bigint
 }
 
-export interface V3ExactInputParams {
+interface V3ExactInputParams {
     path: Hex
     recipient: Address
     amountIn: bigint
@@ -85,7 +85,7 @@ export function encodeV3Path(tokens: Address[], fees: number[]): Hex {
     return concat(parts)
 }
 
-export function encodeExactInputSingle(params: V3ExactInputSingleParams): Hex {
+function encodeExactInputSingle(params: V3ExactInputSingleParams): Hex {
     return encodeFunctionData({
         abi: UNISWAP_V3_SWAP_ROUTER_ABI,
         functionName: 'exactInputSingle',
@@ -93,7 +93,7 @@ export function encodeExactInputSingle(params: V3ExactInputSingleParams): Hex {
     })
 }
 
-export function encodeExactInput(params: V3ExactInputParams): Hex {
+function encodeExactInput(params: V3ExactInputParams): Hex {
     return encodeFunctionData({
         abi: UNISWAP_V3_SWAP_ROUTER_ABI,
         functionName: 'exactInput',
@@ -101,7 +101,7 @@ export function encodeExactInput(params: V3ExactInputParams): Hex {
     })
 }
 
-export function encodeUnwrapWETH9(amountMinimum: bigint, recipient: Address): Hex {
+function encodeUnwrapWETH9(amountMinimum: bigint, recipient: Address): Hex {
     return encodeFunctionData({
         abi: UNISWAP_V3_SWAP_ROUTER_ABI,
         functionName: 'unwrapWETH9',

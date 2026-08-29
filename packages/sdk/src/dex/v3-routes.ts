@@ -24,7 +24,7 @@ export interface V3RouteQuote {
     quote: QuoteResult
 }
 
-export interface V3RouteParams {
+interface V3RouteParams {
     chainId: number
     tokenIn: Address
     tokenOut: Address
@@ -268,7 +268,7 @@ export interface V3PoolCandidate {
     tokenOut: Address
 }
 
-export interface BuildPoolCandidatesInput {
+interface BuildPoolCandidatesInput {
     chainId: number
     dexIds: readonly DEXType[]
     tokenIn: Address
@@ -359,7 +359,7 @@ export function pickBestPools(
     return best
 }
 
-export async function discoverV3Pools(
+async function discoverV3Pools(
     client: ReadClient,
     params: Omit<V3QuoteParams, 'amountIn'>
 ): Promise<Map<DEXType, DiscoveredV3Pool>> {

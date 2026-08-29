@@ -22,7 +22,7 @@ function bitLength(n: bigint): bigint {
     return len
 }
 
-export function getLiquidityForAmount0(
+function getLiquidityForAmount0(
     sqrtPriceAX96: bigint,
     sqrtPriceBX96: bigint,
     amount0: bigint
@@ -34,7 +34,7 @@ export function getLiquidityForAmount0(
     return (amount0 * intermediate) / (sqrtPriceBX96 - sqrtPriceAX96)
 }
 
-export function getLiquidityForAmount1(
+function getLiquidityForAmount1(
     sqrtPriceAX96: bigint,
     sqrtPriceBX96: bigint,
     amount1: bigint
@@ -45,7 +45,7 @@ export function getLiquidityForAmount1(
     return (amount1 * Q96) / (sqrtPriceBX96 - sqrtPriceAX96)
 }
 
-export function getAmount0ForLiquidity(
+function getAmount0ForLiquidity(
     sqrtPriceAX96: bigint,
     sqrtPriceBX96: bigint,
     liquidity: bigint
@@ -56,7 +56,7 @@ export function getAmount0ForLiquidity(
     return (liquidity * Q96 * (sqrtPriceBX96 - sqrtPriceAX96)) / sqrtPriceBX96 / sqrtPriceAX96
 }
 
-export function getAmount1ForLiquidity(
+function getAmount1ForLiquidity(
     sqrtPriceAX96: bigint,
     sqrtPriceBX96: bigint,
     liquidity: bigint
@@ -149,8 +149,4 @@ export function calculateMinAmounts(
         amount0Min: (amount0 * slippageMultiplier) / 10000n,
         amount1Min: (amount1 * slippageMultiplier) / 10000n,
     }
-}
-
-export function calculateDeadline(deadlineMinutes: number): bigint {
-    return BigInt(Math.floor(Date.now() / 1000) + deadlineMinutes * 60)
 }

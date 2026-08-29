@@ -38,7 +38,7 @@ export interface NetWorthPoint {
 }
 
 export const DAY_SECONDS = 86_400
-export const MAX_POINTS = 96
+const MAX_POINTS = 96
 
 export function makePriceAt(
     points: readonly PricePoint[],
@@ -65,11 +65,7 @@ export function makePriceAt(
     }
 }
 
-export function downsample(
-    series: NetWorthPoint[],
-    startSec: number,
-    nowSec: number
-): NetWorthPoint[] {
+function downsample(series: NetWorthPoint[], startSec: number, nowSec: number): NetWorthPoint[] {
     if (series.length <= MAX_POINTS) return series
 
     const bucketSize = (nowSec - startSec) / MAX_POINTS
@@ -81,17 +77,17 @@ export function downsample(
     return [...byBucket.values()]
 }
 
-export interface BalanceDelta {
+interface BalanceDelta {
     timestamp: number
     delta: number
 }
 
-export interface BalanceStep {
+interface BalanceStep {
     fromTs: number
     balance: number
 }
 
-export type PriceKind = 'stable' | 'native' | 'reconstructed' | 'fallback'
+type PriceKind = 'stable' | 'native' | 'reconstructed' | 'fallback'
 
 export interface LedgerToken {
     currentBalance: number
@@ -101,7 +97,7 @@ export interface LedgerToken {
     priceUsdNow: number
 }
 
-export interface BuildLedgerParams {
+interface BuildLedgerParams {
     tokens: LedgerToken[]
     nativeUsdPoints: PricePoint[]
     nativeUsdNow: number

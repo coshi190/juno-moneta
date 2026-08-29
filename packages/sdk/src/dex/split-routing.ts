@@ -6,7 +6,7 @@ import { buildQuoteCall } from './quote-call.js'
 import { batchRead, type ReadClient, type ReadResult } from './multicall.js'
 import type { ContractCall } from './plan-swap.js'
 
-export const SPLIT_FRACTIONS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+const SPLIT_FRACTIONS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 
 export interface SplitRouteInput {
     dexId: DEXType

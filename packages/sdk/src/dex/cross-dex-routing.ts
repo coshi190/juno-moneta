@@ -7,7 +7,7 @@ import { parseQuoteAmountOut } from './split-routing.js'
 import { batchRead, type ReadClient } from './multicall.js'
 import type { ContractCall } from './plan-swap.js'
 
-export const MAX_CROSS_CONNECTORS = 3
+const MAX_CROSS_CONNECTORS = 3
 
 export interface HopOption {
     dexId: DEXType

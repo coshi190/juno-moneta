@@ -119,7 +119,7 @@ function poolLabel(pool: PoolMetrics | undefined, address: string): string {
     return `${pool.token0.symbol}/${pool.token1.symbol} ${pool.fee / 10_000}%`
 }
 
-export function computeIncentiveMetrics({
+function computeIncentiveMetrics({
     incentive,
     nowSeconds,
     rewardDecimals,

@@ -17,7 +17,7 @@ export interface PoolBalances {
     balance1: bigint
 }
 
-export interface PoolVolume {
+interface PoolVolume {
     volume1d: number
     volume30d: number
 }

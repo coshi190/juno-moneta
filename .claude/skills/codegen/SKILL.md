@@ -97,8 +97,9 @@ Generated 24 entity types → packages/sdk/src/ponder/entities.ts
 All committed to git. The published SDK builds from them without regenerating,
 so a stale commit ships stale types.
 
-`packages/sdk/src/index.ts` is not generated; its `export * from './abis/…'`
-lines are hand-maintained. Five ABI files are hand-written too — `erc20`,
+`packages/sdk/src/index.ts` is not generated; its
+`export { <NAME>_ABI } from './abis/…'` lines are hand-maintained. Five ABI
+files are hand-written too — `erc20`,
 `uniswap-v2-router`, `uniswap-v3-quoter`, `uniswap-v3-swap-router`,
 `uniswap-v3-staker`. Three are deliberately not re-exported from `index.ts`:
 `erc20-token` (folded into `erc20`), and `uniswap-v2-router` /
@@ -141,7 +142,9 @@ double quotes) and reformats every generated file.
 
 Add a row to the target table above and the matching entry in `TARGETS` in the
 generator source. Then rebuild, regenerate, and add the
-`export * from './abis/<file>.js'` line to `packages/sdk/src/index.ts` by hand.
+`export { <CONST> } from './abis/<file>.js'` line to `packages/sdk/src/index.ts`
+by hand. The barrel names every export explicitly — there are no `export *` lines,
+so a new ABI is not public until its name is listed.
 
 ## Generators
 

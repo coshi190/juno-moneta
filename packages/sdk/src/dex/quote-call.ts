@@ -6,7 +6,7 @@ import { encodeV3Path, type ContractCall } from './plan-swap.js'
 import { getSwapAddress, resolveSwapPath } from './native.js'
 import { batchRead, type ReadClient } from './multicall.js'
 
-export interface QuoteCallInput {
+interface QuoteCallInput {
     protocol: ProtocolType
     chainId: number
     dexId?: DEXType

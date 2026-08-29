@@ -16,7 +16,7 @@ export function resolveSwapPath(tokens: Address[], chainId: number, wnative?: Ad
     return tokens.map((token) => getSwapAddress(token, chainId, wnative))
 }
 
-export function isWrappedNative(token: Address, chainId: number, wnative?: Address): boolean {
+function isWrappedNative(token: Address, chainId: number, wnative?: Address): boolean {
     const wrapped = wnative ?? getWrappedNativeAddress(chainId)
     if (!wrapped) return false
     return token.toLowerCase() === wrapped.toLowerCase()
