@@ -97,9 +97,8 @@ const DEPLOYMENTS = 'deployments'
 const PONDER = 'ponder'
 
 const CHAIN_FLAG = '--chainId <id|slug>'
-const CONFIG_FLAGS = `${CHAIN_FLAG} [--dexId <dex>] [--protocolType v2|v3]`
+const CONFIG_FLAGS = `${CHAIN_FLAG} [--dexId <dex=junoswap>] [--protocolType v2|v3]`
 const OPTIONAL_CHAIN_FLAG = '[--chainId <id|slug>]'
-const SELECT_FLAGS = '[--fields <preset|a,b,c>] [--orderBy <field>] [--orderDirection asc|desc]'
 const PONDER_FLAG = '[--ponderUrl <url>]'
 
 const LAUNCH_TOKEN_PRESETS: Record<string, readonly (keyof LaunchToken)[]> = {
@@ -117,6 +116,11 @@ const TOKEN_SNAPSHOT_PRESETS: Record<string, readonly (keyof TokenSnapshot)[]> =
 const TOKEN_HOLDER_PRESETS: Record<string, readonly (keyof TokenHolder)[]> = {
     address: TOKEN_HOLDER_ADDRESS_FIELDS,
     balance: TOKEN_HOLDER_BALANCE_FIELDS,
+}
+
+function selectFlags(presets: Record<string, unknown>): string {
+    const fields = `[--fields ${Object.keys(presets).join('|')}|a,b,c]`
+    return `${fields} [--orderBy <field>] [--orderDirection asc|desc=asc]`
 }
 
 function chainCommand(group: string, describe: string, fn: (chainId: number) => unknown): Command {
@@ -178,7 +182,7 @@ export const COMMANDS: Record<string, Command> = {
 
     pickAggregatePlan: {
         group: DEX,
-        flags: `${CHAIN_FLAG} --tokenIn <addr> --tokenOut <addr> --amountIn <decimal> [--rpcUrl <url>]`,
+        flags: `${CHAIN_FLAG} --tokenIn <sold> --tokenOut <bought> --amountIn <tokens> [--rpcUrl <url=$JUNO_MONETA_RPC_URL>]`,
         describe:
             'Best aggregated route for a pair, split across dexes or hopped through a connector',
         run: async (args) => {
@@ -220,7 +224,7 @@ export const COMMANDS: Record<string, Command> = {
 
     fetchUserStats: {
         group: PONDER,
-        flags: `${CHAIN_FLAG} --users <addr,addr> [--ponderUrl <url>]`,
+        flags: `${CHAIN_FLAG} --users <addr,addr> ${PONDER_FLAG}`,
         describe:
             'Aggregate trade volume, counts, points, and USD volume per user from the indexer',
         run: async (args) => {
@@ -233,19 +237,19 @@ export const COMMANDS: Record<string, Command> = {
     },
     fetchIndexerStatus: {
         group: PONDER,
-        flags: '[--ponderUrl <url>]',
+        flags: PONDER_FLAG,
         describe: 'Latest indexed block and lag per chain from the indexer',
         run: (args) => fetchIndexerStatus(createPonderClient(parsePonderUrl(args.ponderUrl))),
     },
     fetchAllReferralBindings: {
         group: PONDER,
-        flags: '[--ponderUrl <url>]',
+        flags: PONDER_FLAG,
         describe: 'Every referee and referrer pair from the indexer, oldest binding first',
         run: (args) => fetchAllReferralBindings(createPonderClient(parsePonderUrl(args.ponderUrl))),
     },
     fetchReferralBindings: {
         group: PONDER,
-        flags: '--referrer <addr> [--ponderUrl <url>]',
+        flags: `--referrer <addr> ${PONDER_FLAG}`,
         describe: 'Referees bound to a referrer, oldest binding first',
         run: (args) =>
             fetchReferralBindings(createPonderClient(parsePonderUrl(args.ponderUrl)), {
@@ -254,7 +258,7 @@ export const COMMANDS: Record<string, Command> = {
     },
     fetchReferralRewards: {
         group: PONDER,
-        flags: `${CHAIN_FLAG} --referrer <addr> [--ponderUrl <url>]`,
+        flags: `${CHAIN_FLAG} --referrer <addr> ${PONDER_FLAG}`,
         describe: 'Referral points and referred trader breakdown for a referrer',
         run: async (args) => {
             const chainId = parseChainId(args.chainId)
@@ -266,7 +270,7 @@ export const COMMANDS: Record<string, Command> = {
     },
     fetchIncentives: {
         group: PONDER,
-        flags: `${CHAIN_FLAG} [--limit <n>] [--ponderUrl <url>]`,
+        flags: `${CHAIN_FLAG} [--limit <n>] ${PONDER_FLAG}`,
         describe:
             'V3 staker incentives on a chain, with reward token, pool, window, and refund state',
         run: (args) =>
@@ -302,7 +306,7 @@ export const COMMANDS: Record<string, Command> = {
     },
     fetchLaunchTokens: {
         group: PONDER,
-        flags: `${OPTIONAL_CHAIN_FLAG} [--creator <addr>] [--isGraduated 0|1] [--tokenAddrs <a,a>] ${SELECT_FLAGS} ${PONDER_FLAG}`,
+        flags: `${OPTIONAL_CHAIN_FLAG} [--creator <addr>] [--isGraduated 0|1] [--tokenAddrs <a,a>] ${selectFlags(LAUNCH_TOKEN_PRESETS)} ${PONDER_FLAG}`,
         describe: 'Launchpad tokens from the indexer, filtered by chain, creator, or graduation',
         run: (args) =>
             fetchLaunchTokens(
@@ -323,7 +327,7 @@ export const COMMANDS: Record<string, Command> = {
     },
     fetchTokenSnapshots: {
         group: PONDER,
-        flags: `${OPTIONAL_CHAIN_FLAG} [--tokenAddrs <a,a>] ${SELECT_FLAGS} ${PONDER_FLAG}`,
+        flags: `${OPTIONAL_CHAIN_FLAG} [--tokenAddrs <a,a>] ${selectFlags(TOKEN_SNAPSHOT_PRESETS)} ${PONDER_FLAG}`,
         describe: 'Per-token market cap, price, fee, and holder snapshots from the indexer',
         run: (args) =>
             fetchTokenSnapshots(
@@ -342,7 +346,7 @@ export const COMMANDS: Record<string, Command> = {
     },
     fetchTokenHolders: {
         group: PONDER,
-        flags: `${OPTIONAL_CHAIN_FLAG} [--tokenAddr <addr>] [--address <addr>] ${SELECT_FLAGS} ${PONDER_FLAG}`,
+        flags: `${OPTIONAL_CHAIN_FLAG} [--tokenAddr <addr>] [--address <holder>] ${selectFlags(TOKEN_HOLDER_PRESETS)} ${PONDER_FLAG}`,
         describe: 'Launch token holders and balances from the indexer',
         run: (args) =>
             fetchTokenHolders(
@@ -372,7 +376,7 @@ export const COMMANDS: Record<string, Command> = {
     },
     fetchUserPositions: {
         group: PONDER,
-        flags: `${CHAIN_FLAG} --owner <addr> [--limit <n>] [--ponderUrl <url>]`,
+        flags: `${CHAIN_FLAG} --owner <addr> [--limit <n>] ${PONDER_FLAG}`,
         describe: 'V3 positions held by an owner on a chain, with range, liquidity, and fees owed',
         run: (args) =>
             fetchUserPositions(createPonderClient(parsePonderUrl(args.ponderUrl)), {
@@ -383,7 +387,7 @@ export const COMMANDS: Record<string, Command> = {
     },
     fetchPositionsByTokenIds: {
         group: PONDER,
-        flags: `${CHAIN_FLAG} --tokenIds <id,id> [--limit <n>] [--ponderUrl <url>]`,
+        flags: `${CHAIN_FLAG} --tokenIds <id,id> [--limit <n>] ${PONDER_FLAG}`,
         describe: 'V3 positions on a chain looked up by NFT token id',
         run: (args) =>
             fetchPositionsByTokenIds(createPonderClient(parsePonderUrl(args.ponderUrl)), {
@@ -394,7 +398,7 @@ export const COMMANDS: Record<string, Command> = {
     },
     fetchPoolMetrics: {
         group: PONDER,
-        flags: `${CHAIN_FLAG} [--protocol <name>] [--limit <n>] [--ponderUrl <url>]`,
+        flags: `${CHAIN_FLAG} [--protocol <name=junoswap>] [--limit <n>] ${PONDER_FLAG}`,
         describe:
             'Pools on a chain with token metadata, price, TVL, 1d and 30d volume, and fee APR',
         run: (args) =>

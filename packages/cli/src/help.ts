@@ -1,15 +1,47 @@
 import { CHAIN_SLUGS } from './args.js'
 import { COMMANDS, type Command } from './commands.js'
 
-export function signature(name: string, command: Command): string {
-    return command.flags ? `${name} ${command.flags}` : name
+const WRAP_WIDTH = 96
+
+function flagGroups(flags: string): string[] {
+    const groups: string[] = []
+    for (const token of flags.split(' ')) {
+        const previous = groups.length - 1
+        if (previous >= 0 && !token.startsWith('--') && !token.startsWith('[')) {
+            groups[previous] += ` ${token}`
+        } else {
+            groups.push(token)
+        }
+    }
+    return groups
+}
+
+export function signature(name: string, command: Command, indent = 0): string {
+    if (!command.flags) return name
+
+    const hang = ' '.repeat(indent + name.length + 1)
+    const lines: string[] = []
+    let line = name
+    let offset = indent
+    for (const group of flagGroups(command.flags)) {
+        const candidate = `${line} ${group}`
+        if (line === name || offset + candidate.length <= WRAP_WIDTH) {
+            line = candidate
+            continue
+        }
+        lines.push(line)
+        line = hang + group
+        offset = 0
+    }
+    lines.push(line)
+    return lines.join('\n')
 }
 
 export function helpText(): string {
     const groups = new Map<string, string[]>()
     for (const [name, command] of Object.entries(COMMANDS)) {
         const lines = groups.get(command.group) ?? []
-        lines.push(`  ${signature(name, command)}\n      ${command.describe}`)
+        lines.push(`  ${signature(name, command, 2)}\n      ${command.describe}`)
         groups.set(command.group, lines)
     }
 
@@ -17,32 +49,12 @@ export function helpText(): string {
         'Usage: juno-moneta <command> [flags]',
         '',
         'Every command mirrors one export of the SDK.',
+        `Chains: ${CHAIN_SLUGS.join(', ')}`,
+        'Indexer commands read $JUNO_MONETA_PONDER_URL unless --ponderUrl is passed.',
         '',
-        'Flags:',
-        `  --chainId <id|slug>     chain id or slug (${CHAIN_SLUGS.join(', ')})`,
-        '  --dexId <dex>           dex id, defaults to junoswap',
-        '  --protocolType v2|v3    protocol to select',
-        '  --protocol <name>       indexer pool protocol, defaults to junoswap',
-        '  --users <addr,addr>     comma-separated user addresses',
-        '  --owner <addr>          position owner address',
-        '  --tokenIds <id,id>      comma-separated position token ids',
-        '  --referrer <addr>       referrer address',
-        '  --tokenAddr <addr>      token address',
-        '  --tokenAddrs <a,a>      comma-separated token addresses',
-        '  --tokenIn <addr>        token being sold',
-        '  --tokenOut <addr>       token being bought',
-        '  --amountIn <decimal>    input amount in token units, e.g. 1.5',
-        '  --rpcUrl <url>          json-rpc endpoint, defaults to $JUNO_MONETA_RPC_URL or the public node',
-        '  --creator <addr>        launch token creator address',
-        '  --address <addr>        token holder address',
-        '  --isGraduated 0|1       graduation state to filter on',
-        '  --fields <preset|list>  field preset or comma-separated field names',
-        '  --orderBy <field>       field to sort on',
-        '  --orderDirection <dir>  asc or desc, defaults to asc',
-        '  --limit <n>             max rows to return',
-        '  --ponderUrl <url>       indexer graphql endpoint, defaults to $JUNO_MONETA_PONDER_URL',
-        '  --json                  print raw JSON instead of formatted output',
-        '  -h, --help              show this help',
+        'Global flags:',
+        '  --json      print raw JSON instead of formatted output',
+        '  -h, --help  show this help',
         '',
         ...[...groups].map(([group, lines]) => `${group}\n${lines.join('\n')}\n`),
     ].join('\n')
