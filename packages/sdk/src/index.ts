@@ -78,6 +78,13 @@ export {
     calculatePriceFromSqrtPrice,
 } from './dex/curve.js'
 export type { CurveSwapEvent } from './dex/curve.js'
+export { getCurveCreationEvent, getCurveState, planCurveCall } from './dex/curve-calls.js'
+export type {
+    CurveState,
+    CurveStateParams,
+    CurveTokenMetadata,
+    CurveAction,
+} from './dex/curve-calls.js'
 export { wrapQuoteResult, type QuoteResult } from './dex/quote-call.js'
 
 export { isPonderError, createPonderClient } from './ponder/client.js'

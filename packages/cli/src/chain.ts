@@ -31,7 +31,7 @@ export interface AggregatePlanParams {
     rpcUrl: string
 }
 
-function createReadClient(rpcUrl: string): ReadClient {
+export function createReadClient(rpcUrl: string): ReadClient {
     return createPublicClient({ transport: http(rpcUrl) }) as unknown as ReadClient
 }
 

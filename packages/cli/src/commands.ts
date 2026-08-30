@@ -1,3 +1,4 @@
+import type { Address } from 'viem'
 import {
     getChains,
     LAUNCH_TOKEN_CARD_FIELDS,
@@ -31,6 +32,7 @@ import {
     fetchV3TokenSnapshots,
     getAggRouterDeployment,
     getBondingCurveDeployment,
+    getCurveState,
     getDexConfig,
     getSupportedDexs,
     type IncentiveMetrics,
@@ -38,7 +40,7 @@ import {
     type TokenHolder,
     type TokenSnapshot,
 } from '@coshi190/juno-moneta-sdk'
-import { resolveAggregatePlan } from './chain.js'
+import { createReadClient, resolveAggregatePlan } from './chain.js'
 import {
     optionalAddress,
     optionalAddressList,
@@ -208,6 +210,20 @@ export const COMMANDS: Record<string, Command> = {
                     ].join(' → '),
                 })),
             }
+        },
+    },
+
+    getCurveState: {
+        group: DEX,
+        flags: `${CHAIN_FLAG} [--tokenAddr <addr>] [--rpcUrl <url=$JUNO_MONETA_RPC_URL>]`,
+        describe:
+            'Bonding curve fee and graduation globals on a chain, plus a token’s reserves with --tokenAddr',
+        run: (args) => {
+            const chainId = parseChainId(args.chainId)
+            return getCurveState(createReadClient(parseRpcUrl(args.rpcUrl, chainId)), {
+                chainId,
+                token: optionalAddress(args.tokenAddr) as Address | undefined,
+            })
         },
     },
 

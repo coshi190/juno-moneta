@@ -4,6 +4,7 @@ import {
     getDexConfig,
     AGG_ROUTER_JUNOSWAP_ABI,
     BONDING_CURVE_JUNOSWAP_ABI,
+    getCurveCreationEvent,
     getChains,
     ERC20_ABI,
     NONFUNGIBLE_POSITION_MANAGER_ABI,
@@ -66,9 +67,9 @@ const abiEvent = <TAbi extends readonly { type: string; name?: string }[], TName
     return event
 }
 
-const CREATION_EVENT = abiEvent(BONDING_CURVE_JUNOSWAP_ABI, 'Creation')
 const PAIR_CREATED_EVENT = abiEvent(UNISWAP_V2_FACTORY_ABI, 'PairCreated')
 const V3_POOL_CREATED_EVENT = abiEvent(UNISWAP_V3_FACTORY_ABI, 'PoolCreated')
+const CURVE_CREATION_EVENT = getCurveCreationEvent()
 
 const BONDING_CURVE_TESTNET = getBondingCurveDeployment(CHAINS.kubTestnet)!
 const BONDING_CURVE_BITKUB = getBondingCurveDeployment(CHAINS.bitkub)
@@ -117,7 +118,7 @@ export default createConfig({
             chain: 'kubTestnet',
             address: factory({
                 address: BONDING_CURVE_TESTNET.address,
-                event: CREATION_EVENT,
+                event: CURVE_CREATION_EVENT,
                 parameter: 'tokenAddr',
             }),
             startBlock: BONDING_CURVE_TESTNET.startBlock,
@@ -135,7 +136,7 @@ export default createConfig({
                       chain: 'bitkub',
                       address: factory({
                           address: BONDING_CURVE_BITKUB.address,
-                          event: CREATION_EVENT,
+                          event: CURVE_CREATION_EVENT,
                           parameter: 'tokenAddr',
                       }),
                       startBlock: BONDING_CURVE_BITKUB.startBlock,
