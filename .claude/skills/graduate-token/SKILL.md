@@ -25,6 +25,22 @@ its Uniswap V3 pool already exists at a price that does not match the curve's
 graduation price, so `graduate()` reverts. This moves the pool price onto the
 target, then graduates.
 
+## Pick the path first
+
+Two curves exist, and the recovery differs:
+
+| Curve | Path |
+| ----- | ---- |
+| **V1** at `0x65F6EC30A9E70822721585f6Bba15c40c2F8ab4e` — live on mainnet | [Manual path](#manual-path-v1) |
+| **V1.1** — has `creatorOf`, no `setFeeCollector` | [Helper path](#helper-path-v11) |
+
+Ask the operator which curve the token is on, or read the address they give you.
+`GraduationHelper` is bound to V1.1 and **must not** be pointed at V1: V1 gates
+graduation on `token * graduationAmount <= native * INITIALTOKEN` where the
+helper requires `native >= graduationAmount`, and V1 omits the `tokenLiquidity`
+balance clamp V1.1 applies, so the two compute different target prices from the
+same reserves.
+
 ## Inputs
 
 | Value          | Default                        | Notes                                                      |
@@ -34,18 +50,31 @@ target, then graduates.
 | `PRIVATE_KEY`  | falls back to `contracts/.env` | Match `/^PRIVATE_KEY\s*=\s*(?:0x)?([0-9a-fA-F]{64})\s*$/m` |
 | `SEED_KKUB`    | `0.01` KKUB                    | KKUB side of the temporary seed position                   |
 | `SEED_TOKEN`   | `1000` tokens                  | Token side of the temporary seed position                  |
-| `TOLERANCE_BP` | `100`                          | How close to target counts as "already correct"            |
+| `TOLERANCE_BP` | `25`                           | How close to target counts as "already correct"            |
 
 Gas reserve: keep `0.05` KUB unwrapped when deciding how much to wrap.
+
+**You must already hold the launch token.** Both paths need it, and there is no
+way to acquire it on-chain once a token is stuck: `buy()` is dead at the cap and
+the griefed pool has no liquidity to buy from. It has to come from an existing
+holder. Sort that out before starting.
 
 ## Addresses (Bitkub mainnet, chain 96)
 
 ```
-BONDING_CURVE   0x65F6EC30A9E70822721585f6Bba15c40c2F8ab4e
-V3_FACTORY      0x090C6E5fF29251B1eF9EC31605Bdd13351eA316C
-V3_POS_MANAGER  0xb6b76870549893c6b59E7e979F254d0F9Cca4Cc9
-V3_SWAP_ROUTER  0x3F7582E36843FF79F173c7DC19f517832496f2D8
+BONDING_CURVE     0x65F6EC30A9E70822721585f6Bba15c40c2F8ab4e   # V1, live
+V3_FACTORY        0x090C6E5fF29251B1eF9EC31605Bdd13351eA316C
+V3_POS_MANAGER    0xb6b76870549893c6b59E7e979F254d0F9Cca4Cc9
+V3_SWAP_ROUTER    0x3F7582E36843FF79F173c7DC19f517832496f2D8
+
+BONDING_CURVE_V1_1  <not deployed yet>
+GRADUATION_HELPER   <not deployed yet>
 ```
+
+The helper path cannot be run until both placeholders are filled in. When they
+are, read `helper.curve()` and `helper.wrappedNative()` back and check them
+against the curve before the first use — both are `immutable`, so a helper wired
+to the wrong curve has to be redeployed rather than corrected.
 
 `wrappedNative` (KKUB) is read from the bonding curve, not hardcoded. Fee tier is
 `10000`; full range is ticks `-887200` … `887200`.
@@ -53,7 +82,98 @@ V3_SWAP_ROUTER  0x3F7582E36843FF79F173c7DC19f517832496f2D8
 Use `viem` with ABIs imported from `packages/sdk/src/index.js`:
 `BONDING_CURVE_JUNOSWAP_ABI`, `UNISWAP_V3_FACTORY_ABI`, `UNISWAP_V3_POOL_ABI`,
 `NONFUNGIBLE_POSITION_MANAGER_ABI`, `UNISWAP_V3_SWAP_ROUTER_ABI`, `WETH9_ABI`,
-`ERC20_ABI`. If contracts changed, run the `codegen` skill first.
+`ERC20_ABI`. If contracts changed, run the `codegen` skill first. The published
+`BONDING_CURVE_JUNOSWAP_ABI` is V1's — it still carries `setFeeCollector`, which
+V1.1 removed — so the helper path needs a regenerated ABI too.
+
+---
+
+# Helper path (V1.1)
+
+`GraduationHelper.rescue()` does the seed, the swap, the price guard, the
+graduation, and the unwind in one transaction. That atomicity is the point: run
+as separate transactions, the repair leaves a tiny seeded position that anyone
+can shove back off band before `graduate()` lands, and `graduate()` is
+permissionless so you cannot hold the slot.
+
+## 1. Read-only pass
+
+```
+target  = GRADUATION_HELPER.targetSqrtPriceX96(token)
+pool    = V3_FACTORY.getPool(token0, token1, 10000)
+current = pool == 0x0 ? 0 : V3_POOL.slot0()[0]
+gapBp   = current == 0 ? 0 : GRADUATION_HELPER.deviationBps(current, target)
+```
+
+`targetSqrtPriceX96` mirrors the curve's own encoder, so there is no arithmetic
+to do here — no bigint reserve maths, no integer square root.
+
+Also read `BONDING_CURVE_V1_1.isGraduate(token)` and
+`pumpReserve(token)` → `[reserveNative, reserveToken]` so you have numbers to
+show:
+
+```
+assert isGraduate === false                     // else: already graduated
+assert reserveNative >= graduationAmount        // cap met
+```
+
+Report `target`, `current`, `gapBp`, and whether a repair is needed
+(`gapBp > TOLERANCE_BP`). A pool at `0x0`, an uninitialised pool, and a pool
+already inside tolerance all need no repair — `rescue()` handles each internally,
+so you still make the same single call either way.
+
+**This is the end of the read-only pass — stop here and get confirmation.**
+
+## 2. Fund and approve
+
+The helper never touches native. KKUB gates `withdraw()` to KYC-registered
+addresses, so a contract cannot unwrap; you wrap going in and unwrap coming out,
+on your own account. Leftovers come back as KKUB, not KUB.
+
+- assert token balance ≥ what you intend to pass as `tokenAmount`
+- `deposit()` on `wrappedNative` for the KKUB you intend to pass as
+  `wrappedAmount`, after asserting `kubBalance - 0.05 KUB ≥ that amount`
+- `approve` `GRADUATION_HELPER` for the launch token and for KKUB (max uint256,
+  skipping if the existing allowance already covers it)
+
+Size `tokenAmount` and `wrappedAmount` generously — whatever the repair does not
+consume is returned in the same transaction. The seed alone needs `SEED_TOKEN`
+(1000 tokens) and `SEED_WRAPPED` (0.01 KKUB); the swap needs enough of whichever
+side moves the price toward the target, which you will not know exactly in
+advance.
+
+## 3. Rescue
+
+```
+GRADUATION_HELPER.rescue(token, tokenAmount, wrappedAmount, TOLERANCE_BP)
+```
+
+The tolerance is enforced on-chain. If the repair cannot reach the target the
+call reverts with `repair missed target`, nothing graduates, and your assets stay
+yours — so there is no separate post-swap guard to remember, and no way to
+graduate at a wrong price by pressing on.
+
+Other reverts worth recognising: `not reach graduation cap` (the cap assertion
+above), `token already graduated`, `not enough token to seed` /
+`not enough wrapped to seed` (raise the amounts), `no input to repair with` (you
+passed only the seed amounts and nothing to swap with).
+
+## 4. After
+
+- re-read `isGraduate(token)` and assert it is now true
+- `withdraw(balance)` your remaining KKUB back to KUB
+- print closing KUB / KKUB / token balances
+
+There is no position to unwind and no `tokenId` to track — the helper mints its
+seed, removes it, and burns it inside the call.
+
+---
+
+# Manual path (V1)
+
+For the live V1 curve, which the helper cannot serve. Seed, swap, and graduate
+are three separate transactions; between the swap and the graduation the
+repaired price is exposed, so move promptly and re-check before graduating.
 
 ## 1. Read state and assert preconditions
 
@@ -90,7 +210,12 @@ integer square root; `Math.sqrt` loses precision at this magnitude.
 (current `sqrtPriceX96`) and `liquidity()`.
 
 Deviation is measured in basis points as `|a - b| * 10000 / b` against the
-target.
+target — on `sqrtPriceX96`, so a bp here is half a bp of price. V1 `graduate()`
+mints at 95% minimums, which admits ~±500 bp of price, i.e. ~±250 bp of
+`sqrtPriceX96`; `TOLERANCE_BP = 25` keeps the repair comfortably inside that
+band. (V1.1 tightened those minimums to 99%, ~±100 bp of price — the same
+tolerance is conservative under either, but do not carry V1.1's numbers into a
+V1 recovery.)
 
 **Three cases call `graduate(token)` directly with no price fix:**
 
@@ -164,6 +289,8 @@ amount1Max: MAX_UINT128 })`, then `burn(tokenId)`.
 The old script at `scripts/graduate-token.ts` in git history passed `2**256 - 1`
 here, which viem rejects at encode time — that unwind path was never exercised.
 Use the `uint128` max.
+
+---
 
 ## Sending transactions
 

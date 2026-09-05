@@ -3,13 +3,19 @@ pragma solidity 0.8.19;
 pragma abicoder v2;
 
 import "../../src/interfaces/v3-periphery/INonfungiblePositionManager.sol";
+import "../../src/interfaces/v3-core/IUniswapV3Factory.sol";
+import "../../src/interfaces/v3-core/IUniswapV3Pool.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "./V3LiquidityMath.sol";
 
 contract MockPositionManager is INonfungiblePositionManager {
     INonfungiblePositionManager.MintParams public lastMintParams;
     uint256 public mintCallCount;
+    uint256 public lastAmount0;
+    uint256 public lastAmount1;
 
     address public wrappedNative;
+    address public poolFactory;
     bool public partialFill;
     uint256 public nativeUsed;
     uint256 public tokenUsed;
@@ -17,6 +23,10 @@ contract MockPositionManager is INonfungiblePositionManager {
 
     function setWrappedNative(address _wrappedNative) external {
         wrappedNative = _wrappedNative;
+    }
+
+    function setPoolFactory(address _factory) external {
+        poolFactory = _factory;
     }
 
     function setPartialFill(uint256 _nativeUsed, uint256 _tokenUsed) external {
@@ -34,17 +44,51 @@ contract MockPositionManager is INonfungiblePositionManager {
         mintCallCount++;
 
         bool token0IsNative = params.token0 == wrappedNative;
-        uint256 usedNative = partialFill ? nativeUsed : (token0IsNative ? params.amount0Desired : params.amount1Desired);
-        uint256 usedToken = partialFill ? tokenUsed : (token0IsNative ? params.amount1Desired : params.amount0Desired);
+
+        if (partialFill) {
+            amount0 = token0IsNative ? nativeUsed : tokenUsed;
+            amount1 = token0IsNative ? tokenUsed : nativeUsed;
+        } else if (poolFactory != address(0)) {
+            (amount0, amount1) = _amountsAtPoolPrice(params);
+            require(amount0 >= params.amount0Min && amount1 >= params.amount1Min, "Price slippage check");
+        } else {
+            amount0 = params.amount0Desired;
+            amount1 = params.amount1Desired;
+        }
+
+        lastAmount0 = amount0;
+        lastAmount1 = amount1;
+
+        uint256 usedNative = token0IsNative ? amount0 : amount1;
+        uint256 usedToken = token0IsNative ? amount1 : amount0;
 
         address launchToken = token0IsNative ? params.token1 : params.token0;
         IERC20(launchToken).transferFrom(msg.sender, address(this), usedToken);
 
         ethToRefund = msg.value - usedNative;
 
-        amount0 = token0IsNative ? usedNative : usedToken;
-        amount1 = token0IsNative ? usedToken : usedNative;
         return (1, 0, amount0, amount1);
+    }
+
+    function _amountsAtPoolPrice(INonfungiblePositionManager.MintParams calldata params)
+        internal
+        view
+        returns (uint256 amount0, uint256 amount1)
+    {
+        require(params.tickLower == -887200 && params.tickUpper == 887200, "mock: full range only");
+        address pool = IUniswapV3Factory(poolFactory).getPool(params.token0, params.token1, params.fee);
+        (uint160 sqrtPriceX96,,,,,,) = IUniswapV3Pool(pool).slot0();
+
+        uint128 liq = V3LiquidityMath.liquidityForAmounts(
+            sqrtPriceX96,
+            V3LiquidityMath.SQRT_RATIO_LOWER,
+            V3LiquidityMath.SQRT_RATIO_UPPER,
+            params.amount0Desired,
+            params.amount1Desired
+        );
+        (amount0, amount1) = V3LiquidityMath.amountsForLiquidity(
+            sqrtPriceX96, V3LiquidityMath.SQRT_RATIO_LOWER, V3LiquidityMath.SQRT_RATIO_UPPER, liq
+        );
     }
 
     function positions(uint256)
@@ -107,12 +151,12 @@ contract MockPositionManager is INonfungiblePositionManager {
 
     function sweepToken(address, uint256, address) external payable {}
 
-    function factory() external pure returns (address) {
-        return address(0);
+    function factory() external view returns (address) {
+        return poolFactory;
     }
 
-    function WETH9() external pure returns (address) {
-        return address(0);
+    function WETH9() external view returns (address) {
+        return wrappedNative;
     }
 
     function name() external pure returns (string memory) {
