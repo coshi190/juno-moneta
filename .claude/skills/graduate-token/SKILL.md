@@ -29,10 +29,10 @@ target, then graduates.
 
 Two curves exist, and the recovery differs:
 
-| Curve | Path |
-| ----- | ---- |
-| **V1** at `0x65F6EC30A9E70822721585f6Bba15c40c2F8ab4e` — live on mainnet | [Manual path](#manual-path-v1) |
-| **V1.1** — has `creatorOf`, no `setFeeCollector` | [Helper path](#helper-path-v11) |
+| Curve                                                                    | Path                            |
+| ------------------------------------------------------------------------ | ------------------------------- |
+| **V1** at `0x65F6EC30A9E70822721585f6Bba15c40c2F8ab4e` — live on mainnet | [Manual path](#manual-path-v1)  |
+| **V1.1** — has `creatorOf`, no `setFeeCollector`                         | [Helper path](#helper-path-v11) |
 
 Ask the operator which curve the token is on, or read the address they give you.
 `GraduationHelper` is bound to V1.1 and **must not** be pointed at V1: V1 gates
