@@ -20,6 +20,7 @@ contract JunoBondingCurveV1_1 {
     mapping(address => PumpReserve) public pumpReserve;
 
     address public immutable feeCollector;
+    address public immutable lpLocker;
     uint256 public createFee;
     uint256 public pumpFee;
     uint256 public constant INITIALTOKEN = 1000000000 ether;
@@ -41,6 +42,7 @@ contract JunoBondingCurveV1_1 {
         address indexed tokenAddr,
         uint256 amountIn,
         uint256 amountOut,
+        uint256 feeAmount,
         uint256 reserveIn,
         uint256 reserveOut
     );
@@ -56,23 +58,38 @@ contract JunoBondingCurveV1_1 {
     );
     event Graduation(
         address indexed sender,
-        address tokenAddr
+        address tokenAddr,
+        uint256 tokenId,
+        uint128 liquidity,
+        uint256 amount0,
+        uint256 amount1
     );
+    event FeeSet(uint256 createFee, uint256 pumpFee);
     
     constructor (
         address _wrappedNative,
         address _v3factory,
         address _v3posManager,
         address _feeCollector,
+        address _lpLocker,
         uint256 _virtualAmount,
         uint256 _graduationAmount
     ) {
         require(_virtualAmount > 0 && _graduationAmount > 0, "invalid curve state");
-        require(_feeCollector != address(0), "invalid fee collector");
+        require(_feeCollector.code.length > 0, "invalid fee collector");
+        require(_lpLocker.code.length > 0, "invalid lp locker");
+        require(_wrappedNative != address(0), "invalid wrapped native");
+        require(_v3factory != address(0), "invalid v3 factory");
+        require(_v3posManager != address(0), "invalid pos manager");
+        require(
+            INonfungiblePositionManager(_v3posManager).WETH9() == _wrappedNative,
+            "wrapped native mismatch"
+        );
         wrappedNative = IERC20(_wrappedNative);
         v3factory = IUniswapV3Factory(_v3factory);
         v3posManager = INonfungiblePositionManager(_v3posManager);
         feeCollector = _feeCollector;
+        lpLocker = _lpLocker;
         virtualAmount = _virtualAmount;
         graduationAmount = _graduationAmount;
         uint256 total = _virtualAmount + _graduationAmount;
@@ -86,11 +103,12 @@ contract JunoBondingCurveV1_1 {
     }
 
     function setFee(uint256 _createFee, uint256 _pumpFee) external returns (bool) {
-        require(msg.sender == feeCollector);
+        require(msg.sender == feeCollector, "only fee collector");
         require(_pumpFee <= 500, "fee too high");
         require(_createFee <= 10 ether, "create fee too high");
         createFee = _createFee;
         pumpFee = _pumpFee;
+        emit FeeSet(_createFee, _pumpFee);
         return true;
     }
 
@@ -120,7 +138,7 @@ contract JunoBondingCurveV1_1 {
             block.timestamp
         );
 
-        _sendNative(feeCollector, createFee);
+        if (createFee > 0) _sendNative(feeCollector, createFee);
         return (address(newtoken));
     }
 
@@ -149,7 +167,7 @@ contract JunoBondingCurveV1_1 {
         // createPool/initialize are permissionless; a pre-existing pool can hold a foreign sqrtPriceX96
         // The 99% minimums below admit ~+/-100bps of skew around the curve close, under the ~260bps
         // an initialize-at-band-edge -> graduate() -> dump round trip needs to break even, so the
-        // displacement to the 0xdead position is not extractable (testFork_SkewSkim_*)
+        // displacement to the locked position is not extractable
         address pool = v3factory.getPool(_tkn0, _tkn1, 10000);
         if (pool == address(0)) {
             pool = v3factory.createPool(_tkn0, _tkn1, 10000);
@@ -160,7 +178,10 @@ contract JunoBondingCurveV1_1 {
                 IUniswapV3Pool(pool).initialize(_encodeSqrtPriceX96(_tkn0AmountToMint, _tkn1AmountToMint));
             }
         }
-        ERC20(_tokenAddr).approve(address(v3posManager), 2**256 - 1);
+        ERC20(_tokenAddr).approve(
+            address(v3posManager),
+            _tokenAddr < address(wrappedNative) ? _tkn0AmountToMint : _tkn1AmountToMint
+        );
         INonfungiblePositionManager.MintParams memory params =
             INonfungiblePositionManager.MintParams({
                 token0: _tkn0,
@@ -172,14 +193,19 @@ contract JunoBondingCurveV1_1 {
                 amount1Desired: _tkn1AmountToMint,
                 amount0Min: (_tkn0AmountToMint * 99) / 100,
                 amount1Min: (_tkn1AmountToMint * 99) / 100,
-                recipient: address(0xdead),
+                recipient: lpLocker,
                 deadline: block.timestamp + 1 hours
             });
         uint256 nativeToSend = pumpReserve[_tokenAddr].native;
         delete pumpReserve[_tokenAddr].native;
         delete pumpReserve[_tokenAddr].token;
 
-        (, , uint256 amt0Used, uint256 amt1Used) = v3posManager.mint{value: nativeToSend}(params);
+        uint256 nativeHeldBefore = address(this).balance - nativeToSend;
+        {
+            (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1) =
+                v3posManager.mint{value: nativeToSend}(params);
+            emit Graduation(msg.sender, _tokenAddr, tokenId, liquidity, amount0, amount1);
+        }
         v3posManager.refundETH();
 
         uint256 tokenLeft = ERC20(_tokenAddr).balanceOf(address(this));
@@ -187,11 +213,9 @@ contract JunoBondingCurveV1_1 {
             ERC20(_tokenAddr).transfer(address(0xdead), tokenLeft);
         }
 
-        emit Graduation(msg.sender, _tokenAddr);
-
-        uint256 nativeUsed = _tokenAddr < address(wrappedNative) ? amt1Used : amt0Used;
-        if (nativeToSend > nativeUsed) {
-            _sendNative(feeCollector, nativeToSend - nativeUsed);
+        uint256 nativeRefunded = address(this).balance - nativeHeldBefore;
+        if (nativeRefunded > 0) {
+            _sendNative(feeCollector, nativeRefunded);
         }
         return true;
     }
@@ -222,19 +246,18 @@ contract JunoBondingCurveV1_1 {
     }
 
     function buy(address _tokenAddr, uint256 _minToken) external payable returns (uint256) {
+        require(msg.value > 0, "zero amount");
         require(!isGraduate[_tokenAddr], "token already graduated");
         require(pumpReserve[_tokenAddr].native < graduationAmount, "curve complete");
 
         uint256 feeAmount = (msg.value * pumpFee) / 10000;
         uint256 amountInAfterFee = msg.value - feeAmount;
-        uint256 refund;
         {
             uint256 room = graduationAmount - pumpReserve[_tokenAddr].native;
             if (amountInAfterFee > room) {
                 uint256 gross = (room * 10000) / (10000 - pumpFee);
                 feeAmount = (gross * pumpFee) / 10000;
                 amountInAfterFee = gross - feeAmount;
-                refund = msg.value - gross;
             }
         }
 
@@ -254,6 +277,7 @@ contract JunoBondingCurveV1_1 {
             _tokenAddr,
             amountInAfterFee,
             amountOut,
+            feeAmount,
             pumpReserve[_tokenAddr].native,
             pumpReserve[_tokenAddr].token
         );
@@ -263,6 +287,7 @@ contract JunoBondingCurveV1_1 {
             feeAmount,
             abi.encodeWithSelector(IFeeCollector.collectNative.selector, _tokenAddr, creatorOf[_tokenAddr])
         );
+        uint256 refund = msg.value - amountInAfterFee - feeAmount;
         if (refund > 0) _sendNative(msg.sender, refund);
         return amountOut;
     }
@@ -272,38 +297,34 @@ contract JunoBondingCurveV1_1 {
         uint256 _tokenSold,
         uint256 _minToken
     ) external returns (uint256) {
+        require(_tokenSold > 0, "zero amount");
         require(!isGraduate[_tokenAddr], "token already graduated");
 
         uint256 feeAmount = (_tokenSold * pumpFee) / 10000;
-        uint256 amountInAfterFee = _tokenSold - feeAmount;
         uint256 amountOut = getAmountOut(
-            amountInAfterFee,
+            _tokenSold - feeAmount,
             pumpReserve[_tokenAddr].token,
             virtualAmount + pumpReserve[_tokenAddr].native
         );
         require(amountOut >= _minToken, "insufficient output amount");
 
-        pumpReserve[_tokenAddr].token += amountInAfterFee;
+        pumpReserve[_tokenAddr].token += _tokenSold - feeAmount;
         pumpReserve[_tokenAddr].native -= amountOut;
 
         emit Swap(
             msg.sender,
             false,
             _tokenAddr,
-            amountInAfterFee,
+            _tokenSold - feeAmount,
             amountOut,
+            feeAmount,
             pumpReserve[_tokenAddr].token,
             pumpReserve[_tokenAddr].native
         );
 
         ERC20(_tokenAddr).transferFrom(msg.sender, address(this), _tokenSold);
-        ERC20(_tokenAddr).transfer(feeCollector, feeAmount);
-        _shareFee(
-            0,
-            abi.encodeWithSelector(
-                IFeeCollector.collectToken.selector, _tokenAddr, creatorOf[_tokenAddr], feeAmount
-            )
-        );
+        ERC20(_tokenAddr).approve(feeCollector, feeAmount);
+        IFeeCollector(feeCollector).collectToken(_tokenAddr, creatorOf[_tokenAddr], feeAmount);
         _sendNative(msg.sender, amountOut);
         return amountOut;
     }

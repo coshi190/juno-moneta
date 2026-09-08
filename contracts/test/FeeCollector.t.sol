@@ -4,10 +4,12 @@ pragma solidity 0.8.19;
 import "forge-std/Test.sol";
 import "../src/FeeCollector.sol";
 import "../src/JunoBondingCurveV1_1.sol";
+import "../src/LpFeeLocker.sol";
 import "../src/ERC20Token.sol";
 import "./mocks/MockV3Factory.sol";
 import "./mocks/MockV3Pool.sol";
 import "./mocks/MockPositionManager.sol";
+import {MockWETH9} from "./mocks/MockPools.sol";
 
 contract FeeCollectorTest is Test {
     event FeeShared(
@@ -18,13 +20,22 @@ contract FeeCollectorTest is Test {
         bool isNative
     );
     event Claimed(address indexed account, address indexed tokenAddr, uint256 amount);
+    event TreasuryCredited(uint256 amount);
     event CreatorShareSet(uint256 bps);
     event TreasurySet(address treasury);
+    event LpFeeShared(
+        address indexed tokenAddr,
+        address indexed creator,
+        address indexed asset,
+        uint256 creatorAmount,
+        uint256 treasuryAmount
+    );
 
     FeeCollector public collector;
     ERC20Token public token;
 
     address public curve;
+    address public lpLocker;
     address public treasury;
     address public creator;
     address public stranger;
@@ -33,11 +44,12 @@ contract FeeCollectorTest is Test {
 
     function setUp() public {
         curve = makeAddr("curve");
+        lpLocker = makeAddr("lpLocker");
         treasury = makeAddr("treasury");
         creator = makeAddr("creator");
         stranger = makeAddr("stranger");
 
-        collector = new FeeCollector(treasury, CREATOR_SHARE_BPS, curve);
+        collector = new FeeCollector(treasury, CREATOR_SHARE_BPS, curve, lpLocker);
         token = new ERC20Token("Fee", "FEE", 1_000_000 ether);
         vm.deal(curve, 100 ether);
     }
@@ -48,9 +60,15 @@ contract FeeCollectorTest is Test {
     }
 
     function _collectToken(uint256 amount) internal {
-        token.transfer(address(collector), amount);
-        vm.prank(curve);
-        collector.collectToken(address(token), creator, amount);
+        _collectTokenFor(creator, amount);
+    }
+
+    function _collectTokenFor(address _creator, uint256 amount) internal {
+        token.transfer(curve, amount);
+        vm.startPrank(curve);
+        token.approve(address(collector), amount);
+        collector.collectToken(address(token), _creator, amount);
+        vm.stopPrank();
     }
 
     function test_Constructor_SetsState() public {
@@ -62,13 +80,16 @@ contract FeeCollectorTest is Test {
 
     function test_RevertConstructor_BadArgs() public {
         vm.expectRevert("invalid treasury");
-        new FeeCollector(address(0), CREATOR_SHARE_BPS, curve);
+        new FeeCollector(address(0), CREATOR_SHARE_BPS, curve, lpLocker);
 
         vm.expectRevert("invalid curve");
-        new FeeCollector(treasury, CREATOR_SHARE_BPS, address(0));
+        new FeeCollector(treasury, CREATOR_SHARE_BPS, address(0), lpLocker);
+
+        vm.expectRevert("invalid lp locker");
+        new FeeCollector(treasury, CREATOR_SHARE_BPS, curve, address(0));
 
         vm.expectRevert("share too high");
-        new FeeCollector(treasury, 10001, curve);
+        new FeeCollector(treasury, 10001, curve, lpLocker);
     }
 
     function test_RevertCollect_NonCurve() public {
@@ -88,6 +109,37 @@ contract FeeCollectorTest is Test {
         assertEq(err, abi.encodeWithSignature("Error(string)", "only curve"));
     }
 
+    function test_CollectAsset_SplitsAndEmitsWithTheAsset() public {
+        address launchToken = makeAddr("launchToken");
+        token.transfer(lpLocker, 100 ether);
+        uint256 creatorCut = (100 ether * CREATOR_SHARE_BPS) / 10000;
+
+        vm.startPrank(lpLocker);
+        token.approve(address(collector), 100 ether);
+        vm.expectEmit(true, true, true, true);
+        emit LpFeeShared(launchToken, creator, address(token), creatorCut, 100 ether - creatorCut);
+        collector.collectAsset(launchToken, creator, address(token), 100 ether);
+        vm.stopPrank();
+
+        assertEq(collector.claimable(creator, address(token)), creatorCut);
+        assertEq(collector.claimable(treasury, address(token)), 100 ether - creatorCut);
+        assertEq(token.balanceOf(address(collector)), 100 ether);
+    }
+
+    function test_RevertCollectAsset_NonLocker() public {
+        vm.prank(stranger);
+        vm.expectRevert("only lp locker");
+        collector.collectAsset(address(token), creator, address(token), 1 ether);
+
+        vm.prank(curve);
+        vm.expectRevert("only lp locker");
+        collector.collectAsset(address(token), creator, address(token), 1 ether);
+    }
+
+    function test_LpLocker_IsFixedAtConstruction() public view {
+        assertEq(collector.lpLocker(), lpLocker);
+    }
+
     function test_CollectNative_SplitsAndEmits() public {
         vm.expectEmit(true, true, true, true);
         emit FeeShared(address(token), creator, 0.5 ether, 0.5 ether, true);
@@ -99,15 +151,29 @@ contract FeeCollectorTest is Test {
     }
 
     function test_CollectToken_SplitsAndEmits() public {
-        token.transfer(address(collector), 200 ether);
+        token.transfer(curve, 200 ether);
+        vm.startPrank(curve);
+        token.approve(address(collector), 200 ether);
 
         vm.expectEmit(true, true, true, true);
         emit FeeShared(address(token), creator, 100 ether, 100 ether, false);
-        vm.prank(curve);
         collector.collectToken(address(token), creator, 200 ether);
+        vm.stopPrank();
 
         assertEq(collector.claimable(creator, address(token)), 100 ether);
         assertEq(collector.claimable(treasury, address(token)), 100 ether);
+        assertEq(token.balanceOf(address(collector)), 200 ether, "credited exactly what it received");
+    }
+
+    function test_RevertCollectToken_WithoutReceipt() public {
+        token.transfer(curve, 200 ether);
+
+        vm.prank(curve);
+        vm.expectRevert("ERC20: insufficient allowance");
+        collector.collectToken(address(token), creator, 200 ether);
+
+        assertEq(collector.claimable(creator, address(token)), 0, "no receipt, no credit");
+        assertEq(collector.claimable(treasury, address(token)), 0, "no receipt, no credit");
     }
 
     function test_CollectNative_Accumulates() public {
@@ -122,13 +188,13 @@ contract FeeCollectorTest is Test {
         collector.collectNative{value: 1 ether}(address(token), address(0));
         assertEq(collector.claimable(treasury, address(0)), 1 ether);
 
-        token.transfer(address(collector), 10 ether);
-        vm.prank(curve);
-        collector.collectToken(address(token), address(0), 10 ether);
+        _collectTokenFor(address(0), 10 ether);
         assertEq(collector.claimable(treasury, address(token)), 10 ether);
     }
 
     function test_Receive_CreditsTreasury() public {
+        vm.expectEmit(true, true, true, true);
+        emit TreasuryCredited(2 ether);
         vm.prank(curve);
         (bool ok, ) = address(collector).call{value: 2 ether}("");
 
@@ -221,6 +287,39 @@ contract FeeCollectorTest is Test {
         vm.stopPrank();
     }
 
+    function test_RevertRenounceOwnership_Disabled() public {
+        vm.expectRevert("renounce disabled");
+        collector.renounceOwnership();
+        assertEq(collector.owner(), address(this), "owner survives the attempt");
+
+        collector.setTreasury(stranger);
+        assertEq(collector.treasury(), stranger, "admin still reachable");
+    }
+
+    function test_TransferOwnership_NeedsAcceptance() public {
+        address newOwner = makeAddr("newOwner");
+
+        collector.transferOwnership(newOwner);
+        assertEq(collector.owner(), address(this), "unchanged until accepted");
+        assertEq(collector.pendingOwner(), newOwner);
+
+        vm.prank(stranger);
+        vm.expectRevert("Ownable2Step: caller is not the new owner");
+        collector.acceptOwnership();
+
+        vm.prank(newOwner);
+        collector.acceptOwnership();
+        assertEq(collector.owner(), newOwner);
+        assertEq(collector.pendingOwner(), address(0));
+
+        vm.prank(newOwner);
+        collector.setTreasury(stranger);
+        assertEq(collector.treasury(), stranger);
+
+        vm.expectRevert("Ownable: caller is not the owner");
+        collector.setTreasury(treasury);
+    }
+
     function test_SetTreasury_LeavesCreditedBalances() public {
         _collectNative(1 ether);
         address newTreasury = makeAddr("newTreasury");
@@ -251,10 +350,13 @@ contract FeeCollectorTest is Test {
 }
 
 contract FeeCollectorCurveTest is Test {
+    event TreasuryCredited(uint256 amount);
+    event FeeSet(uint256 createFee, uint256 pumpFee);
+
     JunoBondingCurveV1_1 public pump;
     FeeCollector public collector;
+    LpFeeLocker public locker;
     MockV3Factory public factory;
-    MockV3Pool public pool;
     MockPositionManager public posManager;
 
     address public treasury;
@@ -270,22 +372,31 @@ contract FeeCollectorCurveTest is Test {
 
     function setUp() public {
         factory = new MockV3Factory();
-        pool = new MockV3Pool();
         posManager = new MockPositionManager();
-        factory.setMockPool(address(pool));
 
         treasury = makeAddr("treasury");
         alice = makeAddr("alice");
         bob = makeAddr("bob");
         wrappedNative = address(0xFFfFfFffFFfffFFfFFfFFFFFffFFFffffFfFFFfF);
+        vm.etch(wrappedNative, address(new MockWETH9()).code);
         posManager.setWrappedNative(wrappedNative);
         posManager.setPoolFactory(address(factory));
 
-        address predictedCurve = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
-        collector = new FeeCollector(treasury, CREATOR_SHARE_BPS, predictedCurve);
+        uint256 nonce = vm.getNonce(address(this));
+        address predictedLocker = vm.computeCreateAddress(address(this), nonce + 1);
+        address predictedCurve = vm.computeCreateAddress(address(this), nonce + 2);
+        collector = new FeeCollector(treasury, CREATOR_SHARE_BPS, predictedCurve, predictedLocker);
+        locker = new LpFeeLocker(address(collector), address(posManager), wrappedNative);
         pump = new JunoBondingCurveV1_1(
-            wrappedNative, address(factory), address(posManager), address(collector), VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+            wrappedNative,
+            address(factory),
+            address(posManager),
+            address(collector),
+            address(locker),
+            VIRTUAL_AMOUNT,
+            GRADUATION_AMOUNT
         );
+        require(address(pump) == predictedCurve, "curve address mismatch");
         collector.setCurveFee(CREATE_FEE, PUMP_FEE);
 
         vm.deal(alice, 100 ether);
@@ -298,6 +409,8 @@ contract FeeCollectorCurveTest is Test {
     }
 
     function test_CreateFee_GoesWhollyToTreasury() public {
+        vm.expectEmit(true, true, true, true);
+        emit TreasuryCredited(CREATE_FEE);
         _createToken();
         assertEq(collector.claimable(treasury, address(0)), CREATE_FEE);
         assertEq(collector.claimable(alice, address(0)), 0);
@@ -327,7 +440,11 @@ contract FeeCollectorCurveTest is Test {
         uint256 creatorCut = (fee * CREATOR_SHARE_BPS) / 10000;
         assertEq(collector.claimable(alice, tokenAddr), creatorCut);
         assertEq(collector.claimable(treasury, tokenAddr), fee - creatorCut);
-        assertEq(ERC20Token(tokenAddr).balanceOf(address(collector)), fee);
+        assertEq(
+            ERC20Token(tokenAddr).balanceOf(address(collector)),
+            collector.claimable(alice, tokenAddr) + collector.claimable(treasury, tokenAddr),
+            "the collector holds exactly what its ledger owes"
+        );
     }
 
     function test_CreatorClaimsBothSides() public {
@@ -371,6 +488,8 @@ contract FeeCollectorCurveTest is Test {
     }
 
     function test_CurveAdminPassthrough() public {
+        vm.expectEmit(true, true, true, true);
+        emit FeeSet(0.5 ether, 200);
         collector.setCurveFee(0.5 ether, 200);
         assertEq(pump.createFee(), 0.5 ether);
         assertEq(pump.pumpFee(), 200);

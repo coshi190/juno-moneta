@@ -4,10 +4,12 @@ pragma solidity 0.8.19;
 import "forge-std/Test.sol";
 import "../src/JunoBondingCurveV1_1.sol";
 import "../src/FeeCollector.sol";
+import "../src/LpFeeLocker.sol";
 import "../src/ERC20Token.sol";
 import "./mocks/MockV3Factory.sol";
 import "./mocks/MockV3Pool.sol";
 import "./mocks/MockPositionManager.sol";
+import {MockWETH9} from "./mocks/MockPools.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract HandlerReentrantActor {
@@ -35,6 +37,7 @@ contract HandlerReentrantActor {
 
 contract JunoBondingCurveV1_1Handler is Test {
     JunoBondingCurveV1_1 public pump;
+    FeeCollector public collector;
     uint256 public immutable VIRTUAL_AMOUNT;
     uint256 public immutable GRADUATION_AMOUNT;
     uint256 public constant CREATE_FEE = 0.001 ether;
@@ -46,8 +49,9 @@ contract JunoBondingCurveV1_1Handler is Test {
 
     receive() external payable {}
 
-    constructor(JunoBondingCurveV1_1 _pump) {
+    constructor(JunoBondingCurveV1_1 _pump, FeeCollector _collector) {
         pump = _pump;
+        collector = _collector;
         VIRTUAL_AMOUNT = _pump.virtualAmount();
         GRADUATION_AMOUNT = _pump.graduationAmount();
         actors[0] = makeAddr("h_alice");
@@ -119,8 +123,41 @@ contract JunoBondingCurveV1_1Handler is Test {
         if (pump.isGraduate(t)) return;
         (uint256 nat,) = pump.pumpReserve(t);
         if (nat < GRADUATION_AMOUNT) return;
-        try pump.graduate(t) returns (bool) {} catch {}
+        vm.recordLogs();
+        try pump.graduate(t) returns (bool) {
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            bytes32 sig = keccak256("Graduation(address,address,uint256,uint128,uint256,uint256)");
+            for (uint256 i; i < logs.length; i++) {
+                if (logs[i].topics.length > 0 && logs[i].topics[0] == sig) {
+                    (, uint256 tokenId,,,) =
+                        abi.decode(logs[i].data, (address, uint256, uint128, uint256, uint256));
+                    graduatedIds.push(tokenId);
+                    break;
+                }
+            }
+        } catch {}
     }
+
+    function graduatedIdCount() external view returns (uint256) {
+        return graduatedIds.length;
+    }
+
+    function graduatedIdAt(uint256 i) external view returns (uint256) {
+        return graduatedIds[i];
+    }
+
+    function setPumpFee(uint256 seed) public {
+        collector.setCurveFee(CREATE_FEE, bound(seed, 0, 500));
+    }
+
+    function dirtyPositionManager(uint256 amountSeed) public {
+        uint256 amount = amountSeed % 1 ether;
+        if (amount == 0) return;
+        address manager = address(pump.v3posManager());
+        vm.deal(manager, manager.balance + amount);
+    }
+
+    uint256[] internal graduatedIds;
 
     function tokenCount() external view returns (uint256) {
         return tokens.length;
@@ -142,10 +179,10 @@ contract JunoBondingCurveV1_1Handler is Test {
 contract JunoBondingCurveV1_1InvariantTest is Test {
     JunoBondingCurveV1_1 public pump;
     MockV3Factory public factory;
-    MockV3Pool public pool;
     MockPositionManager public posManager;
     JunoBondingCurveV1_1Handler public handler;
     FeeCollector public collector;
+    LpFeeLocker public locker;
     uint256 internal virtualOffset;
 
     address public wrappedNative = address(0xFFfFfFffFFfffFFfFFfFFFFFffFFFffffFfFFFfF);
@@ -154,28 +191,40 @@ contract JunoBondingCurveV1_1InvariantTest is Test {
 
     function setUp() public {
         factory = new MockV3Factory();
-        pool = new MockV3Pool();
         posManager = new MockPositionManager();
-        factory.setMockPool(address(pool));
+        vm.etch(wrappedNative, address(new MockWETH9()).code);
         posManager.setWrappedNative(wrappedNative);
         posManager.setPoolFactory(address(factory));
 
-        address predictedCurve = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
-        collector = new FeeCollector(address(this), 5000, predictedCurve);
+        uint256 nonce = vm.getNonce(address(this));
+        address predictedLocker = vm.computeCreateAddress(address(this), nonce + 1);
+        address predictedCurve = vm.computeCreateAddress(address(this), nonce + 2);
+        collector = new FeeCollector(address(this), 5000, predictedCurve, predictedLocker);
+        locker = new LpFeeLocker(address(collector), address(posManager), wrappedNative);
         pump = new JunoBondingCurveV1_1(
-            wrappedNative, address(factory), address(posManager), address(collector), 0.34 ether, 0.4 ether
+            wrappedNative,
+            address(factory),
+            address(posManager),
+            address(collector),
+            address(locker),
+            0.34 ether,
+            0.4 ether
         );
+        require(address(pump) == predictedCurve, "curve address mismatch");
         collector.setCurveFee(0.001 ether, 100);
 
         virtualOffset = pump.curveReserve() - pump.INITIALTOKEN();
 
-        handler = new JunoBondingCurveV1_1Handler(pump);
+        handler = new JunoBondingCurveV1_1Handler(pump, collector);
+        collector.transferOwnership(address(handler));
 
-        bytes4[] memory selectors = new bytes4[](4);
+        bytes4[] memory selectors = new bytes4[](6);
         selectors[0] = handler.createToken.selector;
         selectors[1] = handler.buy.selector;
         selectors[2] = handler.sell.selector;
         selectors[3] = handler.graduate.selector;
+        selectors[4] = handler.dirtyPositionManager.selector;
+        selectors[5] = handler.setPumpFee.selector;
         targetContract(address(handler));
         targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
     }
@@ -211,7 +260,7 @@ contract JunoBondingCurveV1_1InvariantTest is Test {
             (uint256 nat,) = pump.pumpReserve(t);
             owed += nat;
         }
-        assertGe(address(pump).balance, owed);
+        assertEq(address(pump).balance, owed, "the curve holds live reserves and nothing else");
     }
 
     function invariant_TokenBacking() public {
@@ -221,6 +270,25 @@ contract JunoBondingCurveV1_1InvariantTest is Test {
             if (pump.isGraduate(t)) continue;
             (, uint256 tok) = pump.pumpReserve(t);
             assertGe(ERC20Token(t).balanceOf(address(pump)) + virtualOffset, tok);
+        }
+    }
+
+    function invariant_LockerHoldsEveryGraduatedPosition() public {
+        uint256 graduated;
+        uint256 n = handler.tokenCount();
+        for (uint256 i; i < n; i++) {
+            if (pump.isGraduate(handler.tokenAt(i))) graduated++;
+        }
+        assertEq(
+            posManager.balanceOf(address(locker)), graduated, "every graduation must leave its position in the locker"
+        );
+        assertEq(handler.graduatedIdCount(), graduated, "every graduation published its id");
+        for (uint256 i; i < graduated; i++) {
+            assertEq(
+                posManager.ownerOf(handler.graduatedIdAt(i)),
+                address(locker),
+                "a locked position must never change hands"
+            );
         }
     }
 
@@ -255,6 +323,19 @@ contract JunoBondingCurveV1_1InvariantTest is Test {
             owed += collector.claimable(handler.actorAt(i), address(0));
         }
         assertGe(address(collector).balance, owed);
+    }
+
+    function invariant_CollectorTokenSolvency() public {
+        uint256 n = handler.tokenCount();
+        uint256 a = handler.actorCount();
+        for (uint256 i; i < n; i++) {
+            address t = handler.tokenAt(i);
+            uint256 owed = collector.claimable(address(this), t);
+            for (uint256 j; j < a; j++) {
+                owed += collector.claimable(handler.actorAt(j), t);
+            }
+            assertGe(ERC20Token(t).balanceOf(address(collector)), owed);
+        }
     }
 
     function invariant_CurveKNeverDecreases() public {

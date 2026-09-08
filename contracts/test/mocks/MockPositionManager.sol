@@ -5,6 +5,7 @@ pragma abicoder v2;
 import "../../src/interfaces/v3-periphery/INonfungiblePositionManager.sol";
 import "../../src/interfaces/v3-core/IUniswapV3Factory.sol";
 import "../../src/interfaces/v3-core/IUniswapV3Pool.sol";
+import "../../src/interfaces/IWETH9.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./V3LiquidityMath.sol";
 
@@ -16,10 +17,23 @@ contract MockPositionManager is INonfungiblePositionManager {
 
     address public wrappedNative;
     address public poolFactory;
+    uint256 public nextTokenId = 1;
+
+    struct Position {
+        address token0;
+        address token1;
+        uint128 liquidity;
+        uint128 owed0;
+        uint128 owed1;
+    }
+
+    mapping(uint256 => Position) internal _positions;
+    mapping(uint256 => address) internal _owners;
+    mapping(address => uint256) internal _balances;
+
     bool public partialFill;
     uint256 public nativeUsed;
     uint256 public tokenUsed;
-    uint256 internal ethToRefund;
 
     function setWrappedNative(address _wrappedNative) external {
         wrappedNative = _wrappedNative;
@@ -33,6 +47,11 @@ contract MockPositionManager is INonfungiblePositionManager {
         partialFill = true;
         nativeUsed = _nativeUsed;
         tokenUsed = _tokenUsed;
+    }
+
+    function setPendingFees(uint256 _tokenId, uint128 _amount0, uint128 _amount1) external {
+        _positions[_tokenId].owed0 = _amount0;
+        _positions[_tokenId].owed1 = _amount1;
     }
 
     function mint(INonfungiblePositionManager.MintParams calldata params)
@@ -59,15 +78,22 @@ contract MockPositionManager is INonfungiblePositionManager {
         lastAmount0 = amount0;
         lastAmount1 = amount1;
 
+        tokenId = nextTokenId++;
+        liquidity = 1e18;
+        _positions[tokenId] =
+            Position({token0: params.token0, token1: params.token1, liquidity: liquidity, owed0: 0, owed1: 0});
+        _owners[tokenId] = params.recipient;
+        _balances[params.recipient]++;
+
         uint256 usedNative = token0IsNative ? amount0 : amount1;
         uint256 usedToken = token0IsNative ? amount1 : amount0;
 
         address launchToken = token0IsNative ? params.token1 : params.token0;
         IERC20(launchToken).transferFrom(msg.sender, address(this), usedToken);
 
-        ethToRefund = msg.value - usedNative;
+        IWETH9(wrappedNative).deposit{value: usedNative}();
 
-        return (1, 0, amount0, amount1);
+        return (tokenId, liquidity, amount0, amount1);
     }
 
     function _amountsAtPoolPrice(INonfungiblePositionManager.MintParams calldata params)
@@ -91,25 +117,13 @@ contract MockPositionManager is INonfungiblePositionManager {
         );
     }
 
-    function positions(uint256)
+    function positions(uint256 tokenId)
         external
-        pure
-        returns (
-            uint96 nonce,
-            address operator,
-            address token0,
-            address token1,
-            uint24 fee,
-            int24 tickLower,
-            int24 tickUpper,
-            uint128 liquidity,
-            uint256 feeGrowthInside0LastX128,
-            uint256 feeGrowthInside1LastX128,
-            uint128 tokensOwed0,
-            uint128 tokensOwed1
-        )
+        view
+        returns (uint96, address, address, address, uint24, int24, int24, uint128, uint256, uint256, uint128, uint128)
     {
-        return (0, address(0), address(0), address(0), 0, 0, 0, 0, 0, 0, 0, 0);
+        Position memory pos = _positions[tokenId];
+        return (0, address(0), pos.token0, pos.token1, 10000, -887200, 887200, pos.liquidity, 0, 0, pos.owed0, pos.owed1);
     }
 
     function increaseLiquidity(IncreaseLiquidityParams calldata)
@@ -128,8 +142,18 @@ contract MockPositionManager is INonfungiblePositionManager {
         return (0, 0);
     }
 
-    function collect(CollectParams calldata) external payable returns (uint256 amount0, uint256 amount1) {
-        return (0, 0);
+    function collect(CollectParams calldata params) external payable returns (uint256 amount0, uint256 amount1) {
+        require(_owners[params.tokenId] == msg.sender, "Not approved");
+        Position memory pos = _positions[params.tokenId];
+
+        amount0 = pos.owed0 > params.amount0Max ? params.amount0Max : pos.owed0;
+        amount1 = pos.owed1 > params.amount1Max ? params.amount1Max : pos.owed1;
+
+        _positions[params.tokenId].owed0 = pos.owed0 - uint128(amount0);
+        _positions[params.tokenId].owed1 = pos.owed1 - uint128(amount1);
+
+        if (amount0 > 0) IERC20(pos.token0).transfer(params.recipient, amount0);
+        if (amount1 > 0) IERC20(pos.token1).transfer(params.recipient, amount1);
     }
 
     function burn(uint256) external payable {}
@@ -141,8 +165,7 @@ contract MockPositionManager is INonfungiblePositionManager {
     function unwrapWETH9(uint256, address) external payable {}
 
     function refundETH() external payable {
-        uint256 amt = ethToRefund;
-        ethToRefund = 0;
+        uint256 amt = address(this).balance;
         if (amt > 0) {
             (bool ok,) = msg.sender.call{value: amt}("");
             require(ok, "refund failed");
@@ -183,12 +206,12 @@ contract MockPositionManager is INonfungiblePositionManager {
         return 0;
     }
 
-    function balanceOf(address) external pure returns (uint256) {
-        return 0;
+    function balanceOf(address owner) external view returns (uint256) {
+        return _balances[owner];
     }
 
-    function ownerOf(uint256) external pure returns (address) {
-        return address(0);
+    function ownerOf(uint256 tokenId) external view returns (address) {
+        return _owners[tokenId];
     }
 
     function safeTransferFrom(address, address, uint256) external pure {}

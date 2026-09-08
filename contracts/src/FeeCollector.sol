@@ -1,19 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity 0.8.19;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable2Step.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 interface ICurveAdmin {
     function setFee(uint256 _createFee, uint256 _pumpFee) external returns (bool);
 }
 
-contract FeeCollector is Ownable {
+contract FeeCollector is Ownable2Step {
     using SafeERC20 for IERC20;
 
     uint256 public constant BPS_DENOMINATOR = 10000;
 
     address public immutable curve;
+    address public immutable lpLocker;
     address public treasury;
     uint256 public creatorShareBps;
 
@@ -27,6 +28,14 @@ contract FeeCollector is Ownable {
         uint256 treasuryAmount,
         bool isNative
     );
+    event LpFeeShared(
+        address indexed tokenAddr,
+        address indexed creator,
+        address indexed asset,
+        uint256 creatorAmount,
+        uint256 treasuryAmount
+    );
+    event TreasuryCredited(uint256 amount);
     event Claimed(address indexed account, address indexed tokenAddr, uint256 amount);
     event CreatorShareSet(uint256 bps);
     event TreasurySet(address treasury);
@@ -36,17 +45,25 @@ contract FeeCollector is Ownable {
         _;
     }
 
-    constructor(address _treasury, uint256 _creatorShareBps, address _curve) {
+    modifier onlyLpLocker() {
+        require(msg.sender == lpLocker, "only lp locker");
+        _;
+    }
+    
+    constructor(address _treasury, uint256 _creatorShareBps, address _curve, address _lpLocker) {
         require(_treasury != address(0), "invalid treasury");
         require(_curve != address(0), "invalid curve");
+        require(_lpLocker != address(0), "invalid lp locker");
         require(_creatorShareBps <= BPS_DENOMINATOR, "share too high");
         treasury = _treasury;
         creatorShareBps = _creatorShareBps;
         curve = _curve;
+        lpLocker = _lpLocker;
     }
 
     receive() external payable onlyCurve {
         claimable[treasury][address(0)] += msg.value;
+        emit TreasuryCredited(msg.value);
     }
 
     function collectNative(address _tokenAddr, address _creator) external payable onlyCurve {
@@ -54,16 +71,36 @@ contract FeeCollector is Ownable {
     }
 
     function collectToken(address _tokenAddr, address _creator, uint256 _amount) external onlyCurve {
+        IERC20(_tokenAddr).safeTransferFrom(curve, address(this), _amount);
         _share(_tokenAddr, _creator, _amount, _tokenAddr);
     }
 
+    function collectAsset(address _tokenAddr, address _creator, address _asset, uint256 _amount)
+        external
+        onlyLpLocker
+    {
+        IERC20(_asset).safeTransferFrom(msg.sender, address(this), _amount);
+        (uint256 creatorCut, uint256 treasuryCut) = _credit(_creator, _asset, _amount);
+        emit LpFeeShared(_tokenAddr, _creator, _asset, creatorCut, treasuryCut);
+    }
+
     function _share(address _tokenAddr, address _creator, uint256 _amount, address _feeAsset) private {
-        uint256 creatorCut;
+        (uint256 creatorCut, uint256 treasuryCut) = _credit(_creator, _feeAsset, _amount);
+        emit FeeShared(_tokenAddr, _creator, creatorCut, treasuryCut, _feeAsset == address(0));
+    }
+
+    function _credit(address _creator, address _feeAsset, uint256 _amount)
+        private
+        returns (uint256 creatorCut, uint256 treasuryCut)
+    {
         if (_creator != address(0)) creatorCut = (_amount * creatorShareBps) / BPS_DENOMINATOR;
-        uint256 treasuryCut = _amount - creatorCut;
+        treasuryCut = _amount - creatorCut;
         if (creatorCut > 0) claimable[_creator][_feeAsset] += creatorCut;
         if (treasuryCut > 0) claimable[treasury][_feeAsset] += treasuryCut;
-        emit FeeShared(_tokenAddr, _creator, creatorCut, treasuryCut, _feeAsset == address(0));
+    }
+
+    function renounceOwnership() public pure override {
+        revert("renounce disabled");
     }
 
     function setCreatorShareBps(uint256 _bps) external onlyOwner {

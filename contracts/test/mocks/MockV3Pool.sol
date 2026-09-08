@@ -15,6 +15,7 @@ contract MockV3Pool is IUniswapV3Pool {
     }
 
     function initialize(uint160 sqrtPriceX96) external {
+        require(storedSqrtPriceX96 == 0, "AI");
         require(sqrtPriceX96 >= MIN_SQRT_RATIO && sqrtPriceX96 < MAX_SQRT_RATIO, "R");
         storedSqrtPriceX96 = sqrtPriceX96;
         initialized = true;

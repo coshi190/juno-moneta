@@ -4,6 +4,7 @@ pragma solidity 0.8.19;
 import "forge-std/Test.sol";
 import "../src/JunoBondingCurveV1_1.sol";
 import "../src/FeeCollector.sol";
+import "../src/LpFeeLocker.sol";
 import "../src/ERC20Token.sol";
 import "../src/interfaces/v3-core/IUniswapV3Factory.sol";
 import "../src/interfaces/v3-core/IUniswapV3Pool.sol";
@@ -37,7 +38,8 @@ contract JunoBondingCurveV1_1ForkTest is Test {
     address constant V3_SWAP_ROUTER = 0x3F7582E36843FF79F173c7DC19f517832496f2D8;
     address constant KKUB = 0x67eBD850304c70d983B2d1b93ea79c7CD6c3F6b5;
     uint24 constant FEE_TIER = 10000;
-
+    uint256 constant FORK_BLOCK = 35_019_116;
+    uint256 constant MAX_MARGINAL_BPS = 110;
     uint256 constant VIRTUAL_AMOUNT = 3400 ether;
     uint256 constant GRADUATION_AMOUNT = 4000 ether;
     uint256 constant CREATE_FEE = 0.1 ether;
@@ -46,6 +48,7 @@ contract JunoBondingCurveV1_1ForkTest is Test {
 
     JunoBondingCurveV1_1 internal pump;
     FeeCollector internal collector;
+    LpFeeLocker internal locker;
     address internal treasury;
     address internal alice;
     address internal attacker;
@@ -53,19 +56,30 @@ contract JunoBondingCurveV1_1ForkTest is Test {
     bool internal enabled;
 
     function setUp() public {
-        enabled = vm.envOr("FORK_TESTS", false);
-        if (!enabled) return;
+        string memory rpc = vm.envOr("KUB_MAINNET_RPC", string(""));
+        enabled = vm.envOr("FORK_TESTS", false) && bytes(rpc).length > 0;
+        if (!enabled) {
+            if (vm.envOr("FORK_TESTS", false)) {
+                console2.log("fork tests need KUB_MAINNET_RPC set to an archive endpoint; skipping");
+            }
+            return;
+        }
 
-        vm.createSelectFork(vm.envOr("KUB_MAINNET_RPC", string("https://rpc.bitkubchain.io")));
+        uint256 forkBlock = vm.envOr("KUB_FORK_BLOCK", FORK_BLOCK);
+        vm.createSelectFork(rpc, forkBlock);
+        assertEq(block.number, forkBlock, "fork did not land on the pinned block");
 
         treasury = makeAddr("treasury");
         alice = makeAddr("alice");
         attacker = makeAddr("attacker");
 
-        address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
-        collector = new FeeCollector(treasury, CREATOR_SHARE_BPS, predicted);
+        uint256 nonce = vm.getNonce(address(this));
+        address predictedLocker = vm.computeCreateAddress(address(this), nonce + 1);
+        address predicted = vm.computeCreateAddress(address(this), nonce + 2);
+        collector = new FeeCollector(treasury, CREATOR_SHARE_BPS, predicted, predictedLocker);
+        locker = new LpFeeLocker(address(collector), V3_POS_MANAGER, KKUB);
         pump = new JunoBondingCurveV1_1(
-            KKUB, V3_FACTORY, V3_POS_MANAGER, address(collector), VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+            KKUB, V3_FACTORY, V3_POS_MANAGER, address(collector), address(locker), VIRTUAL_AMOUNT, GRADUATION_AMOUNT
         );
         require(address(pump) == predicted, "curve address mismatch");
         collector.setCurveFee(CREATE_FEE, PUMP_FEE);
@@ -162,7 +176,6 @@ contract JunoBondingCurveV1_1ForkTest is Test {
         address tokenAddr = _tokenAtCap();
         assertEq(_poolOf(tokenAddr), address(0), "pool should not exist yet");
 
-        uint256 burnedNftsBefore = INonfungiblePositionManager(V3_POS_MANAGER).balanceOf(address(0xdead));
         uint256 treasuryBefore = collector.claimable(treasury, address(0));
 
         pump.graduate(tokenAddr);
@@ -174,9 +187,14 @@ contract JunoBondingCurveV1_1ForkTest is Test {
         assertGt(IUniswapV3Pool(pool).liquidity(), 0, "pool must hold the seeded liquidity");
 
         assertEq(
-            INonfungiblePositionManager(V3_POS_MANAGER).balanceOf(address(0xdead)),
-            burnedNftsBefore + 1,
-            "LP position must be burned to 0xdead"
+            INonfungiblePositionManager(V3_POS_MANAGER).balanceOf(address(locker)),
+            1,
+            "LP position must be locked in the LpFeeLocker"
+        );
+        assertEq(
+            INonfungiblePositionManager(V3_POS_MANAGER).ownerOf(_lockedTokenId()),
+            address(locker),
+            "the locker must own the position it was minted"
         );
 
         uint256 diverted = collector.claimable(treasury, address(0)) - treasuryBefore;
@@ -335,6 +353,86 @@ contract JunoBondingCurveV1_1ForkTest is Test {
 
         pump.graduate(tokenAddr);
         assertTrue(pump.isGraduate(tokenAddr), "the runbook must actually unstick the token");
+    }
+
+    function _lockedTokenId() internal view returns (uint256) {
+        return INonfungiblePositionManager(V3_POS_MANAGER).tokenOfOwnerByIndex(address(locker), 0);
+    }
+
+    function _tradeBothWays(address tokenAddr, address who, uint256 amountNative) internal {
+        vm.startPrank(who);
+        IKKUB(KKUB).deposit{value: amountNative}();
+        IERC20(KKUB).approve(V3_SWAP_ROUTER, type(uint256).max);
+        uint256 bought = ISwapRouter(V3_SWAP_ROUTER).exactInputSingle(
+            ISwapRouter.ExactInputSingleParams({
+                tokenIn: KKUB,
+                tokenOut: tokenAddr,
+                fee: FEE_TIER,
+                recipient: who,
+                amountIn: amountNative,
+                amountOutMinimum: 0,
+                sqrtPriceLimitX96: 0
+            })
+        );
+        IERC20(tokenAddr).approve(V3_SWAP_ROUTER, type(uint256).max);
+        ISwapRouter(V3_SWAP_ROUTER).exactInputSingle(
+            ISwapRouter.ExactInputSingleParams({
+                tokenIn: tokenAddr,
+                tokenOut: KKUB,
+                fee: FEE_TIER,
+                recipient: who,
+                amountIn: bought,
+                amountOutMinimum: 0,
+                sqrtPriceLimitX96: 0
+            })
+        );
+        vm.stopPrank();
+    }
+
+    function testFork_LpFees_ReachCreatorAndTreasury() public onFork {
+        address tokenAddr = _tokenAtCap();
+        pump.graduate(tokenAddr);
+        uint256 tokenId = _lockedTokenId();
+
+        _tradeBothWays(tokenAddr, attacker, 100 ether);
+
+        (,,,,,,, uint128 liquidityBefore,,,,) = INonfungiblePositionManager(V3_POS_MANAGER).positions(tokenId);
+        uint256 kkubBefore = collector.claimable(treasury, KKUB) + collector.claimable(alice, KKUB);
+
+        (uint256 amount0, uint256 amount1) = locker.collect(tokenId);
+        assertGt(amount0, 0, "the token0 leg must have earned fees");
+        assertGt(amount1, 0, "the token1 leg must have earned fees");
+
+        uint256 creatorKkub = collector.claimable(alice, KKUB);
+        uint256 treasuryKkub = collector.claimable(treasury, KKUB);
+        uint256 creatorToken = collector.claimable(alice, tokenAddr);
+        uint256 treasuryToken = collector.claimable(treasury, tokenAddr);
+
+        assertEq(creatorKkub + treasuryKkub - kkubBefore, tokenAddr < KKUB ? amount1 : amount0);
+        assertEq(creatorToken + treasuryToken, tokenAddr < KKUB ? amount0 : amount1);
+        assertEq(creatorKkub, ((creatorKkub + treasuryKkub) * CREATOR_SHARE_BPS) / 10000, "creator gets half the KKUB");
+        assertEq(
+            creatorToken, ((creatorToken + treasuryToken) * CREATOR_SHARE_BPS) / 10000, "creator gets half the token"
+        );
+
+        (,,,,,,, uint128 liquidityAfter,,,,) = INonfungiblePositionManager(V3_POS_MANAGER).positions(tokenId);
+        assertEq(liquidityAfter, liquidityBefore, "collect must not touch the principal");
+        assertEq(
+            INonfungiblePositionManager(V3_POS_MANAGER).ownerOf(tokenId),
+            address(locker),
+            "the position must stay locked"
+        );
+
+        uint256 aliceKkubBefore = IKKUB(KKUB).balanceOf(alice);
+        uint256 aliceTokenBefore = ERC20Token(tokenAddr).balanceOf(alice);
+        vm.startPrank(alice);
+        collector.claim(KKUB);
+        collector.claim(tokenAddr);
+        vm.stopPrank();
+        assertEq(
+            IKKUB(KKUB).balanceOf(alice) - aliceKkubBefore, creatorKkub, "the creator can withdraw its LP fee share"
+        );
+        assertEq(ERC20Token(tokenAddr).balanceOf(alice) - aliceTokenBefore, creatorToken);
     }
 
     function _repairPrice(address tokenAddr, address rescuer, uint160 target) internal {
@@ -511,16 +609,26 @@ contract JunoBondingCurveV1_1ForkTest is Test {
             int256 atEdge = _netAt(tail, wantToken0, maxSkew);
             int256 atHalf = _netAt(tail, wantToken0, maxSkew / 2);
             int256 atTarget = _netAt(tail, wantToken0, 0);
+            int256 marginal = atEdge - atTarget;
+            int256 marginalBps = (marginal * 10000) / int256(tail);
 
             emit log_named_string("ordering                     ", wantToken0 ? "token0" : "token1");
             emit log_named_uint("  max admitted skew (bps)    ", maxSkew);
             emit log_named_decimal_int("  net at the band edge       ", atEdge, 18);
             emit log_named_decimal_int("  net at half the band       ", atHalf, 18);
             emit log_named_decimal_int("  net on target              ", atTarget, 18);
+            emit log_named_decimal_int("  marginal gain from skewing ", marginal, 18);
+            emit log_named_int("  as bps of the position     ", marginalBps);
+            emit log_named_uint("  share of band captured (%) ", uint256(marginalBps) * 100 / maxSkew);
 
             assertLe(atEdge, int256(0), "the band edge must not be profitable at 99% minimums");
             assertLe(atHalf, int256(0), "half the band must not be profitable");
             assertLe(atTarget, int256(0), "an on-target graduation must not be profitable");
+            assertLe(
+                marginalBps,
+                int256(MAX_MARGINAL_BPS),
+                "pre-initializing must not pay an exiting holder more than ~1% of their position"
+            );
         }
     }
 

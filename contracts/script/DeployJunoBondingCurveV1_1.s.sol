@@ -4,6 +4,7 @@ pragma solidity 0.8.19;
 import "forge-std/Script.sol";
 import "../src/JunoBondingCurveV1_1.sol";
 import "../src/FeeCollector.sol";
+import "../src/LpFeeLocker.sol";
 
 contract DeployJunoBondingCurveV1_1 is Script {
     address constant WRAPPED_NATIVE_TESTNET = 0x700D3ba307E1256e509eD3E45D6f9dff441d6907;
@@ -28,11 +29,25 @@ contract DeployJunoBondingCurveV1_1 is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        address predictedCurve = vm.computeCreateAddress(deployer, vm.getNonce(deployer) + 1);
-        FeeCollector collector = new FeeCollector(treasury, CREATOR_SHARE_BPS, predictedCurve);
+        // the collector is keyed to both the curve and the locker immutably, so both addresses are
+        // predicted from the deployer's nonce; the curve is deployed last because it checks both
+        // have code, and the locker checks the collector names it
+        uint256 nonce = vm.getNonce(deployer);
+        address predictedLocker = vm.computeCreateAddress(deployer, nonce + 1);
+        address predictedCurve = vm.computeCreateAddress(deployer, nonce + 2);
+        FeeCollector collector =
+            new FeeCollector(treasury, CREATOR_SHARE_BPS, predictedCurve, predictedLocker);
+        LpFeeLocker locker = new LpFeeLocker(address(collector), v3PosManager, wrappedNative);
         JunoBondingCurveV1_1 pump = new JunoBondingCurveV1_1(
-            wrappedNative, v3Factory, v3PosManager, address(collector), VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+            wrappedNative,
+            v3Factory,
+            v3PosManager,
+            address(collector),
+            address(locker),
+            VIRTUAL_AMOUNT,
+            GRADUATION_AMOUNT
         );
+        require(address(locker) == predictedLocker, "locker address mismatch");
         require(address(pump) == predictedCurve, "curve address mismatch");
         collector.setCurveFee(CREATE_FEE, PUMP_FEE);
 
@@ -40,8 +55,12 @@ contract DeployJunoBondingCurveV1_1 is Script {
 
         console.log("JunoBondingCurveV1_1 deployed at:", address(pump));
         console.log("FeeCollector deployed at:", address(collector));
+        console.log("LpFeeLocker deployed at:", address(locker));
         console.log("feeCollector:", pump.feeCollector());
         console.log("collector.curve:", collector.curve());
+        console.log("collector.lpLocker:", collector.lpLocker());
+        console.log("curve.lpLocker:", pump.lpLocker());
+        console.log("locker.curve:", locker.curve());
         console.log("pumpFee:", pump.pumpFee());
         console.log("treasury:", collector.treasury());
     }

@@ -7,6 +7,8 @@ import "../src/ERC20Token.sol";
 import "./mocks/MockV3Factory.sol";
 import "./mocks/MockV3Pool.sol";
 import "./mocks/MockPositionManager.sol";
+import {MockWETH9} from "./mocks/MockPools.sol";
+import {LpLockerStub} from "./mocks/MockLpLocker.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract JunoBondingCurveV1_1Test is Test {
@@ -16,9 +18,11 @@ contract JunoBondingCurveV1_1Test is Test {
         address indexed tokenAddr,
         uint256 amountIn,
         uint256 amountOut,
+        uint256 feeAmount,
         uint256 reserveIn,
         uint256 reserveOut
     );
+    event FeeSet(uint256 createFee, uint256 pumpFee);
     event Creation(
         address indexed creator,
         address tokenAddr,
@@ -29,14 +33,21 @@ contract JunoBondingCurveV1_1Test is Test {
         string link3,
         uint256 createdTime
     );
-    event Graduation(address indexed sender, address tokenAddr);
+    event Graduation(
+        address indexed sender,
+        address tokenAddr,
+        uint256 tokenId,
+        uint128 liquidity,
+        uint256 amount0,
+        uint256 amount1
+    );
 
     JunoBondingCurveV1_1 public pump;
     MockV3Factory public factory;
-    MockV3Pool public pool;
     MockPositionManager public posManager;
 
     address public feeCollector;
+    address public lpLocker;
     address public alice;
     address public bob;
     address public wrappedNative;
@@ -53,21 +64,25 @@ contract JunoBondingCurveV1_1Test is Test {
     receive() external payable {}
     fallback() external payable {}
 
+    function collectToken(address _tokenAddr, address, uint256 _amount) external {
+        ERC20Token(_tokenAddr).transferFrom(msg.sender, address(this), _amount);
+    }
+
     function setUp() public {
         factory = new MockV3Factory();
-        pool = new MockV3Pool();
         posManager = new MockPositionManager();
 
         feeCollector = address(this);
+        lpLocker = address(new LpLockerStub());
         alice = makeAddr("alice");
         bob = makeAddr("bob");
         wrappedNative = address(0xFFfFfFffFFfffFFfFFfFFFFFffFFFffffFfFFFfF);
+        vm.etch(wrappedNative, address(new MockWETH9()).code);
 
-        factory.setMockPool(address(pool));
         posManager.setWrappedNative(wrappedNative);
         posManager.setPoolFactory(address(factory));
         pump = new JunoBondingCurveV1_1(
-            wrappedNative, address(factory), address(posManager), feeCollector, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+            wrappedNative, address(factory), address(posManager), feeCollector, lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
         );
         pump.setFee(CREATE_FEE, PUMP_FEE);
 
@@ -86,6 +101,12 @@ contract JunoBondingCurveV1_1Test is Test {
         );
     }
 
+    function _poolOf(address tokenAddr) internal view returns (MockV3Pool) {
+        (address tkn0, address tkn1) =
+            tokenAddr < wrappedNative ? (tokenAddr, wrappedNative) : (wrappedNative, tokenAddr);
+        return MockV3Pool(factory.getPool(tkn0, tkn1, 10000));
+    }
+
     function _computeBuyOutput(uint256 msgValue, address tokenAddr) internal view returns (uint256) {
         uint256 feeAmount = (msgValue * pump.pumpFee()) / 10000;
         uint256 amountInAfterFee = msgValue - feeAmount;
@@ -102,7 +123,7 @@ contract JunoBondingCurveV1_1Test is Test {
 
     function test_RevertSetFee_NonFeeCollector() public {
         vm.prank(alice);
-        vm.expectRevert();
+        vm.expectRevert("only fee collector");
         pump.setFee(0, 0);
     }
 
@@ -210,7 +231,7 @@ contract JunoBondingCurveV1_1Test is Test {
         uint256 expectedTokenAfter = tokenBefore - expectedOut;
 
         vm.expectEmit(true, true, true, true);
-        emit Swap(alice, true, tokenAddr, amountInAfterFee, expectedOut, expectedNativeAfter, expectedTokenAfter);
+        emit Swap(alice, true, tokenAddr, amountInAfterFee, expectedOut, feeAmount, expectedNativeAfter, expectedTokenAfter);
 
         vm.prank(alice);
         pump.buy{value: buyAmount}(tokenAddr, 0);
@@ -322,10 +343,45 @@ contract JunoBondingCurveV1_1Test is Test {
         uint256 expectedNativeAfter = nativeBefore - expectedOut;
 
         vm.expectEmit(true, true, true, true);
-        emit Swap(alice, false, tokenAddr, amountInAfterFee, expectedOut, expectedTokenAfter, expectedNativeAfter);
+        emit Swap(alice, false, tokenAddr, amountInAfterFee, expectedOut, feeAmount, expectedTokenAfter, expectedNativeAfter);
 
         vm.prank(alice);
         pump.sell(tokenAddr, sellAmount, 0);
+    }
+
+    function _lastSwapGross() internal returns (uint256 gross) {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 sig = keccak256("Swap(address,bool,address,uint256,uint256,uint256,uint256,uint256)");
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] == sig) {
+                (uint256 amountIn, , uint256 feeAmount, , ) =
+                    abi.decode(logs[i].data, (uint256, uint256, uint256, uint256, uint256));
+                return amountIn + feeAmount;
+            }
+        }
+        revert("no Swap log");
+    }
+
+    function test_Buy_SwapEventCarriesGrossNativeIn() public {
+        address tokenAddr = _createToken();
+        uint256 buyAmount = 0.1 ether;
+
+        vm.recordLogs();
+        vm.prank(alice);
+        pump.buy{value: buyAmount}(tokenAddr, 0);
+
+        assertEq(_lastSwapGross(), buyAmount, "buyer's gross native is recoverable from Swap alone");
+    }
+
+    function test_Sell_SwapEventCarriesGrossTokenIn() public {
+        address tokenAddr = _setupSell();
+        uint256 sellAmount = 1000 ether;
+
+        vm.recordLogs();
+        vm.prank(alice);
+        pump.sell(tokenAddr, sellAmount, 0);
+
+        assertEq(_lastSwapGross(), sellAmount, "seller's gross token outflow is recoverable from Swap alone");
     }
 
     function test_RevertSell_InsufficientOutput() public {
@@ -381,7 +437,7 @@ contract JunoBondingCurveV1_1Test is Test {
             10000
         );
         assertTrue(poolAddr != address(0));
-        assertTrue(pool.initialized());
+        assertTrue(_poolOf(tokenAddr).initialized());
     }
 
     function test_Graduate_InitializesPoolWithCorrectSqrtPriceX96() public {
@@ -392,7 +448,7 @@ contract JunoBondingCurveV1_1Test is Test {
 
         pump.graduate(tokenAddr);
 
-        uint160 sqrtP = pool.storedSqrtPriceX96();
+        uint160 sqrtP = _poolOf(tokenAddr).storedSqrtPriceX96();
         assertGt(sqrtP, 0);
         assertLt(sqrtP, 2 ** 96);
         assertGe(sqrtP, MIN_SQRT_RATIO);
@@ -424,7 +480,7 @@ contract JunoBondingCurveV1_1Test is Test {
 
         pump.graduate(tokenAddr);
 
-        assertTrue(pool.initialized());
+        assertTrue(_poolOf(tokenAddr).initialized());
     }
 
     function test_Graduate_MintsLPWithCorrectParams() public {
@@ -472,8 +528,9 @@ contract JunoBondingCurveV1_1Test is Test {
         assertEq(_tickUpper, 887200);
         assertEq(_amount0Min, (_amount0Desired * 99) / 100);
         assertEq(_amount1Min, (_amount1Desired * 99) / 100);
-        assertEq(_recipient, address(0xdead));
+        assertEq(_recipient, lpLocker);
         assertEq(_deadline, block.timestamp + 1 hours);
+        assertEq(posManager.ownerOf(1), lpLocker, "the position must land in the locker");
     }
 
     function test_Graduate_DeletesReservesAndSetsFlag() public {
@@ -506,8 +563,82 @@ contract JunoBondingCurveV1_1Test is Test {
 
         assertEq(feeCollector.balance - feeNativeBefore, nativeReserve - usedNative);
         assertEq(ERC20Token(tokenAddr).balanceOf(address(0xdead)) - burnedBefore, pumpTokenBalance - usedToken);
-        assertEq(address(posManager).balance, usedNative);
+        assertEq(IERC20(wrappedNative).balanceOf(address(posManager)), usedNative);
         assertEq(ERC20Token(tokenAddr).balanceOf(address(pump)), 0);
+    }
+
+    function test_Graduate_ForwardsStrayManagerNativeToCollector() public {
+        address tokenAddr = _createToken();
+        _buyToGraduation(tokenAddr);
+
+        (uint256 nativeReserve,) = pump.pumpReserve(tokenAddr);
+        uint256 usedNative = nativeReserve / 2;
+        posManager.setPartialFill(usedNative, ERC20Token(tokenAddr).balanceOf(address(pump)) / 2);
+
+        uint256 stray = 0.05 ether;
+        vm.deal(address(posManager), address(posManager).balance + stray);
+
+        uint256 feeNativeBefore = feeCollector.balance;
+        pump.graduate(tokenAddr);
+
+        assertEq(
+            feeCollector.balance - feeNativeBefore,
+            nativeReserve - usedNative + stray,
+            "everything refundETH hands back must reach the collector"
+        );
+        assertEq(address(pump).balance, 0, "no native may be stranded in the curve");
+    }
+
+    function test_Graduate_WrapsSeededNativeIntoWrappedNative() public {
+        address tokenAddr = _createToken();
+        _buyToGraduation(tokenAddr);
+        (uint256 nativeReserve,) = pump.pumpReserve(tokenAddr);
+
+        uint256 collectorBefore = feeCollector.balance;
+        pump.graduate(tokenAddr);
+        uint256 refunded = feeCollector.balance - collectorBefore;
+
+        uint256 wrapped = posManager.lastAmount1();
+        assertEq(
+            IERC20(wrappedNative).balanceOf(address(posManager)),
+            wrapped,
+            "the mint's native leg must reach the position manager wrapped, not as raw ETH"
+        );
+        assertEq(wrappedNative.balance, wrapped, "the wrapper must hold the native it minted against");
+        assertEq(wrapped + refunded, nativeReserve, "wrapped plus refunded must account for the whole raise");
+        assertEq(address(posManager).balance, 0, "refundETH sweeps back everything the mint did not consume");
+        assertEq(address(pump).balance, 0, "no native may be stranded in the curve");
+    }
+
+    function test_MockFactory_ResolvesEitherPairOrder() public {
+        address tokenAddr = _createToken();
+        _buyToGraduation(tokenAddr);
+        pump.graduate(tokenAddr);
+
+        (address tkn0, address tkn1) =
+            tokenAddr < wrappedNative ? (tokenAddr, wrappedNative) : (wrappedNative, tokenAddr);
+        address poolAddr = factory.getPool(tkn0, tkn1, 10000);
+        assertTrue(poolAddr != address(0));
+        assertEq(factory.getPool(tkn1, tkn0, 10000), poolAddr, "both orders must resolve to one pool");
+
+        vm.expectRevert(bytes("pool exists"));
+        factory.createPool(tkn1, tkn0, 10000);
+    }
+
+    function test_Graduate_DoesNotReinitializeAPoolSomeoneElseOpened() public {
+        (address tokenAddr, uint160 target) = _tokenAtCapWithTarget();
+        _preInitializePoolAt(tokenAddr, target, 10000);
+
+        MockV3Pool existing = _poolOf(tokenAddr);
+        uint160 preInitialized = existing.storedSqrtPriceX96();
+
+        pump.graduate(tokenAddr);
+
+        assertFalse(existing.initialized(), "initialize must be skipped when slot0 is already set");
+        assertEq(existing.storedSqrtPriceX96(), preInitialized, "the foreign price must survive graduation");
+
+        vm.expectRevert(bytes("AI"));
+        existing.initialize(target);
     }
 
     function test_Graduate_SeedsV3AtCurvePrice_N1() public {
@@ -586,6 +717,16 @@ contract JunoBondingCurveV1_1Test is Test {
         pump.graduate(tokenAddr);
     }
 
+    function test_Graduate_ExtremeRatio_RevertsNotWraps() public {
+        address tokenAddr = _createToken();
+        _setReserves(tokenAddr, 1e40, 1e6);
+
+        vm.expectRevert("Math: mulDiv overflow");
+        pump.graduate(tokenAddr);
+
+        assertFalse(pump.isGraduate(tokenAddr));
+    }
+
     function test_GetAmountOut_IndependentVectors() public {
         assertEq(pump.getAmountOut(1 ether, 1 ether, 1 ether), 0.5 ether);
         assertEq(pump.getAmountOut(1 ether, 3400 ether, 1e27), 294031167303734195824757);
@@ -636,9 +777,32 @@ contract JunoBondingCurveV1_1Test is Test {
     function test_Graduate_EmitsGraduation() public {
         address tokenAddr = _createToken();
         _buyToGraduation(tokenAddr);
-        vm.expectEmit(true, true, true, true);
-        emit Graduation(address(this), tokenAddr);
+
+        vm.recordLogs();
         pump.graduate(tokenAddr);
+
+        (address emitted, uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1) =
+            _lastGraduation();
+        assertEq(emitted, tokenAddr);
+        assertEq(posManager.ownerOf(tokenId), lpLocker, "the emitted id is the locked position");
+        assertGt(liquidity, 0);
+        assertGt(amount0, 0);
+        assertGt(amount1, 0);
+    }
+
+    function _lastGraduation()
+        internal
+        returns (address tokenAddr, uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
+    {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 sig = keccak256("Graduation(address,address,uint256,uint128,uint256,uint256)");
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] == sig) {
+                assertEq(address(uint160(uint256(logs[i].topics[1]))), address(this), "sender");
+                return abi.decode(logs[i].data, (address, uint256, uint128, uint256, uint256));
+            }
+        }
+        revert("no Graduation log");
     }
 
     function test_TwoTokens_ReservesIsolated() public {
@@ -658,18 +822,85 @@ contract JunoBondingCurveV1_1Test is Test {
     function test_ConstructorRejectsInvalidParams() public {
         vm.expectRevert("invalid fee collector");
         new JunoBondingCurveV1_1(
-            wrappedNative, address(factory), address(posManager), address(0), VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+            wrappedNative, address(factory), address(posManager), address(0), lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+        );
+
+        vm.expectRevert("invalid fee collector");
+        new JunoBondingCurveV1_1(
+            wrappedNative,
+            address(factory),
+            address(posManager),
+            makeAddr("eoaCollector"),
+            lpLocker,
+            VIRTUAL_AMOUNT,
+            GRADUATION_AMOUNT
+        );
+
+        vm.expectRevert("invalid lp locker");
+        new JunoBondingCurveV1_1(
+            wrappedNative, address(factory), address(posManager), feeCollector, address(0), VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+        );
+
+        vm.expectRevert("invalid lp locker");
+        new JunoBondingCurveV1_1(
+            wrappedNative,
+            address(factory),
+            address(posManager),
+            feeCollector,
+            makeAddr("eoaLocker"),
+            VIRTUAL_AMOUNT,
+            GRADUATION_AMOUNT
         );
 
         vm.expectRevert("invalid curve state");
         new JunoBondingCurveV1_1(
-            wrappedNative, address(factory), address(posManager), feeCollector, VIRTUAL_AMOUNT, 0
+            wrappedNative, address(factory), address(posManager), feeCollector, lpLocker, VIRTUAL_AMOUNT, 0
         );
 
         vm.expectRevert("invalid curve state");
         new JunoBondingCurveV1_1(
-            wrappedNative, address(factory), address(posManager), feeCollector, 0, GRADUATION_AMOUNT
+            wrappedNative, address(factory), address(posManager), feeCollector, lpLocker, 0, GRADUATION_AMOUNT
         );
+    }
+
+    function test_ConstructorRejectsZeroV3Addresses() public {
+        vm.expectRevert("invalid wrapped native");
+        new JunoBondingCurveV1_1(
+            address(0), address(factory), address(posManager), feeCollector, lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+        );
+
+        vm.expectRevert("invalid v3 factory");
+        new JunoBondingCurveV1_1(
+            wrappedNative, address(0), address(posManager), feeCollector, lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+        );
+
+        vm.expectRevert("invalid pos manager");
+        new JunoBondingCurveV1_1(
+            wrappedNative, address(factory), address(0), feeCollector, lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+        );
+    }
+
+    function test_ConstructorRejectsWrappedNativeMismatch() public {
+        MockPositionManager mismatched = new MockPositionManager();
+        mismatched.setWrappedNative(makeAddr("otherWrappedNative"));
+
+        vm.expectRevert("wrapped native mismatch");
+        new JunoBondingCurveV1_1(
+            wrappedNative, address(factory), address(mismatched), feeCollector, lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+        );
+
+        MockPositionManager unset = new MockPositionManager();
+
+        vm.expectRevert("wrapped native mismatch");
+        new JunoBondingCurveV1_1(
+            wrappedNative, address(factory), address(unset), feeCollector, lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+        );
+    }
+
+    function test_SetFee_EmitsFeeSet() public {
+        vm.expectEmit(true, true, true, true);
+        emit FeeSet(0.5 ether, 250);
+        pump.setFee(0.5 ether, 250);
     }
 
     function test_SetFeeRejectsAboveCap() public {
@@ -691,20 +922,80 @@ contract JunoBondingCurveV1_1Test is Test {
         assertLt(pump.getAmountOut(inputAmount, inReserve, outReserve), outReserve);
     }
 
-    function testFuzz_BuyThenSell_NeverProfitable(uint256 buyAmount) public {
+    function _curveK(address tokenAddr) internal view returns (uint256) {
+        (uint256 nat, uint256 tok) = pump.pumpReserve(tokenAddr);
+        return (VIRTUAL_AMOUNT + nat) * tok;
+    }
+
+    function testFuzz_BuyThenSell_NeverProfitable(uint256 prologue, uint256 buyAmount) public {
         address tokenAddr = _createToken();
-        buyAmount = bound(buyAmount, 1e9, 10 ether);
+
+        prologue = bound(prologue, 0, 0.2 ether);
+        if (prologue > 0) {
+            vm.prank(bob);
+            pump.buy{value: prologue}(tokenAddr, 0);
+        }
+
+        (uint256 natBefore, uint256 tokBefore) = pump.pumpReserve(tokenAddr);
+        uint256 kBefore = _curveK(tokenAddr);
+        buyAmount = bound(buyAmount, 1e9, GRADUATION_AMOUNT - natBefore);
+
         vm.deal(alice, buyAmount + 1 ether);
+        uint256 balanceBefore = alice.balance;
 
         vm.prank(alice);
         uint256 tokensOut = pump.buy{value: buyAmount}(tokenAddr, 0);
+
+        uint256 spent = balanceBefore - alice.balance;
+        uint256 buyFee = (spent * PUMP_FEE) / 10000;
 
         vm.prank(alice);
         ERC20Token(tokenAddr).approve(address(pump), tokensOut);
         vm.prank(alice);
         uint256 nativeBack = pump.sell(tokenAddr, tokensOut, 0);
 
-        assertLe(nativeBack, buyAmount);
+        assertLe(nativeBack, spent - buyFee, "a round trip returns no more than the curve took in");
+        assertGe(spent - nativeBack, buyFee, "the whole native fee leg is lost");
+        assertLe(spent - nativeBack, (2 * spent * PUMP_FEE) / 10000 + 2, "the loss is bounded by two fee legs");
+
+        (uint256 natAfter, uint256 tokAfter) = pump.pumpReserve(tokenAddr);
+        assertEq(tokAfter, tokBefore - (tokensOut * PUMP_FEE) / 10000, "the sell returns every token but its fee");
+        assertEq(
+            natAfter, natBefore + (spent - buyFee) - nativeBack, "the native reserve keeps what the round trip left"
+        );
+        assertGe(_curveK(tokenAddr), kBefore, "k never decreases across a round trip");
+    }
+
+    function testFuzz_FeeChangeMidCurve_NeverProfitable(uint256 buyAmount, uint256 newPumpFee) public {
+        address tokenAddr = _createToken();
+        buyAmount = bound(buyAmount, 1e9, GRADUATION_AMOUNT);
+        newPumpFee = bound(newPumpFee, 0, 500);
+
+        uint256 kBefore = _curveK(tokenAddr);
+
+        vm.deal(alice, buyAmount + 1 ether);
+        uint256 balanceBefore = alice.balance;
+
+        vm.prank(alice);
+        uint256 tokensOut = pump.buy{value: buyAmount}(tokenAddr, 0);
+
+        uint256 spent = balanceBefore - alice.balance;
+        uint256 buyFee = (spent * PUMP_FEE) / 10000;
+
+        pump.setFee(CREATE_FEE, newPumpFee);
+
+        vm.prank(alice);
+        ERC20Token(tokenAddr).approve(address(pump), tokensOut);
+        vm.prank(alice);
+        uint256 nativeBack = pump.sell(tokenAddr, tokensOut, 0);
+
+        assertLe(nativeBack, spent - buyFee, "a rate change mid-curve does not make the round trip profitable");
+        assertLe(
+            spent - nativeBack,
+            buyFee + ((spent - buyFee) * newPumpFee) / 10000 + 2,
+            "the sell leg costs the new rate and no more"
+        );
+        assertGe(_curveK(tokenAddr), kBefore, "a mid-curve fee change never decreases k");
     }
 
     function testFuzz_Buy_ConservesNative(uint256 prologue, uint256 amount) public {
@@ -758,6 +1049,7 @@ contract JunoBondingCurveV1_1Test is Test {
         address tokenAddr = _createToken();
         uint256 balanceBefore = alice.balance;
 
+        vm.recordLogs();
         vm.prank(alice);
         pump.buy{value: 10 ether}(tokenAddr, 0);
 
@@ -765,7 +1057,9 @@ contract JunoBondingCurveV1_1Test is Test {
         assertEq(nativeReserve, GRADUATION_AMOUNT);
 
         uint256 room = GRADUATION_AMOUNT;
-        assertEq(balanceBefore - alice.balance, (room * 10000) / (10000 - PUMP_FEE));
+        uint256 charged = (room * 10000) / (10000 - PUMP_FEE);
+        assertEq(balanceBefore - alice.balance, charged);
+        assertEq(_lastSwapGross(), charged, "a clipped buy reports the gross it was charged, not msg.value");
     }
 
     function test_RevertBuy_CurveComplete() public {
@@ -855,7 +1149,7 @@ contract JunoBondingCurveV1_1Test is Test {
     function test_FeeCollectorContract_DoesNotBrickCurve() public {
         GasHungryReceiver collector = new GasHungryReceiver();
         pump = new JunoBondingCurveV1_1(
-            wrappedNative, address(factory), address(posManager), address(collector), VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+            wrappedNative, address(factory), address(posManager), address(collector), lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
         );
         vm.prank(address(collector));
         pump.setFee(CREATE_FEE, PUMP_FEE);
@@ -929,22 +1223,20 @@ contract JunoBondingCurveV1_1Test is Test {
         vm.deal(address(pump), address(pump).balance + native);
     }
 
-    function test_ZeroValueBuy_SucceedsAndEmitsSwap() public {
+    function test_ZeroValueBuy_Reverts() public {
         address tokenAddr = _createToken();
         (uint256 nativeBefore, uint256 tokenBefore) = pump.pumpReserve(tokenAddr);
 
-        vm.expectEmit(true, true, true, true);
-        emit Swap(alice, true, tokenAddr, 0, 0, nativeBefore, tokenBefore);
         vm.prank(alice);
-        uint256 out = pump.buy{value: 0}(tokenAddr, 0);
+        vm.expectRevert("zero amount");
+        pump.buy{value: 0}(tokenAddr, 0);
 
-        assertEq(out, 0);
         (uint256 nativeAfter, uint256 tokenAfter) = pump.pumpReserve(tokenAddr);
         assertEq(nativeAfter, nativeBefore, "a zero buy must not move reserves");
         assertEq(tokenAfter, tokenBefore);
     }
 
-    function test_ZeroAmountSell_SucceedsAndEmitsSwap() public {
+    function test_ZeroAmountSell_Reverts() public {
         address tokenAddr = _createToken();
         vm.prank(alice);
         pump.buy{value: 0.01 ether}(tokenAddr, 0);
@@ -952,12 +1244,10 @@ contract JunoBondingCurveV1_1Test is Test {
 
         vm.startPrank(alice);
         ERC20Token(tokenAddr).approve(address(pump), type(uint256).max);
-        vm.expectEmit(true, true, true, true);
-        emit Swap(alice, false, tokenAddr, 0, 0, tokenBefore, nativeBefore);
-        uint256 out = pump.sell(tokenAddr, 0, 0);
+        vm.expectRevert("zero amount");
+        pump.sell(tokenAddr, 0, 0);
         vm.stopPrank();
 
-        assertEq(out, 0);
         (uint256 nativeAfter, uint256 tokenAfter) = pump.pumpReserve(tokenAddr);
         assertEq(nativeAfter, nativeBefore, "a zero sell must not move reserves");
         assertEq(tokenAfter, tokenBefore);
@@ -1017,16 +1307,10 @@ contract JunoBondingCurveV1_1Test is Test {
     uint256 constant BAND_UPPER_BPS = 10101;
 
     function _observedGraduationSqrtPrice() internal returns (uint160) {
-        MockV3Pool scratchPool = new MockV3Pool();
-        address prevPool = factory.mockPool();
-        factory.setMockPool(address(scratchPool));
-
         address scratch = _createTokenAs(bob);
         _buyToGraduation(scratch);
         pump.graduate(scratch);
-
-        factory.setMockPool(prevPool);
-        return scratchPool.storedSqrtPriceX96();
+        return _poolOf(scratch).storedSqrtPriceX96();
     }
 
     function _skewedSqrtPrice(uint160 target, uint256 priceBps) internal pure returns (uint160) {
@@ -1218,15 +1502,22 @@ contract JunoBondingCurveV1_1Test is Test {
 }
 
 contract JunoBondingCurveV1_1LowWrappedTest is Test {
-    event Graduation(address indexed sender, address tokenAddr);
+    event Graduation(
+        address indexed sender,
+        address tokenAddr,
+        uint256 tokenId,
+        uint128 liquidity,
+        uint256 amount0,
+        uint256 amount1
+    );
 
     JunoBondingCurveV1_1 public pump;
     MockV3Factory public factory;
-    MockV3Pool public pool;
     MockPositionManager public posManager;
 
     address public alice;
-    address public wrappedNative = address(1);
+    address public lpLocker;
+    address public wrappedNative = address(0x1000);
 
     uint256 constant CREATE_FEE = 0.001 ether;
     uint256 constant VIRTUAL_AMOUNT = 0.34 ether;
@@ -1241,19 +1532,25 @@ contract JunoBondingCurveV1_1LowWrappedTest is Test {
 
     function setUp() public {
         factory = new MockV3Factory();
-        pool = new MockV3Pool();
         posManager = new MockPositionManager();
 
         alice = makeAddr("alice");
-        factory.setMockPool(address(pool));
+        vm.etch(wrappedNative, address(new MockWETH9()).code);
         posManager.setWrappedNative(wrappedNative);
         posManager.setPoolFactory(address(factory));
+        lpLocker = address(new LpLockerStub());
         pump = new JunoBondingCurveV1_1(
-            wrappedNative, address(factory), address(posManager), address(this), VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+            wrappedNative, address(factory), address(posManager), address(this), lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
         );
         pump.setFee(CREATE_FEE, PUMP_FEE);
 
         vm.deal(alice, 100 ether);
+    }
+
+    function _poolOf(address tokenAddr) internal view returns (MockV3Pool) {
+        (address tkn0, address tkn1) =
+            tokenAddr < wrappedNative ? (tokenAddr, wrappedNative) : (wrappedNative, tokenAddr);
+        return MockV3Pool(factory.getPool(tkn0, tkn1, 10000));
     }
 
     function _createToken() internal returns (address) {
@@ -1289,7 +1586,7 @@ contract JunoBondingCurveV1_1LowWrappedTest is Test {
 
         pump.graduate(tokenAddr);
 
-        uint160 sqrtP = pool.storedSqrtPriceX96();
+        uint160 sqrtP = _poolOf(tokenAddr).storedSqrtPriceX96();
         assertGt(sqrtP, 2 ** 96);
         assertLt(sqrtP, MAX_SQRT_RATIO);
         assertGe(sqrtP, MIN_SQRT_RATIO);
@@ -1331,7 +1628,7 @@ contract JunoBondingCurveV1_1LowWrappedTest is Test {
         assertEq(_fee, 10000);
         assertEq(_tickLower, -887200);
         assertEq(_tickUpper, 887200);
-        assertEq(_recipient, address(0xdead));
+        assertEq(_recipient, lpLocker);
         assertEq(_deadline, block.timestamp + 1 hours);
 
         _checkSlippage(_amount0Desired, _amount0Min, _amount1Desired, _amount1Min);
@@ -1352,18 +1649,18 @@ contract JunoBondingCurveV1_1LowWrappedTest is Test {
         factory.createPool(wrappedNative, tokenAddr, 10000);
 
         pump.graduate(tokenAddr);
-        assertTrue(pool.initialized());
+        assertTrue(_poolOf(tokenAddr).initialized());
     }
 }
 
 contract JunoBondingCurveV1_1ProductionConfigTest is Test {
     JunoBondingCurveV1_1 public pump;
     MockV3Factory public factory;
-    MockV3Pool public pool;
     MockPositionManager public posManager;
 
     address public alice;
-    address public wrappedNative = address(1);
+    address public lpLocker;
+    address public wrappedNative = address(0x1000);
 
     uint256 constant CREATE_FEE = 0.1 ether;
     uint256 constant VIRTUAL_AMOUNT = 3400 ether;
@@ -1379,19 +1676,25 @@ contract JunoBondingCurveV1_1ProductionConfigTest is Test {
 
     function setUp() public {
         factory = new MockV3Factory();
-        pool = new MockV3Pool();
         posManager = new MockPositionManager();
-        factory.setMockPool(address(pool));
+        vm.etch(wrappedNative, address(new MockWETH9()).code);
         posManager.setWrappedNative(wrappedNative);
         posManager.setPoolFactory(address(factory));
 
+        lpLocker = address(new LpLockerStub());
         pump = new JunoBondingCurveV1_1(
-            wrappedNative, address(factory), address(posManager), address(this), VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+            wrappedNative, address(factory), address(posManager), address(this), lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
         );
         pump.setFee(CREATE_FEE, PUMP_FEE);
 
         alice = makeAddr("alice");
         vm.deal(alice, 100 ether);
+    }
+
+    function _poolOf(address tokenAddr) internal view returns (MockV3Pool) {
+        (address tkn0, address tkn1) =
+            tokenAddr < wrappedNative ? (tokenAddr, wrappedNative) : (wrappedNative, tokenAddr);
+        return MockV3Pool(factory.getPool(tkn0, tkn1, 10000));
     }
 
     function _createToken() internal returns (address) {
@@ -1421,7 +1724,7 @@ contract JunoBondingCurveV1_1ProductionConfigTest is Test {
 
         pump.graduate(tokenAddr);
 
-        uint160 sqrtP = pool.storedSqrtPriceX96();
+        uint160 sqrtP = _poolOf(tokenAddr).storedSqrtPriceX96();
         assertGe(sqrtP, MIN_SQRT_RATIO);
         assertLt(sqrtP, MAX_SQRT_RATIO);
         assertTrue(pump.isGraduate(tokenAddr));
