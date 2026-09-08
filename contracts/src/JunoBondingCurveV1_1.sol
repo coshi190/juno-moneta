@@ -67,7 +67,6 @@ contract JunoBondingCurveV1_1 {
     event FeeSet(uint256 createFee, uint256 pumpFee);
     
     constructor (
-        address _wrappedNative,
         address _v3factory,
         address _v3posManager,
         address _feeCollector,
@@ -78,13 +77,10 @@ contract JunoBondingCurveV1_1 {
         require(_virtualAmount > 0 && _graduationAmount > 0, "invalid curve state");
         require(_feeCollector.code.length > 0, "invalid fee collector");
         require(_lpLocker.code.length > 0, "invalid lp locker");
-        require(_wrappedNative != address(0), "invalid wrapped native");
         require(_v3factory != address(0), "invalid v3 factory");
         require(_v3posManager != address(0), "invalid pos manager");
-        require(
-            INonfungiblePositionManager(_v3posManager).WETH9() == _wrappedNative,
-            "wrapped native mismatch"
-        );
+        address _wrappedNative = INonfungiblePositionManager(_v3posManager).WETH9();
+        require(_wrappedNative != address(0), "invalid wrapped native");
         wrappedNative = IERC20(_wrappedNative);
         v3factory = IUniswapV3Factory(_v3factory);
         v3posManager = INonfungiblePositionManager(_v3posManager);

@@ -60,9 +60,8 @@ contract LpFeeLockerTest is Test {
         address predictedLocker = vm.computeCreateAddress(address(this), nonce + 1);
         address predictedCurve = vm.computeCreateAddress(address(this), nonce + 2);
         collector = new FeeCollector(treasury, CREATOR_SHARE_BPS, predictedCurve, predictedLocker);
-        locker = new LpFeeLocker(address(collector), address(posManager), wrappedNative);
+        locker = new LpFeeLocker(address(collector), address(posManager));
         pump = new JunoBondingCurveV1_1(
-            wrappedNative,
             address(factory),
             address(posManager),
             address(collector),
@@ -93,27 +92,6 @@ contract LpFeeLockerTest is Test {
             uint128(tokenIsZero ? tokenFees : nativeFees),
             uint128(tokenIsZero ? nativeFees : tokenFees)
         );
-    }
-
-    function test_Constructor_DerivesCurveFromCollector() public view {
-        assertEq(locker.curve(), address(pump));
-        assertEq(locker.feeCollector(), address(collector));
-        assertEq(address(locker.posManager()), address(posManager));
-        assertEq(locker.wrappedNative(), wrappedNative);
-    }
-
-    function test_RevertConstructor_BadArgs() public {
-        vm.expectRevert("invalid fee collector");
-        new LpFeeLocker(makeAddr("eoaCollector"), address(posManager), wrappedNative);
-
-        vm.expectRevert("invalid pos manager");
-        new LpFeeLocker(address(collector), address(0), wrappedNative);
-
-        vm.expectRevert("invalid wrapped native");
-        new LpFeeLocker(address(collector), address(posManager), address(0));
-
-        vm.expectRevert("wrapped native mismatch");
-        new LpFeeLocker(address(collector), address(posManager), makeAddr("otherWrappedNative"));
     }
 
     function test_Graduate_MintsPositionToLocker() public {
@@ -158,7 +136,7 @@ contract LpFeeLockerTest is Test {
         FeeCollector wrong =
             new FeeCollector(treasury, CREATOR_SHARE_BPS, address(pump), makeAddr("otherLocker"));
         vm.expectRevert("collector locker mismatch");
-        new LpFeeLocker(address(wrong), address(posManager), wrappedNative);
+        new LpFeeLocker(address(wrong), address(posManager));
     }
 
     function test_Collect_SplitsBothLegsBetweenCreatorAndTreasury() public {

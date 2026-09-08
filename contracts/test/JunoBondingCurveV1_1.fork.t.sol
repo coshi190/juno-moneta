@@ -77,9 +77,9 @@ contract JunoBondingCurveV1_1ForkTest is Test {
         address predictedLocker = vm.computeCreateAddress(address(this), nonce + 1);
         address predicted = vm.computeCreateAddress(address(this), nonce + 2);
         collector = new FeeCollector(treasury, CREATOR_SHARE_BPS, predicted, predictedLocker);
-        locker = new LpFeeLocker(address(collector), V3_POS_MANAGER, KKUB);
+        locker = new LpFeeLocker(address(collector), V3_POS_MANAGER);
         pump = new JunoBondingCurveV1_1(
-            KKUB, V3_FACTORY, V3_POS_MANAGER, address(collector), address(locker), VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+            V3_FACTORY, V3_POS_MANAGER, address(collector), address(locker), VIRTUAL_AMOUNT, GRADUATION_AMOUNT
         );
         require(address(pump) == predicted, "curve address mismatch");
         collector.setCurveFee(CREATE_FEE, PUMP_FEE);

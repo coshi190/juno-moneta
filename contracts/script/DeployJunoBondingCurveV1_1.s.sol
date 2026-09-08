@@ -7,7 +7,6 @@ import "../src/FeeCollector.sol";
 import "../src/LpFeeLocker.sol";
 
 contract DeployJunoBondingCurveV1_1 is Script {
-    address constant WRAPPED_NATIVE_TESTNET = 0x700D3ba307E1256e509eD3E45D6f9dff441d6907;
     address constant V3_FACTORY_TESTNET = 0xCBd41F872FD46964bD4Be4d72a8bEBA9D656565b;
     address constant V3_POS_MANAGER_TESTNET = 0x690f45C21744eCC4ac0D897ACAC920889c3cFa4b;
 
@@ -19,7 +18,6 @@ contract DeployJunoBondingCurveV1_1 is Script {
     uint256 constant CREATOR_SHARE_BPS = 5000;
 
     function run() external {
-        address wrappedNative = vm.envOr("WRAPPED_NATIVE", WRAPPED_NATIVE_TESTNET);
         address v3Factory = vm.envOr("V3_FACTORY", V3_FACTORY_TESTNET);
         address v3PosManager = vm.envOr("V3_POS_MANAGER", V3_POS_MANAGER_TESTNET);
 
@@ -37,9 +35,8 @@ contract DeployJunoBondingCurveV1_1 is Script {
         address predictedCurve = vm.computeCreateAddress(deployer, nonce + 2);
         FeeCollector collector =
             new FeeCollector(treasury, CREATOR_SHARE_BPS, predictedCurve, predictedLocker);
-        LpFeeLocker locker = new LpFeeLocker(address(collector), v3PosManager, wrappedNative);
+        LpFeeLocker locker = new LpFeeLocker(address(collector), v3PosManager);
         JunoBondingCurveV1_1 pump = new JunoBondingCurveV1_1(
-            wrappedNative,
             v3Factory,
             v3PosManager,
             address(collector),
@@ -61,6 +58,10 @@ contract DeployJunoBondingCurveV1_1 is Script {
         console.log("collector.lpLocker:", collector.lpLocker());
         console.log("curve.lpLocker:", pump.lpLocker());
         console.log("locker.curve:", locker.curve());
+        // both contracts read this off the position manager, so it is the one wiring value
+        // no constructor can validate -- check it against the intended chain by eye
+        console.log("curve.wrappedNative:", address(pump.wrappedNative()));
+        console.log("locker.wrappedNative:", locker.wrappedNative());
         console.log("pumpFee:", pump.pumpFee());
         console.log("treasury:", collector.treasury());
     }

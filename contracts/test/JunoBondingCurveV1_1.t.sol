@@ -82,7 +82,7 @@ contract JunoBondingCurveV1_1Test is Test {
         posManager.setWrappedNative(wrappedNative);
         posManager.setPoolFactory(address(factory));
         pump = new JunoBondingCurveV1_1(
-            wrappedNative, address(factory), address(posManager), feeCollector, lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+            address(factory), address(posManager), feeCollector, lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
         );
         pump.setFee(CREATE_FEE, PUMP_FEE);
 
@@ -822,12 +822,11 @@ contract JunoBondingCurveV1_1Test is Test {
     function test_ConstructorRejectsInvalidParams() public {
         vm.expectRevert("invalid fee collector");
         new JunoBondingCurveV1_1(
-            wrappedNative, address(factory), address(posManager), address(0), lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+            address(factory), address(posManager), address(0), lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
         );
 
         vm.expectRevert("invalid fee collector");
         new JunoBondingCurveV1_1(
-            wrappedNative,
             address(factory),
             address(posManager),
             makeAddr("eoaCollector"),
@@ -838,12 +837,11 @@ contract JunoBondingCurveV1_1Test is Test {
 
         vm.expectRevert("invalid lp locker");
         new JunoBondingCurveV1_1(
-            wrappedNative, address(factory), address(posManager), feeCollector, address(0), VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+            address(factory), address(posManager), feeCollector, address(0), VIRTUAL_AMOUNT, GRADUATION_AMOUNT
         );
 
         vm.expectRevert("invalid lp locker");
         new JunoBondingCurveV1_1(
-            wrappedNative,
             address(factory),
             address(posManager),
             feeCollector,
@@ -854,46 +852,33 @@ contract JunoBondingCurveV1_1Test is Test {
 
         vm.expectRevert("invalid curve state");
         new JunoBondingCurveV1_1(
-            wrappedNative, address(factory), address(posManager), feeCollector, lpLocker, VIRTUAL_AMOUNT, 0
+            address(factory), address(posManager), feeCollector, lpLocker, VIRTUAL_AMOUNT, 0
         );
 
         vm.expectRevert("invalid curve state");
         new JunoBondingCurveV1_1(
-            wrappedNative, address(factory), address(posManager), feeCollector, lpLocker, 0, GRADUATION_AMOUNT
+            address(factory), address(posManager), feeCollector, lpLocker, 0, GRADUATION_AMOUNT
         );
     }
 
     function test_ConstructorRejectsZeroV3Addresses() public {
-        vm.expectRevert("invalid wrapped native");
-        new JunoBondingCurveV1_1(
-            address(0), address(factory), address(posManager), feeCollector, lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
-        );
-
         vm.expectRevert("invalid v3 factory");
         new JunoBondingCurveV1_1(
-            wrappedNative, address(0), address(posManager), feeCollector, lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+            address(0), address(posManager), feeCollector, lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
         );
 
         vm.expectRevert("invalid pos manager");
         new JunoBondingCurveV1_1(
-            wrappedNative, address(factory), address(0), feeCollector, lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+            address(factory), address(0), feeCollector, lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
         );
     }
 
-    function test_ConstructorRejectsWrappedNativeMismatch() public {
-        MockPositionManager mismatched = new MockPositionManager();
-        mismatched.setWrappedNative(makeAddr("otherWrappedNative"));
-
-        vm.expectRevert("wrapped native mismatch");
-        new JunoBondingCurveV1_1(
-            wrappedNative, address(factory), address(mismatched), feeCollector, lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
-        );
-
+    function test_ConstructorRejectsPosManagerWithNoWrappedNative() public {
         MockPositionManager unset = new MockPositionManager();
 
-        vm.expectRevert("wrapped native mismatch");
+        vm.expectRevert("invalid wrapped native");
         new JunoBondingCurveV1_1(
-            wrappedNative, address(factory), address(unset), feeCollector, lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+            address(factory), address(unset), feeCollector, lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
         );
     }
 
@@ -1149,7 +1134,7 @@ contract JunoBondingCurveV1_1Test is Test {
     function test_FeeCollectorContract_DoesNotBrickCurve() public {
         GasHungryReceiver collector = new GasHungryReceiver();
         pump = new JunoBondingCurveV1_1(
-            wrappedNative, address(factory), address(posManager), address(collector), lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+            address(factory), address(posManager), address(collector), lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
         );
         vm.prank(address(collector));
         pump.setFee(CREATE_FEE, PUMP_FEE);
@@ -1540,7 +1525,7 @@ contract JunoBondingCurveV1_1LowWrappedTest is Test {
         posManager.setPoolFactory(address(factory));
         lpLocker = address(new LpLockerStub());
         pump = new JunoBondingCurveV1_1(
-            wrappedNative, address(factory), address(posManager), address(this), lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+            address(factory), address(posManager), address(this), lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
         );
         pump.setFee(CREATE_FEE, PUMP_FEE);
 
@@ -1683,7 +1668,7 @@ contract JunoBondingCurveV1_1ProductionConfigTest is Test {
 
         lpLocker = address(new LpLockerStub());
         pump = new JunoBondingCurveV1_1(
-            wrappedNative, address(factory), address(posManager), address(this), lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
+            address(factory), address(posManager), address(this), lpLocker, VIRTUAL_AMOUNT, GRADUATION_AMOUNT
         );
         pump.setFee(CREATE_FEE, PUMP_FEE);
 

@@ -200,9 +200,8 @@ contract JunoBondingCurveV1_1InvariantTest is Test {
         address predictedLocker = vm.computeCreateAddress(address(this), nonce + 1);
         address predictedCurve = vm.computeCreateAddress(address(this), nonce + 2);
         collector = new FeeCollector(address(this), 5000, predictedCurve, predictedLocker);
-        locker = new LpFeeLocker(address(collector), address(posManager), wrappedNative);
+        locker = new LpFeeLocker(address(collector), address(posManager));
         pump = new JunoBondingCurveV1_1(
-            wrappedNative,
             address(factory),
             address(posManager),
             address(collector),
