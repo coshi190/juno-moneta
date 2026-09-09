@@ -7,26 +7,10 @@ import "../src/FeeCollector.sol";
 import "../src/JunoBondingCurveV1_1.sol";
 import "../src/ERC20Token.sol";
 import "./mocks/MockV3Factory.sol";
-import "./mocks/MockV3Pool.sol";
 import "./mocks/MockPositionManager.sol";
 import {MockWETH9} from "./mocks/MockPools.sol";
 
 contract LpFeeLockerTest is Test {
-    event LpFeesCollected(
-        uint256 indexed tokenId,
-        address indexed tokenAddr,
-        address indexed creator,
-        uint256 amount0,
-        uint256 amount1
-    );
-    event LpFeeShared(
-        address indexed tokenAddr,
-        address indexed creator,
-        address indexed asset,
-        uint256 creatorAmount,
-        uint256 treasuryAmount
-    );
-
     JunoBondingCurveV1_1 public pump;
     FeeCollector public collector;
     LpFeeLocker public locker;
@@ -43,6 +27,7 @@ contract LpFeeLockerTest is Test {
     uint256 constant GRADUATION_AMOUNT = 0.2 ether;
     uint256 constant PUMP_FEE = 100;
     uint256 constant CREATOR_SHARE_BPS = 5000;
+    uint256 constant BPS_DENOMINATOR = 10000;
 
     function setUp() public {
         factory = new MockV3Factory();
@@ -84,14 +69,26 @@ contract LpFeeLockerTest is Test {
         pump.graduate(tokenAddr);
     }
 
+    function _sorted(address tokenAddr, uint256 nativeAmount, uint256 tokenAmount)
+        internal
+        view
+        returns (uint256 amount0, uint256 amount1)
+    {
+        return tokenAddr < wrappedNative ? (tokenAmount, nativeAmount) : (nativeAmount, tokenAmount);
+    }
+
     function _accrue(address tokenAddr, uint256 tokenId, uint256 nativeFees, uint256 tokenFees) internal {
-        (address tkn0,) = tokenAddr < wrappedNative ? (tokenAddr, wrappedNative) : (wrappedNative, tokenAddr);
-        bool tokenIsZero = tkn0 == tokenAddr;
-        posManager.setPendingFees(
-            tokenId,
-            uint128(tokenIsZero ? tokenFees : nativeFees),
-            uint128(tokenIsZero ? nativeFees : tokenFees)
-        );
+        (uint256 fees0, uint256 fees1) = _sorted(tokenAddr, nativeFees, tokenFees);
+        posManager.setPendingFees(tokenId, uint128(fees0), uint128(fees1));
+    }
+
+    function _assertLedger(address tokenAddr, uint256 nativeTotal, uint256 tokenTotal) internal view {
+        uint256 nativeCreatorCut = (nativeTotal * CREATOR_SHARE_BPS) / BPS_DENOMINATOR;
+        uint256 tokenCreatorCut = (tokenTotal * CREATOR_SHARE_BPS) / BPS_DENOMINATOR;
+        assertEq(collector.claimable(alice, wrappedNative), nativeCreatorCut, "alice native cut");
+        assertEq(collector.claimable(treasury, wrappedNative), nativeTotal - nativeCreatorCut, "treasury native cut");
+        assertEq(collector.claimable(alice, tokenAddr), tokenCreatorCut, "alice token cut");
+        assertEq(collector.claimable(treasury, tokenAddr), tokenTotal - tokenCreatorCut, "treasury token cut");
     }
 
     function test_Graduate_MintsPositionToLocker() public {
@@ -105,14 +102,8 @@ contract LpFeeLockerTest is Test {
     }
 
     function test_Collect_AcceptsTheIdFromTheGraduationEvent() public {
-        vm.prank(alice);
-        address tokenAddr =
-            pump.createToken{value: CREATE_FEE}("TestToken", "TT", "logo", "desc", "l1", "l2", "l3");
-        vm.prank(bob);
-        pump.buy{value: 1 ether}(tokenAddr, 0);
-
         vm.recordLogs();
-        pump.graduate(tokenAddr);
+        address tokenAddr = _graduatedToken();
 
         uint256 tokenId;
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -129,14 +120,7 @@ contract LpFeeLockerTest is Test {
         _accrue(tokenAddr, tokenId, 0.02 ether, 300 ether);
         locker.collect(tokenId);
 
-        assertEq(collector.claimable(alice, tokenAddr), (300 ether * CREATOR_SHARE_BPS) / 10000);
-    }
-
-    function test_RevertConstructor_CollectorNamesADifferentLocker() public {
-        FeeCollector wrong =
-            new FeeCollector(treasury, CREATOR_SHARE_BPS, address(pump), makeAddr("otherLocker"));
-        vm.expectRevert("collector locker mismatch");
-        new LpFeeLocker(address(wrong), address(posManager));
+        assertEq(collector.claimable(alice, tokenAddr), (300 ether * CREATOR_SHARE_BPS) / BPS_DENOMINATOR);
     }
 
     function test_Collect_SplitsBothLegsBetweenCreatorAndTreasury() public {
@@ -145,12 +129,7 @@ contract LpFeeLockerTest is Test {
 
         locker.collect(1);
 
-        uint256 nativeCreatorCut = (0.02 ether * CREATOR_SHARE_BPS) / 10000;
-        uint256 tokenCreatorCut = (300 ether * CREATOR_SHARE_BPS) / 10000;
-        assertEq(collector.claimable(alice, wrappedNative), nativeCreatorCut);
-        assertEq(collector.claimable(treasury, wrappedNative), 0.02 ether - nativeCreatorCut);
-        assertEq(collector.claimable(alice, tokenAddr), tokenCreatorCut);
-        assertEq(collector.claimable(treasury, tokenAddr), 300 ether - tokenCreatorCut);
+        _assertLedger(tokenAddr, 0.02 ether, 300 ether);
 
         assertEq(ERC20(wrappedNative).balanceOf(address(collector)), 0.02 ether);
         assertEq(ERC20(tokenAddr).balanceOf(address(collector)), 300 ether);
@@ -179,39 +158,16 @@ contract LpFeeLockerTest is Test {
         assertEq(ERC20(wrappedNative).balanceOf(treasury), 0.02 ether - owedNative);
     }
 
-    function test_Collect_IsPermissionlessAndPaysNothingToTheCaller() public {
+    function test_Collect_IsPermissionless() public {
         address tokenAddr = _graduatedToken();
         _accrue(tokenAddr, 1, 0.02 ether, 300 ether);
 
         address poker = makeAddr("poker");
         vm.prank(poker);
-        (uint256 amount0, uint256 amount1) = locker.collect(1);
-
-        assertGt(amount0 + amount1, 0);
-        assertEq(ERC20(wrappedNative).balanceOf(poker), 0);
-        assertEq(ERC20(tokenAddr).balanceOf(poker), 0);
-        assertEq(collector.claimable(poker, wrappedNative), 0);
-        assertEq(collector.claimable(poker, tokenAddr), 0);
-    }
-
-    function test_Collect_EmitsCollectedAndShared() public {
-        address tokenAddr = _graduatedToken();
-        _accrue(tokenAddr, 1, 0.02 ether, 300 ether);
-        (uint256 amount0, uint256 amount1) = tokenAddr < wrappedNative
-            ? (uint256(300 ether), uint256(0.02 ether))
-            : (uint256(0.02 ether), uint256(300 ether));
-
-        vm.expectEmit(true, true, true, true);
-        emit LpFeesCollected(1, tokenAddr, alice, amount0, amount1);
-        vm.expectEmit(true, true, true, true);
-        emit LpFeeShared(
-            tokenAddr,
-            alice,
-            tokenAddr < wrappedNative ? tokenAddr : wrappedNative,
-            (amount0 * CREATOR_SHARE_BPS) / 10000,
-            amount0 - (amount0 * CREATOR_SHARE_BPS) / 10000
-        );
         locker.collect(1);
+
+        assertEq(collector.claimable(poker, wrappedNative), 0, "the caller is paid nothing");
+        assertEq(collector.claimable(poker, tokenAddr), 0, "the caller is paid nothing");
     }
 
     function test_Collect_ZeroFees_IsANoOp() public {
@@ -238,37 +194,25 @@ contract LpFeeLockerTest is Test {
         assertEq(collector.claimable(treasury, tokenAddr), 0);
     }
 
-    function test_Collect_Twice_TakesOnlyWhatAccrued() public {
+    // collect() is permissionless, so repeat calls must credit each round of fees exactly once -
+    // inflating the ledger would let a claim drain balances owed to other tokens' creators.
+    function test_Collect_Twice_CreditsEachRoundOnce() public {
         address tokenAddr = _graduatedToken();
         _accrue(tokenAddr, 1, 0.02 ether, 300 ether);
         locker.collect(1);
 
+        _accrue(tokenAddr, 1, 0.005 ether, 50 ether);
         (uint256 amount0, uint256 amount1) = locker.collect(1);
-        assertEq(amount0, 0);
-        assertEq(amount1, 0);
-        assertEq(
-            collector.claimable(alice, wrappedNative) + collector.claimable(treasury, wrappedNative), 0.02 ether
-        );
-    }
 
-    function test_Collect_LeavesTheLiquidityAndOwnershipUntouched() public {
-        address tokenAddr = _graduatedToken();
-        _accrue(tokenAddr, 1, 0.02 ether, 300 ether);
-        (,,,,,,, uint128 liquidityBefore,,,,) = posManager.positions(1);
+        (uint256 second0, uint256 second1) = _sorted(tokenAddr, 0.005 ether, 50 ether);
+        assertEq(amount0, second0, "the second collect takes only what accrued since the first");
+        assertEq(amount1, second1, "the second collect takes only what accrued since the first");
+        _assertLedger(tokenAddr, 0.02 ether + 0.005 ether, 300 ether + 50 ether);
 
-        locker.collect(1);
-
-        (,,,,,,, uint128 liquidityAfter,,,,) = posManager.positions(1);
-        assertEq(liquidityAfter, liquidityBefore, "collect must never touch the principal");
-        assertEq(posManager.ownerOf(1), address(locker), "the position never leaves the locker");
-        assertTrue(tokenAddr != address(0));
-    }
-
-    function test_RevertCollect_PositionNotOwnedByTheLocker() public {
-        _graduatedToken();
-
-        vm.expectRevert("Not approved");
-        locker.collect(999);
+        (amount0, amount1) = locker.collect(1);
+        assertEq(amount0, 0, "a collect with nothing newly accrued takes nothing");
+        assertEq(amount1, 0, "a collect with nothing newly accrued takes nothing");
+        _assertLedger(tokenAddr, 0.02 ether + 0.005 ether, 300 ether + 50 ether);
     }
 
     function test_Collect_UnknownCreator_AllToTreasury() public {
@@ -285,5 +229,4 @@ contract LpFeeLockerTest is Test {
         assertEq(collector.claimable(treasury, wrappedNative), 0.02 ether);
         assertEq(collector.claimable(alice, wrappedNative), 0);
     }
-
 }

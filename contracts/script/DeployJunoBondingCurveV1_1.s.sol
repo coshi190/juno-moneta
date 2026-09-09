@@ -27,9 +27,6 @@ contract DeployJunoBondingCurveV1_1 is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        // the collector is keyed to both the curve and the locker immutably, so both addresses are
-        // predicted from the deployer's nonce; the curve is deployed last because it checks both
-        // have code, and the locker checks the collector names it
         uint256 nonce = vm.getNonce(deployer);
         address predictedLocker = vm.computeCreateAddress(deployer, nonce + 1);
         address predictedCurve = vm.computeCreateAddress(deployer, nonce + 2);
@@ -58,8 +55,6 @@ contract DeployJunoBondingCurveV1_1 is Script {
         console.log("collector.lpLocker:", collector.lpLocker());
         console.log("curve.lpLocker:", pump.lpLocker());
         console.log("locker.curve:", locker.curve());
-        // both contracts read this off the position manager, so it is the one wiring value
-        // no constructor can validate -- check it against the intended chain by eye
         console.log("curve.wrappedNative:", address(pump.wrappedNative()));
         console.log("locker.wrappedNative:", locker.wrappedNative());
         console.log("pumpFee:", pump.pumpFee());
