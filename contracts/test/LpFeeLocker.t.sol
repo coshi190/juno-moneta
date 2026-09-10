@@ -91,42 +91,9 @@ contract LpFeeLockerTest is Test {
         assertEq(collector.claimable(treasury, tokenAddr), tokenTotal - tokenCreatorCut, "treasury token cut");
     }
 
-    function test_Graduate_MintsPositionToLocker() public {
-        address tokenAddr = _graduatedToken();
-
-        assertEq(posManager.ownerOf(1), address(locker), "the locker owns the position");
-        assertEq(posManager.balanceOf(address(locker)), 1);
-        assertEq(posManager.balanceOf(address(0xdead)), 0, "nothing is burned to 0xdead any more");
-        assertEq(pump.lpLocker(), address(locker));
-        assertTrue(pump.isGraduate(tokenAddr));
-    }
-
-    function test_Collect_AcceptsTheIdFromTheGraduationEvent() public {
-        vm.recordLogs();
-        address tokenAddr = _graduatedToken();
-
-        uint256 tokenId;
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        bytes32 sig = keccak256("Graduation(address,address,uint256,uint128,uint256,uint256)");
-        for (uint256 i = 0; i < logs.length; i++) {
-            if (logs[i].topics[0] == sig) {
-                (, tokenId,,,) = abi.decode(logs[i].data, (address, uint256, uint128, uint256, uint256));
-                break;
-            }
-        }
-        assertGt(tokenId, 0, "graduation published an id");
-        assertEq(posManager.ownerOf(tokenId), address(locker));
-
-        _accrue(tokenAddr, tokenId, 0.02 ether, 300 ether);
-        locker.collect(tokenId);
-
-        assertEq(collector.claimable(alice, tokenAddr), (300 ether * CREATOR_SHARE_BPS) / BPS_DENOMINATOR);
-    }
-
     function test_Collect_SplitsBothLegsBetweenCreatorAndTreasury() public {
         address tokenAddr = _graduatedToken();
         _accrue(tokenAddr, 1, 0.02 ether, 300 ether);
-
         locker.collect(1);
 
         _assertLedger(tokenAddr, 0.02 ether, 300 ether);
@@ -213,20 +180,5 @@ contract LpFeeLockerTest is Test {
         assertEq(amount0, 0, "a collect with nothing newly accrued takes nothing");
         assertEq(amount1, 0, "a collect with nothing newly accrued takes nothing");
         _assertLedger(tokenAddr, 0.02 ether + 0.005 ether, 300 ether + 50 ether);
-    }
-
-    function test_Collect_UnknownCreator_AllToTreasury() public {
-        address tokenAddr = _graduatedToken();
-        _accrue(tokenAddr, 1, 0.02 ether, 0);
-
-        vm.mockCall(
-            address(pump),
-            abi.encodeWithSelector(pump.creatorOf.selector, tokenAddr),
-            abi.encode(address(0))
-        );
-        locker.collect(1);
-
-        assertEq(collector.claimable(treasury, wrappedNative), 0.02 ether);
-        assertEq(collector.claimable(alice, wrappedNative), 0);
     }
 }

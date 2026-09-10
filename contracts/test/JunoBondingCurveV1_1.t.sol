@@ -3,6 +3,8 @@ pragma solidity 0.8.19;
 
 import "forge-std/Test.sol";
 import "../src/JunoBondingCurveV1_1.sol";
+import "../src/FeeCollector.sol";
+import "../src/LpFeeLocker.sol";
 import "../src/ERC20Token.sol";
 import "./mocks/MockV3Factory.sol";
 import "./mocks/MockV3Pool.sol";
@@ -1484,6 +1486,156 @@ contract JunoBondingCurveV1_1Test is Test {
         }
     }
 
+}
+
+contract JunoBondingCurveV1_1FeeCollectorTest is Test {
+    event TreasuryCredited(uint256 amount);
+    event FeeSet(uint256 createFee, uint256 pumpFee);
+
+    JunoBondingCurveV1_1 public pump;
+    FeeCollector public collector;
+    MockPositionManager public posManager;
+
+    address public treasury;
+    address public alice;
+    address public bob;
+    address public wrappedNative;
+
+    uint256 constant CREATE_FEE = 0.001 ether;
+    uint256 constant VIRTUAL_AMOUNT = 0.5 ether;
+    uint256 constant GRADUATION_AMOUNT = 0.2 ether;
+    uint256 constant PUMP_FEE = 100;
+    uint256 constant CREATOR_SHARE_BPS = 5000;
+
+    function setUp() public {
+        MockV3Factory factory = new MockV3Factory();
+        posManager = new MockPositionManager();
+
+        treasury = makeAddr("treasury");
+        alice = makeAddr("alice");
+        bob = makeAddr("bob");
+        wrappedNative = address(0xFFfFfFffFFfffFFfFFfFFFFFffFFFffffFfFFFfF);
+        vm.etch(wrappedNative, address(new MockWETH9()).code);
+        posManager.setWrappedNative(wrappedNative);
+        posManager.setPoolFactory(address(factory));
+
+        uint256 nonce = vm.getNonce(address(this));
+        address predictedLocker = vm.computeCreateAddress(address(this), nonce + 1);
+        address predictedCurve = vm.computeCreateAddress(address(this), nonce + 2);
+        collector = new FeeCollector(treasury, CREATOR_SHARE_BPS, predictedCurve, predictedLocker);
+        LpFeeLocker locker = new LpFeeLocker(address(collector), address(posManager));
+        pump = new JunoBondingCurveV1_1(
+            address(factory),
+            address(posManager),
+            address(collector),
+            address(locker),
+            VIRTUAL_AMOUNT,
+            GRADUATION_AMOUNT
+        );
+        require(address(pump) == predictedCurve, "curve address mismatch");
+        collector.setCurveFee(CREATE_FEE, PUMP_FEE);
+
+        vm.deal(alice, 100 ether);
+        vm.deal(bob, 100 ether);
+    }
+
+    function _createToken() internal returns (address) {
+        vm.prank(alice);
+        return pump.createToken{value: CREATE_FEE}("TestToken", "TT", "logo", "desc", "l1", "l2", "l3");
+    }
+
+    function test_CreateFee_GoesWhollyToTreasury() public {
+        vm.expectEmit(true, true, true, true);
+        emit TreasuryCredited(CREATE_FEE);
+        _createToken();
+        assertEq(collector.claimable(treasury, address(0)), CREATE_FEE);
+        assertEq(collector.claimable(alice, address(0)), 0);
+    }
+
+    function test_BuyFee_SplitsToCreator() public {
+        address tokenAddr = _createToken();
+
+        vm.prank(bob);
+        pump.buy{value: 0.05 ether}(tokenAddr, 0);
+
+        uint256 fee = (0.05 ether * PUMP_FEE) / 10000;
+        uint256 creatorCut = (fee * CREATOR_SHARE_BPS) / 10000;
+        assertEq(collector.claimable(alice, address(0)), creatorCut);
+        assertEq(collector.claimable(treasury, address(0)), CREATE_FEE + fee - creatorCut);
+    }
+
+    function test_SellFee_SplitsToCreatorInToken() public {
+        address tokenAddr = _createToken();
+        vm.startPrank(bob);
+        uint256 bought = pump.buy{value: 0.05 ether}(tokenAddr, 0);
+        ERC20Token(tokenAddr).approve(address(pump), bought);
+        pump.sell(tokenAddr, bought, 0);
+        vm.stopPrank();
+
+        uint256 fee = (bought * PUMP_FEE) / 10000;
+        uint256 creatorCut = (fee * CREATOR_SHARE_BPS) / 10000;
+        assertEq(collector.claimable(alice, tokenAddr), creatorCut);
+        assertEq(collector.claimable(treasury, tokenAddr), fee - creatorCut);
+        assertEq(
+            ERC20Token(tokenAddr).balanceOf(address(collector)),
+            collector.claimable(alice, tokenAddr) + collector.claimable(treasury, tokenAddr),
+            "the collector holds exactly what its ledger owes"
+        );
+    }
+
+    function test_CreatorClaimsBothSides() public {
+        address tokenAddr = _createToken();
+        vm.startPrank(bob);
+        uint256 bought = pump.buy{value: 1 ether}(tokenAddr, 0);
+        ERC20Token(tokenAddr).approve(address(pump), bought);
+        pump.sell(tokenAddr, bought, 0);
+        vm.stopPrank();
+
+        uint256 owedNative = collector.claimable(alice, address(0));
+        uint256 owedToken = collector.claimable(alice, tokenAddr);
+        assertGt(owedNative, 0);
+        assertGt(owedToken, 0);
+
+        uint256 balanceBefore = alice.balance;
+        vm.startPrank(alice);
+        assertEq(collector.claim(address(0)), owedNative);
+        assertEq(collector.claim(tokenAddr), owedToken);
+        vm.stopPrank();
+
+        assertEq(alice.balance - balanceBefore, owedNative);
+        assertEq(ERC20Token(tokenAddr).balanceOf(alice), owedToken);
+        assertEq(collector.claimable(alice, address(0)), 0);
+        assertEq(collector.claimable(alice, tokenAddr), 0);
+    }
+
+    function test_GraduationDust_GoesWhollyToTreasury() public {
+        address tokenAddr = _createToken();
+        vm.prank(bob);
+        pump.buy{value: 1 ether}(tokenAddr, 0);
+
+        (uint256 nativeReserve,) = pump.pumpReserve(tokenAddr);
+        uint256 usedNative = nativeReserve / 2;
+        posManager.setPartialFill(usedNative, ERC20Token(tokenAddr).balanceOf(address(pump)) / 2);
+
+        uint256 treasuryBefore = collector.claimable(treasury, address(0));
+        uint256 creatorBefore = collector.claimable(alice, address(0));
+        pump.graduate(tokenAddr);
+
+        assertEq(collector.claimable(treasury, address(0)) - treasuryBefore, nativeReserve - usedNative);
+        assertEq(collector.claimable(alice, address(0)), creatorBefore);
+    }
+
+    function test_CurveAdminPassthrough() public {
+        vm.expectEmit(true, true, true, true);
+        emit FeeSet(0.5 ether, 200);
+        collector.setCurveFee(0.5 ether, 200);
+        assertEq(pump.createFee(), 0.5 ether);
+        assertEq(pump.pumpFee(), 200);
+
+        vm.prank(treasury);
+        vm.expectRevert();
+        pump.setFee(0, 0);
+    }
 }
 
 contract JunoBondingCurveV1_1LowWrappedTest is Test {
