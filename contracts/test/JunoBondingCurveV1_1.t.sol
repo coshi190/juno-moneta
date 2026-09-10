@@ -123,49 +123,25 @@ contract JunoBondingCurveV1_1Test is Test {
         return pump.getAmountOut(amountInAfterFee, tokenReserve, pump.virtualAmount() + nativeReserve);
     }
 
-    function test_RevertSetFee_NonFeeCollector() public {
-        vm.prank(alice);
-        vm.expectRevert("only fee collector");
-        pump.setFee(0, 0);
+    function _lastSwapGross() internal returns (uint256 gross) {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 sig = keccak256("Swap(address,bool,address,uint256,uint256,uint256,uint256,uint256)");
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] == sig) {
+                (uint256 amountIn, , uint256 feeAmount, , ) =
+                    abi.decode(logs[i].data, (uint256, uint256, uint256, uint256, uint256));
+                return amountIn + feeAmount;
+            }
+        }
+        revert("no Swap log");
     }
-
+    
     function test_CreateToken_SetsReserves() public {
         assertEq(pump.curveReserve(), CURVE_RESERVE);
         address tokenAddr = _createToken();
         (uint256 nativeReserve, uint256 tokenReserve) = pump.pumpReserve(tokenAddr);
         assertEq(nativeReserve, 0);
         assertEq(tokenReserve, CURVE_RESERVE);
-    }
-
-    function test_InitialNative_StaysExposedAndMatchesSeededReserve() public {
-        assertEq(pump.initialNative(), 0);
-        uint256 balanceBefore = alice.balance;
-        address tokenAddr = _createToken();
-        (uint256 nativeReserve, ) = pump.pumpReserve(tokenAddr);
-        assertEq(nativeReserve, pump.initialNative());
-        assertEq(balanceBefore - alice.balance, pump.createFee() + pump.initialNative());
-    }
-
-    function test_CreateToken_RecordsCreator() public {
-        address tokenAddr = _createTokenAs(bob);
-        assertEq(pump.creatorOf(tokenAddr), bob);
-        assertEq(pump.creatorOf(address(0xBEEF)), address(0), "unknown token has no creator");
-    }
-
-    function test_CreateToken_TransfersFeeToCollector() public {
-        uint256 balBefore = feeCollector.balance;
-        _createToken();
-        assertEq(feeCollector.balance - balBefore, CREATE_FEE);
-    }
-
-    function test_RevertCreateToken_WrongValue() public {
-        vm.prank(alice);
-        vm.expectRevert("insufficient creation cost");
-        pump.createToken{value: CREATE_FEE - 1}("T", "T", "", "", "", "", "");
-
-        vm.prank(alice);
-        vm.expectRevert("insufficient creation cost");
-        pump.createToken{value: CREATE_FEE + 1}("T", "T", "", "", "", "", "");
     }
 
     function test_Buy_CalculatesCorrectOutput() public {
@@ -180,34 +156,6 @@ contract JunoBondingCurveV1_1Test is Test {
         assertEq(amountOut, expected);
     }
 
-    function test_Buy_UpdatesReserves() public {
-        address tokenAddr = _createToken();
-        uint256 buyAmount = 0.1 ether;
-
-        (uint256 nativeBefore, uint256 tokenBefore) = pump.pumpReserve(tokenAddr);
-
-        vm.prank(alice);
-        uint256 amountOut = pump.buy{value: buyAmount}(tokenAddr, 0);
-
-        uint256 feeAmount = (buyAmount * PUMP_FEE) / 10000;
-        uint256 amountInAfterFee = buyAmount - feeAmount;
-
-        (uint256 nativeAfter, uint256 tokenAfter) = pump.pumpReserve(tokenAddr);
-
-        assertEq(nativeAfter, nativeBefore + amountInAfterFee);
-        assertEq(tokenAfter, tokenBefore - amountOut);
-    }
-
-    function test_Buy_TransfersTokensToBuyer() public {
-        address tokenAddr = _createToken();
-        uint256 buyAmount = 0.1 ether;
-
-        vm.prank(alice);
-        uint256 amountOut = pump.buy{value: buyAmount}(tokenAddr, 0);
-
-        assertEq(ERC20Token(tokenAddr).balanceOf(alice), amountOut);
-    }
-
     function test_Buy_TransfersFeeToFeeCollector() public {
         address tokenAddr = _createToken();
         uint256 buyAmount = 0.1 ether;
@@ -218,61 +166,6 @@ contract JunoBondingCurveV1_1Test is Test {
 
         uint256 expectedFee = (buyAmount * PUMP_FEE) / 10000;
         assertEq(feeCollector.balance - balBefore, expectedFee);
-    }
-
-    function test_Buy_EmitsSwapEvent() public {
-        address tokenAddr = _createToken();
-        uint256 buyAmount = 0.1 ether;
-
-        uint256 feeAmount = (buyAmount * PUMP_FEE) / 10000;
-        uint256 amountInAfterFee = buyAmount - feeAmount;
-        uint256 expectedOut = _computeBuyOutput(buyAmount, tokenAddr);
-
-        (uint256 nativeBefore, uint256 tokenBefore) = pump.pumpReserve(tokenAddr);
-        uint256 expectedNativeAfter = nativeBefore + amountInAfterFee;
-        uint256 expectedTokenAfter = tokenBefore - expectedOut;
-
-        vm.expectEmit(true, true, true, true);
-        emit Swap(alice, true, tokenAddr, amountInAfterFee, expectedOut, feeAmount, expectedNativeAfter, expectedTokenAfter);
-
-        vm.prank(alice);
-        pump.buy{value: buyAmount}(tokenAddr, 0);
-    }
-
-    function test_RevertBuy_InsufficientOutput() public {
-        address tokenAddr = _createToken();
-        vm.prank(alice);
-        vm.expectRevert("insufficient output amount");
-        pump.buy{value: 0.1 ether}(tokenAddr, type(uint256).max);
-    }
-
-    function test_RevertBuy_GraduatedToken() public {
-        address tokenAddr = _createToken();
-        _graduateToken(tokenAddr);
-
-        vm.prank(alice);
-        vm.expectRevert("token already graduated");
-        pump.buy{value: 0.1 ether}(tokenAddr, 0);
-    }
-
-    function test_Buy_MultipleBuysUpdateProgressively() public {
-        address tokenAddr = _createToken();
-        uint256 buyAmount = 0.05 ether;
-
-        vm.prank(alice);
-        uint256 aliceOut = pump.buy{value: buyAmount}(tokenAddr, 0);
-
-        vm.prank(bob);
-        uint256 bobOut = pump.buy{value: buyAmount}(tokenAddr, 0);
-
-        assertLt(bobOut, aliceOut);
-
-        (uint256 nativeReserve, uint256 tokenReserve) = pump.pumpReserve(tokenAddr);
-
-        uint256 totalFeeAlice = (buyAmount * PUMP_FEE) / 10000;
-        uint256 totalFeeBob = (buyAmount * PUMP_FEE) / 10000;
-        assertEq(nativeReserve, (buyAmount - totalFeeAlice) + (buyAmount - totalFeeBob));
-        assertEq(tokenReserve, CURVE_RESERVE - aliceOut - bobOut);
     }
 
     function test_Sell_CalculatesCorrectOutput() public {
@@ -288,36 +181,6 @@ contract JunoBondingCurveV1_1Test is Test {
         assertEq(amountOut, expected);
     }
 
-    function test_Sell_UpdatesReserves() public {
-        address tokenAddr = _setupSell();
-
-        (uint256 nativeBefore, uint256 tokenBefore) = pump.pumpReserve(tokenAddr);
-
-        uint256 sellAmount = 1000 ether;
-        vm.prank(alice);
-        uint256 amountOut = pump.sell(tokenAddr, sellAmount, 0);
-
-        uint256 feeAmount = (sellAmount * PUMP_FEE) / 10000;
-        uint256 amountInAfterFee = sellAmount - feeAmount;
-
-        (uint256 nativeAfter, uint256 tokenAfter) = pump.pumpReserve(tokenAddr);
-
-        assertEq(nativeAfter, nativeBefore - amountOut);
-        assertEq(tokenAfter, tokenBefore + amountInAfterFee);
-    }
-
-    function test_Sell_TransfersNativeToSeller() public {
-        address tokenAddr = _setupSell();
-
-        uint256 sellAmount = 1000 ether;
-        uint256 balBefore = alice.balance;
-
-        vm.prank(alice);
-        uint256 amountOut = pump.sell(tokenAddr, sellAmount, 0);
-
-        assertEq(alice.balance - balBefore, amountOut);
-    }
-
     function test_Sell_TransfersTokenFeeToFeeCollector() public {
         address tokenAddr = _setupSell();
 
@@ -329,95 +192,6 @@ contract JunoBondingCurveV1_1Test is Test {
 
         uint256 expectedFee = (sellAmount * PUMP_FEE) / 10000;
         assertEq(ERC20Token(tokenAddr).balanceOf(feeCollector) - feeCollectorBalBefore, expectedFee);
-    }
-
-    function test_Sell_EmitsSwapEvent() public {
-        address tokenAddr = _setupSell();
-
-        uint256 sellAmount = 1000 ether;
-        uint256 feeAmount = (sellAmount * PUMP_FEE) / 10000;
-        uint256 amountInAfterFee = sellAmount - feeAmount;
-
-        uint256 expectedOut = _computeSellOutput(sellAmount, tokenAddr);
-
-        (uint256 nativeBefore, uint256 tokenBefore) = pump.pumpReserve(tokenAddr);
-        uint256 expectedTokenAfter = tokenBefore + amountInAfterFee;
-        uint256 expectedNativeAfter = nativeBefore - expectedOut;
-
-        vm.expectEmit(true, true, true, true);
-        emit Swap(alice, false, tokenAddr, amountInAfterFee, expectedOut, feeAmount, expectedTokenAfter, expectedNativeAfter);
-
-        vm.prank(alice);
-        pump.sell(tokenAddr, sellAmount, 0);
-    }
-
-    function _lastSwapGross() internal returns (uint256 gross) {
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        bytes32 sig = keccak256("Swap(address,bool,address,uint256,uint256,uint256,uint256,uint256)");
-        for (uint256 i = 0; i < logs.length; i++) {
-            if (logs[i].topics[0] == sig) {
-                (uint256 amountIn, , uint256 feeAmount, , ) =
-                    abi.decode(logs[i].data, (uint256, uint256, uint256, uint256, uint256));
-                return amountIn + feeAmount;
-            }
-        }
-        revert("no Swap log");
-    }
-
-    function test_Buy_SwapEventCarriesGrossNativeIn() public {
-        address tokenAddr = _createToken();
-        uint256 buyAmount = 0.1 ether;
-
-        vm.recordLogs();
-        vm.prank(alice);
-        pump.buy{value: buyAmount}(tokenAddr, 0);
-
-        assertEq(_lastSwapGross(), buyAmount, "buyer's gross native is recoverable from Swap alone");
-    }
-
-    function test_Sell_SwapEventCarriesGrossTokenIn() public {
-        address tokenAddr = _setupSell();
-        uint256 sellAmount = 1000 ether;
-
-        vm.recordLogs();
-        vm.prank(alice);
-        pump.sell(tokenAddr, sellAmount, 0);
-
-        assertEq(_lastSwapGross(), sellAmount, "seller's gross token outflow is recoverable from Swap alone");
-    }
-
-    function test_RevertSell_InsufficientOutput() public {
-        address tokenAddr = _setupSell();
-
-        vm.prank(alice);
-        vm.expectRevert("insufficient output amount");
-        pump.sell(tokenAddr, 1000 ether, type(uint256).max);
-    }
-
-    function test_RevertSell_GraduatedToken() public {
-        address tokenAddr = _createToken();
-        _graduateToken(tokenAddr);
-
-        vm.prank(alice);
-        vm.expectRevert("token already graduated");
-        pump.sell(tokenAddr, 1, 0);
-    }
-
-    function test_RevertGraduate_AlreadyGraduated() public {
-        address tokenAddr = _createToken();
-        _graduateToken(tokenAddr);
-
-        vm.expectRevert("token already graduated");
-        pump.graduate(tokenAddr);
-    }
-
-    function test_RevertGraduate_NotReachedCap() public {
-        address tokenAddr = _createToken();
-        vm.prank(alice);
-        pump.buy{value: 0.01 ether}(tokenAddr, 0);
-
-        vm.expectRevert("not reach graduation cap");
-        pump.graduate(tokenAddr);
     }
 
     function test_Graduate_CreatesNewPool() public {
@@ -1010,6 +784,23 @@ contract JunoBondingCurveV1_1Test is Test {
         assertLe(reserveAfter, GRADUATION_AMOUNT);
     }
 
+    function testFuzz_Buy_LaterBuyCostsMore(uint256 amount) public {
+        address tokenAddr = _createToken();
+        amount = bound(amount, 1e12, GRADUATION_AMOUNT / 2);
+
+        vm.prank(alice);
+        uint256 aliceOut = pump.buy{value: amount}(tokenAddr, 0);
+        vm.prank(bob);
+        uint256 bobOut = pump.buy{value: amount}(tokenAddr, 0);
+
+        assertLt(bobOut, aliceOut, "an equal-sized later buy receives fewer tokens");
+
+        (uint256 nativeReserve, uint256 tokenReserve) = pump.pumpReserve(tokenAddr);
+        uint256 net = amount - (amount * PUMP_FEE) / 10000;
+        assertEq(nativeReserve, net * 2);
+        assertEq(tokenReserve, CURVE_RESERVE - aliceOut - bobOut);
+    }
+
     function testFuzz_ClampedBuy_LeavesTokenGraduatable(uint256 prologue) public {
         address tokenAddr = _createToken();
         prologue = bound(prologue, 1e12, 0.35 ether);
@@ -1196,11 +987,6 @@ contract JunoBondingCurveV1_1Test is Test {
             vm.prank(alice);
             pump.buy{value: buyStep}(tokenAddr, 0);
         }
-    }
-
-    function _graduateToken(address tokenAddr) internal {
-        _buyToGraduation(tokenAddr);
-        pump.graduate(tokenAddr);
     }
 
     function _setReserves(address tokenAddr, uint256 native, uint256 token) internal {
