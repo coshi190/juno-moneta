@@ -31,16 +31,8 @@ contract LpFeeLocker {
     );
 
     constructor(address _feeCollector, address _posManager) {
-        require(_feeCollector.code.length > 0, "invalid fee collector");
-        require(_posManager != address(0), "invalid pos manager");
         address _wrappedNative = INonfungiblePositionManager(_posManager).WETH9();
-        require(_wrappedNative != address(0), "invalid wrapped native");
         address _curve = ILockerFeeCollector(_feeCollector).curve();
-        require(_curve != address(0), "invalid curve");
-        require(
-            ILockerFeeCollector(_feeCollector).lpLocker() == address(this),
-            "collector locker mismatch"
-        );
         feeCollector = _feeCollector;
         curve = _curve;
         posManager = INonfungiblePositionManager(_posManager);

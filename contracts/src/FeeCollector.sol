@@ -51,10 +51,6 @@ contract FeeCollector is Ownable2Step {
     }
     
     constructor(address _treasury, uint256 _creatorShareBps, address _curve, address _lpLocker) {
-        require(_treasury != address(0), "invalid treasury");
-        require(_curve != address(0), "invalid curve");
-        require(_lpLocker != address(0), "invalid lp locker");
-        require(_creatorShareBps <= BPS_DENOMINATOR, "share too high");
         treasury = _treasury;
         creatorShareBps = _creatorShareBps;
         curve = _curve;

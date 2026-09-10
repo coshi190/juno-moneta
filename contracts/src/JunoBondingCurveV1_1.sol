@@ -24,7 +24,6 @@ contract JunoBondingCurveV1_1 {
     uint256 public createFee;
     uint256 public pumpFee;
     uint256 public constant INITIALTOKEN = 1000000000 ether;
-    uint256 public constant initialNative = 0;
     uint256 public immutable virtualAmount;
     uint256 public immutable graduationAmount;
     uint256 public immutable curveReserve;
@@ -74,13 +73,7 @@ contract JunoBondingCurveV1_1 {
         uint256 _virtualAmount,
         uint256 _graduationAmount
     ) {
-        require(_virtualAmount > 0 && _graduationAmount > 0, "invalid curve state");
-        require(_feeCollector.code.length > 0, "invalid fee collector");
-        require(_lpLocker.code.length > 0, "invalid lp locker");
-        require(_v3factory != address(0), "invalid v3 factory");
-        require(_v3posManager != address(0), "invalid pos manager");
         address _wrappedNative = INonfungiblePositionManager(_v3posManager).WETH9();
-        require(_wrappedNative != address(0), "invalid wrapped native");
         wrappedNative = IERC20(_wrappedNative);
         v3factory = IUniswapV3Factory(_v3factory);
         v3posManager = INonfungiblePositionManager(_v3posManager);
