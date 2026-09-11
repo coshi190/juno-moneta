@@ -1,6 +1,0 @@
-- Prefer the simplest architecture that satisfies the request. Do not add abstraction for hypothetical needs.
-- Avoid mannered prose.
-- Tests pin behavior, not implementations.
-- The SDK is a read-and-compute layer: read and simulate only.
-- The SDK is versioned and published; bump its version when making a released change to its public API.
-- The SDK's main consumer is the `junoswap` frontend at `/Users/coshi/com/junoswap`. `packages/cli` and `indexer` are the in-repo consumers. When changing the SDK's public API, grep all three consumers for the affected symbols and report what breaks.
