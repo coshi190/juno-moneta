@@ -57,6 +57,7 @@ export async function readPosition(
             functionName: 'positions',
             address: manager,
             args: [tokenId],
+            cache: 'immutable',
         })) as readonly [bigint, string, string, string, number, number, number, ...unknown[]]
         return {
             token0: pos[2],
