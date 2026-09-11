@@ -1,6 +1,6 @@
 import type { Abi, Address } from 'viem'
-import { UNISWAP_V2_ROUTER_ABI } from '../abis/uniswap-v2-router.js'
-import { UNISWAP_V3_QUOTER_V2_ABI } from '../abis/uniswap-v3-quoter.js'
+import { V2_ROUTER_ABI } from '../abis/v2-router.js'
+import { V3_QUOTER_V2_ABI } from '../abis/v3-quoter.js'
 import { getDexConfig, ProtocolType, type DEXType } from '../configs/dex.js'
 import { encodeV3Path, type ContractCall } from './plan-swap.js'
 import { getSwapAddress, resolveSwapPath } from './native.js'
@@ -26,7 +26,7 @@ export function buildQuoteCall(input: QuoteCallInput): ContractCall | undefined 
         if (!config) return undefined
         return {
             address: config.router,
-            abi: UNISWAP_V2_ROUTER_ABI as Abi,
+            abi: V2_ROUTER_ABI as Abi,
             functionName: 'getAmountsOut',
             args: [
                 amountIn,
@@ -41,7 +41,7 @@ export function buildQuoteCall(input: QuoteCallInput): ContractCall | undefined 
     if (input.path && input.path.length > 2 && input.fees) {
         return {
             address: config.quoter,
-            abi: UNISWAP_V3_QUOTER_V2_ABI as Abi,
+            abi: V3_QUOTER_V2_ABI as Abi,
             functionName: 'quoteExactInput',
             args: [encodeV3Path(resolveSwapPath(input.path, chainId), input.fees), amountIn],
         }
@@ -52,7 +52,7 @@ export function buildQuoteCall(input: QuoteCallInput): ContractCall | undefined 
 
     return {
         address: config.quoter,
-        abi: UNISWAP_V3_QUOTER_V2_ABI as Abi,
+        abi: V3_QUOTER_V2_ABI as Abi,
         functionName: 'quoteExactInputSingle',
         args: [
             {

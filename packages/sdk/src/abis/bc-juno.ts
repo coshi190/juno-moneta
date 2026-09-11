@@ -1,22 +1,5 @@
 export const BONDING_CURVE_JUNOSWAP_ABI = [
     {
-        type: 'receive',
-        stateMutability: 'payable',
-    },
-    {
-        type: 'function',
-        name: 'INITIALTOKEN',
-        inputs: [],
-        outputs: [
-            {
-                name: '',
-                type: 'uint256',
-                internalType: 'uint256',
-            },
-        ],
-        stateMutability: 'view',
-    },
-    {
         type: 'function',
         name: 'buy',
         inputs: [
@@ -104,48 +87,6 @@ export const BONDING_CURVE_JUNOSWAP_ABI = [
     },
     {
         type: 'function',
-        name: 'feeCollector',
-        inputs: [],
-        outputs: [
-            {
-                name: '',
-                type: 'address',
-                internalType: 'address',
-            },
-        ],
-        stateMutability: 'view',
-    },
-    {
-        type: 'function',
-        name: 'getAmountOut',
-        inputs: [
-            {
-                name: '_inputAmount',
-                type: 'uint256',
-                internalType: 'uint256',
-            },
-            {
-                name: '_inputReserve',
-                type: 'uint256',
-                internalType: 'uint256',
-            },
-            {
-                name: '_outputReserve',
-                type: 'uint256',
-                internalType: 'uint256',
-            },
-        ],
-        outputs: [
-            {
-                name: '',
-                type: 'uint256',
-                internalType: 'uint256',
-            },
-        ],
-        stateMutability: 'pure',
-    },
-    {
-        type: 'function',
         name: 'graduate',
         inputs: [
             {
@@ -179,38 +120,6 @@ export const BONDING_CURVE_JUNOSWAP_ABI = [
     {
         type: 'function',
         name: 'initialNative',
-        inputs: [],
-        outputs: [
-            {
-                name: '',
-                type: 'uint256',
-                internalType: 'uint256',
-            },
-        ],
-        stateMutability: 'view',
-    },
-    {
-        type: 'function',
-        name: 'isGraduate',
-        inputs: [
-            {
-                name: '',
-                type: 'address',
-                internalType: 'address',
-            },
-        ],
-        outputs: [
-            {
-                name: '',
-                type: 'bool',
-                internalType: 'bool',
-            },
-        ],
-        stateMutability: 'view',
-    },
-    {
-        type: 'function',
-        name: 'pumpFee',
         inputs: [],
         outputs: [
             {
@@ -276,104 +185,6 @@ export const BONDING_CURVE_JUNOSWAP_ABI = [
     },
     {
         type: 'function',
-        name: 'setCurveState',
-        inputs: [
-            {
-                name: '_initialNative',
-                type: 'uint256',
-                internalType: 'uint256',
-            },
-            {
-                name: '_virtualAmount',
-                type: 'uint256',
-                internalType: 'uint256',
-            },
-            {
-                name: '_graduationAmount',
-                type: 'uint256',
-                internalType: 'uint256',
-            },
-        ],
-        outputs: [
-            {
-                name: '',
-                type: 'bool',
-                internalType: 'bool',
-            },
-        ],
-        stateMutability: 'nonpayable',
-    },
-    {
-        type: 'function',
-        name: 'setFee',
-        inputs: [
-            {
-                name: '_createFee',
-                type: 'uint256',
-                internalType: 'uint256',
-            },
-            {
-                name: '_pumpFee',
-                type: 'uint256',
-                internalType: 'uint256',
-            },
-        ],
-        outputs: [
-            {
-                name: '',
-                type: 'bool',
-                internalType: 'bool',
-            },
-        ],
-        stateMutability: 'nonpayable',
-    },
-    {
-        type: 'function',
-        name: 'setFeeCollector',
-        inputs: [
-            {
-                name: '_newFeeCollector',
-                type: 'address',
-                internalType: 'address',
-            },
-        ],
-        outputs: [
-            {
-                name: '',
-                type: 'bool',
-                internalType: 'bool',
-            },
-        ],
-        stateMutability: 'nonpayable',
-    },
-    {
-        type: 'function',
-        name: 'v3factory',
-        inputs: [],
-        outputs: [
-            {
-                name: '',
-                type: 'address',
-                internalType: 'contract IUniswapV3Factory',
-            },
-        ],
-        stateMutability: 'view',
-    },
-    {
-        type: 'function',
-        name: 'v3posManager',
-        inputs: [],
-        outputs: [
-            {
-                name: '',
-                type: 'address',
-                internalType: 'contract INonfungiblePositionManager',
-            },
-        ],
-        stateMutability: 'view',
-    },
-    {
-        type: 'function',
         name: 'virtualAmount',
         inputs: [],
         outputs: [
@@ -381,19 +192,6 @@ export const BONDING_CURVE_JUNOSWAP_ABI = [
                 name: '',
                 type: 'uint256',
                 internalType: 'uint256',
-            },
-        ],
-        stateMutability: 'view',
-    },
-    {
-        type: 'function',
-        name: 'wrappedNative',
-        inputs: [],
-        outputs: [
-            {
-                name: '',
-                type: 'address',
-                internalType: 'contract IERC20',
             },
         ],
         stateMutability: 'view',

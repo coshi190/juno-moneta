@@ -1,6 +1,6 @@
 {
     "name": "@coshi190/juno-moneta-sdk",
-    "version": "0.42.0",
+    "version": "0.43.0",
     "description": "Chain-facing primitives",
     "license": "MIT",
     "repository": {
@@ -25,7 +25,7 @@
         "build": "rm -rf dist && tsc -p tsconfig.build.json",
         "clean": "rm -rf dist *.tsbuildinfo",
         "typecheck": "tsc --noEmit",
-        "test": "vitest --run",
+        "test": "vitest --run --passWithNoTests",
         "prepublishOnly": "bun run build"
     },
     "peerDependencies": {

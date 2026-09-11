@@ -1,5 +1,5 @@
 import { formatEther, type Abi, type Address } from 'viem'
-import { BONDING_CURVE_JUNOSWAP_ABI } from '../abis/bonding-curve-junoswap.js'
+import { BONDING_CURVE_JUNOSWAP_ABI } from '../abis/bc-juno.js'
 import { getBondingCurveDeployment } from '../configs/deployments.js'
 import { calculateExactGraduationReserve } from './curve.js'
 import { batchRead, type ReadClient } from './multicall.js'

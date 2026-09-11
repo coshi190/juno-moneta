@@ -1,6 +1,6 @@
 import { zeroAddress, type Abi, type Address } from 'viem'
-import { UNISWAP_V3_FACTORY_ABI } from '../abis/uniswap-v3-factory.js'
-import { UNISWAP_V3_POOL_ABI } from '../abis/uniswap-v3-pool.js'
+import { V3_FACTORY_ABI } from '../abis/v3-factory.js'
+import { V3_POOL_ABI } from '../abis/v3-pool.js'
 import { getDexConfig, ProtocolType, getSupportedDexs, type DEXType } from '../configs/dex.js'
 import { getSwapAddress } from './native.js'
 import { batchRead, type ReadClient, type ReadResult } from './multicall.js'
@@ -131,7 +131,7 @@ function collectLegQueries(candidates: readonly V3RouteCandidate[]): LegQuery[] 
                     key,
                     call: {
                         address: c.factory,
-                        abi: UNISWAP_V3_FACTORY_ABI as Abi,
+                        abi: V3_FACTORY_ABI as Abi,
                         functionName: 'getPool',
                         args: [a, b, fee],
                     },
@@ -373,7 +373,7 @@ async function discoverV3Pools(
         client,
         candidates.map((candidate) => ({
             address: candidate.factory,
-            abi: UNISWAP_V3_FACTORY_ABI as Abi,
+            abi: V3_FACTORY_ABI as Abi,
             functionName: 'getPool',
             args: [candidate.tokenIn, candidate.tokenOut, candidate.fee],
         }))
@@ -385,7 +385,7 @@ async function discoverV3Pools(
         client,
         resolved.map(({ pool }) => ({
             address: pool,
-            abi: UNISWAP_V3_POOL_ABI as Abi,
+            abi: V3_POOL_ABI as Abi,
             functionName: 'liquidity',
             args: [],
         }))

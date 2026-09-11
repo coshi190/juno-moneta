@@ -1,7 +1,7 @@
 import { zeroAddress, type Abi, type Address } from 'viem'
 import { NONFUNGIBLE_POSITION_MANAGER_ABI } from '../abis/nonfungible-position-manager.js'
-import { UNISWAP_V3_FACTORY_ABI } from '../abis/uniswap-v3-factory.js'
-import { UNISWAP_V3_POOL_ABI } from '../abis/uniswap-v3-pool.js'
+import { V3_FACTORY_ABI } from '../abis/v3-factory.js'
+import { V3_POOL_ABI } from '../abis/v3-pool.js'
 import { ProtocolType, getDexConfig, getTickSpacing, type DEXType } from '../configs/dex.js'
 import {
     batchRead,
@@ -97,7 +97,7 @@ export function buildPoolAddressCalls(
 ): ContractCall[] {
     return keys.map((entry) => ({
         address: factory,
-        abi: UNISWAP_V3_FACTORY_ABI as Abi,
+        abi: V3_FACTORY_ABI as Abi,
         functionName: 'getPool',
         args: [entry.token0 as Address, entry.token1 as Address, entry.fee],
     }))
@@ -120,8 +120,8 @@ export function decodePoolAddresses(
 
 export function buildPoolStateCalls(pools: readonly Address[]): ContractCall[] {
     return pools.flatMap((pool) => [
-        { address: pool, abi: UNISWAP_V3_POOL_ABI as Abi, functionName: 'slot0', args: [] },
-        { address: pool, abi: UNISWAP_V3_POOL_ABI as Abi, functionName: 'liquidity', args: [] },
+        { address: pool, abi: V3_POOL_ABI as Abi, functionName: 'slot0', args: [] },
+        { address: pool, abi: V3_POOL_ABI as Abi, functionName: 'liquidity', args: [] },
     ])
 }
 

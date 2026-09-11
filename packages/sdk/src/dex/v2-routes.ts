@@ -1,5 +1,5 @@
 import { zeroAddress, type Abi, type Address } from 'viem'
-import { UNISWAP_V2_FACTORY_ABI } from '../abis/uniswap-v2-factory.js'
+import { V2_FACTORY_ABI } from '../abis/v2-factory.js'
 import { getDexConfig, getSupportedDexs, ProtocolType, type DEXType } from '../configs/dex.js'
 import { getSwapAddress } from './native.js'
 import { batchRead, type ReadClient } from './multicall.js'
@@ -88,7 +88,7 @@ function collectLegQueries(candidates: readonly V2RouteCandidate[]): LegQuery[] 
                 key,
                 call: {
                     address: c.factory,
-                    abi: UNISWAP_V2_FACTORY_ABI as Abi,
+                    abi: V2_FACTORY_ABI as Abi,
                     functionName: 'getPair',
                     args: [a, b],
                 },
@@ -212,7 +212,7 @@ export async function discoverV2Pairs(
         client,
         entries.map((e) => ({
             address: e.factory,
-            abi: UNISWAP_V2_FACTORY_ABI as Abi,
+            abi: V2_FACTORY_ABI as Abi,
             functionName: 'getPair',
             args: [e.tokenIn, e.tokenOut],
         }))

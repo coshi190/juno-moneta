@@ -1,6 +1,6 @@
 import { encodeFunctionData, concat, pad, toHex, type Abi, type Address, type Hex } from 'viem'
-import { UNISWAP_V2_ROUTER_ABI } from '../abis/uniswap-v2-router.js'
-import { UNISWAP_V3_SWAP_ROUTER_ABI } from '../abis/uniswap-v3-swap-router.js'
+import { V2_ROUTER_ABI } from '../abis/v2-router.js'
+import { V3_SWAP_ROUTER_ABI } from '../abis/v3-swap-router.js'
 import { WETH9_ABI } from '../abis/weth9.js'
 import { getDexConfig, ProtocolType, type DEXType } from '../configs/dex.js'
 import { appendTrackingTag } from '../rewards/tracking.js'
@@ -87,7 +87,7 @@ export function encodeV3Path(tokens: Address[], fees: number[]): Hex {
 
 function encodeExactInputSingle(params: V3ExactInputSingleParams): Hex {
     return encodeFunctionData({
-        abi: UNISWAP_V3_SWAP_ROUTER_ABI,
+        abi: V3_SWAP_ROUTER_ABI,
         functionName: 'exactInputSingle',
         args: [params],
     })
@@ -95,7 +95,7 @@ function encodeExactInputSingle(params: V3ExactInputSingleParams): Hex {
 
 function encodeExactInput(params: V3ExactInputParams): Hex {
     return encodeFunctionData({
-        abi: UNISWAP_V3_SWAP_ROUTER_ABI,
+        abi: V3_SWAP_ROUTER_ABI,
         functionName: 'exactInput',
         args: [params],
     })
@@ -103,7 +103,7 @@ function encodeExactInput(params: V3ExactInputParams): Hex {
 
 function encodeUnwrapWETH9(amountMinimum: bigint, recipient: Address): Hex {
     return encodeFunctionData({
-        abi: UNISWAP_V3_SWAP_ROUTER_ABI,
+        abi: V3_SWAP_ROUTER_ABI,
         functionName: 'unwrapWETH9',
         args: [amountMinimum, recipient],
     })
@@ -164,7 +164,7 @@ function planV2Swap(input: PlanSwapInput): SwapPlan {
         value?: bigint
     ): ContractCall => ({
         address: config.router,
-        abi: UNISWAP_V2_ROUTER_ABI as Abi,
+        abi: V2_ROUTER_ABI as Abi,
         functionName,
         args,
         value,
@@ -207,7 +207,7 @@ function planV3Swap(input: PlanSwapInput): SwapPlan {
     const value = isNativeToken(tokenIn) ? amountIn : undefined
 
     const swapRecipient = unwrapOut ? ADDRESS_THIS : recipient
-    const base = { address: config.swapRouter, abi: UNISWAP_V3_SWAP_ROUTER_ABI as Abi, value }
+    const base = { address: config.swapRouter, abi: V3_SWAP_ROUTER_ABI as Abi, value }
 
     const withUnwrap = (swapCalldata: Hex): ContractCall => ({
         ...base,

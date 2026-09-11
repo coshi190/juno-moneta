@@ -8,14 +8,14 @@ import {
     getChains,
     ERC20_ABI,
     NONFUNGIBLE_POSITION_MANAGER_ABI,
-    UNISWAP_V2_FACTORY_ABI,
-    UNISWAP_V2_PAIR_ABI,
-    UNISWAP_V3_FACTORY_ABI,
-    UNISWAP_V3_POOL_ABI,
-    UNISWAP_V3_STAKER_ABI,
+    V2_FACTORY_ABI,
+    V3_FACTORY_ABI,
+    V3_POOL_ABI,
     getAggRouterDeployment,
     getBondingCurveDeployment,
 } from '@coshi190/juno-moneta-sdk'
+import { V3_STAKER_ABI } from './src/abis/v3-staker.js'
+import { V2_PAIR_ABI } from './src/abis/v2-pair.js'
 import externalPools from './external-pools.json'
 
 const CHAINS = getChains()
@@ -67,8 +67,8 @@ const abiEvent = <TAbi extends readonly { type: string; name?: string }[], TName
     return event
 }
 
-const PAIR_CREATED_EVENT = abiEvent(UNISWAP_V2_FACTORY_ABI, 'PairCreated')
-const V3_POOL_CREATED_EVENT = abiEvent(UNISWAP_V3_FACTORY_ABI, 'PoolCreated')
+const PAIR_CREATED_EVENT = abiEvent(V2_FACTORY_ABI, 'PairCreated')
+const V3_POOL_CREATED_EVENT = abiEvent(V3_FACTORY_ABI, 'PoolCreated')
 const CURVE_CREATION_EVENT = getCurveCreationEvent()
 
 const BONDING_CURVE_TESTNET = getBondingCurveDeployment(CHAINS.kubTestnet)!
@@ -144,13 +144,13 @@ export default createConfig({
               }
             : {}),
         V3Factory: {
-            abi: UNISWAP_V3_FACTORY_ABI,
+            abi: V3_FACTORY_ABI,
             chain: 'kubTestnet',
             address: v3Factory(CHAINS.kubTestnet, 'junoswap'),
             startBlock: V3_TESTNET_START,
         },
         V3Pool: {
-            abi: UNISWAP_V3_POOL_ABI,
+            abi: V3_POOL_ABI,
             chain: 'kubTestnet',
             address: factory({
                 address: v3Factory(CHAINS.kubTestnet, 'junoswap'),
@@ -160,13 +160,13 @@ export default createConfig({
             startBlock: V3_TESTNET_START,
         },
         V3FactoryBitkub: {
-            abi: UNISWAP_V3_FACTORY_ABI,
+            abi: V3_FACTORY_ABI,
             chain: 'bitkub',
             address: v3Factory(CHAINS.bitkub, 'junoswap'),
             startBlock: V3_BITKUB_START,
         },
         V3PoolBitkub: {
-            abi: UNISWAP_V3_POOL_ABI,
+            abi: V3_POOL_ABI,
             chain: 'bitkub',
             address: factory({
                 address: v3Factory(CHAINS.bitkub, 'junoswap'),
@@ -176,13 +176,13 @@ export default createConfig({
             startBlock: V3_BITKUB_START,
         },
         V3FactoryJbc: {
-            abi: UNISWAP_V3_FACTORY_ABI,
+            abi: V3_FACTORY_ABI,
             chain: 'jbc',
             address: v3Factory(CHAINS.jbc, 'junoswap'),
             startBlock: V3_JBC_START,
         },
         V3PoolJbc: {
-            abi: UNISWAP_V3_POOL_ABI,
+            abi: V3_POOL_ABI,
             chain: 'jbc',
             address: factory({
                 address: v3Factory(CHAINS.jbc, 'junoswap'),
@@ -210,37 +210,37 @@ export default createConfig({
             startBlock: V3_JBC_START,
         },
         V3Staker: {
-            abi: UNISWAP_V3_STAKER_ABI,
+            abi: V3_STAKER_ABI,
             chain: 'kubTestnet',
             address: v3Staker(CHAINS.kubTestnet, 'junoswap'),
             startBlock: V3_STAKER_TESTNET_START,
         },
         V3StakerBitkub: {
-            abi: UNISWAP_V3_STAKER_ABI,
+            abi: V3_STAKER_ABI,
             chain: 'bitkub',
             address: v3Staker(CHAINS.bitkub, 'junoswap'),
             startBlock: V3_STAKER_BITKUB_START,
         },
         V3StakerJbc: {
-            abi: UNISWAP_V3_STAKER_ABI,
+            abi: V3_STAKER_ABI,
             chain: 'jbc',
             address: v3Staker(CHAINS.jbc, 'junoswap'),
             startBlock: V3_STAKER_JBC_START,
         },
         JibswapFactory: {
-            abi: UNISWAP_V2_FACTORY_ABI,
+            abi: V2_FACTORY_ABI,
             chain: 'jbc',
             address: v2Factory(CHAINS.jbc, 'jibswap'),
             startBlock: JBC_SWAP_START,
         },
         JibswapPairSeeded: {
-            abi: UNISWAP_V2_PAIR_ABI,
+            abi: V2_PAIR_ABI,
             chain: 'jbc',
             address: seed('jibswap'),
             startBlock: JBC_SWAP_START,
         },
         JibswapPair: {
-            abi: UNISWAP_V2_PAIR_ABI,
+            abi: V2_PAIR_ABI,
             chain: 'jbc',
             address: factory({
                 address: v2Factory(CHAINS.jbc, 'jibswap'),
@@ -250,19 +250,19 @@ export default createConfig({
             startBlock: JBC_SWAP_START,
         },
         UdonswapFactory: {
-            abi: UNISWAP_V2_FACTORY_ABI,
+            abi: V2_FACTORY_ABI,
             chain: 'bitkub',
             address: v2Factory(CHAINS.bitkub, 'udonswap'),
             startBlock: BITKUB_SWAP_START,
         },
         UdonswapPairSeeded: {
-            abi: UNISWAP_V2_PAIR_ABI,
+            abi: V2_PAIR_ABI,
             chain: 'bitkub',
             address: seed('udonswap'),
             startBlock: BITKUB_SWAP_START,
         },
         UdonswapPair: {
-            abi: UNISWAP_V2_PAIR_ABI,
+            abi: V2_PAIR_ABI,
             chain: 'bitkub',
             address: factory({
                 address: v2Factory(CHAINS.bitkub, 'udonswap'),
@@ -272,19 +272,19 @@ export default createConfig({
             startBlock: BITKUB_SWAP_START,
         },
         PonderFactory: {
-            abi: UNISWAP_V2_FACTORY_ABI,
+            abi: V2_FACTORY_ABI,
             chain: 'bitkub',
             address: v2Factory(CHAINS.bitkub, 'ponder'),
             startBlock: BITKUB_SWAP_START,
         },
         PonderPairSeeded: {
-            abi: UNISWAP_V2_PAIR_ABI,
+            abi: V2_PAIR_ABI,
             chain: 'bitkub',
             address: seed('ponder'),
             startBlock: BITKUB_SWAP_START,
         },
         PonderPair: {
-            abi: UNISWAP_V2_PAIR_ABI,
+            abi: V2_PAIR_ABI,
             chain: 'bitkub',
             address: factory({
                 address: v2Factory(CHAINS.bitkub, 'ponder'),
@@ -294,19 +294,19 @@ export default createConfig({
             startBlock: BITKUB_SWAP_START,
         },
         DiamonFactory: {
-            abi: UNISWAP_V2_FACTORY_ABI,
+            abi: V2_FACTORY_ABI,
             chain: 'bitkub',
             address: v2Factory(CHAINS.bitkub, 'diamon'),
             startBlock: BITKUB_SWAP_START,
         },
         DiamonPairSeeded: {
-            abi: UNISWAP_V2_PAIR_ABI,
+            abi: V2_PAIR_ABI,
             chain: 'bitkub',
             address: seed('diamon'),
             startBlock: BITKUB_SWAP_START,
         },
         DiamonPair: {
-            abi: UNISWAP_V2_PAIR_ABI,
+            abi: V2_PAIR_ABI,
             chain: 'bitkub',
             address: factory({
                 address: v2Factory(CHAINS.bitkub, 'diamon'),
@@ -316,19 +316,19 @@ export default createConfig({
             startBlock: BITKUB_SWAP_START,
         },
         KublerxV3Factory: {
-            abi: UNISWAP_V3_FACTORY_ABI,
+            abi: V3_FACTORY_ABI,
             chain: 'bitkub',
             address: v3Factory(CHAINS.bitkub, 'kublerx'),
             startBlock: BITKUB_SWAP_START,
         },
         KublerxV3PoolSeeded: {
-            abi: UNISWAP_V3_POOL_ABI,
+            abi: V3_POOL_ABI,
             chain: 'bitkub',
             address: seed('kublerx'),
             startBlock: BITKUB_SWAP_START,
         },
         KublerxV3Pool: {
-            abi: UNISWAP_V3_POOL_ABI,
+            abi: V3_POOL_ABI,
             chain: 'bitkub',
             address: factory({
                 address: v3Factory(CHAINS.bitkub, 'kublerx'),

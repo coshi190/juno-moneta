@@ -1,7 +1,7 @@
-export const UNISWAP_V2_FACTORY_ABI = [
+export const V3_FACTORY_ABI = [
     {
         type: 'function',
-        name: 'getPair',
+        name: 'getPool',
         inputs: [
             {
                 name: 'tokenA',
@@ -13,10 +13,15 @@ export const UNISWAP_V2_FACTORY_ABI = [
                 type: 'address',
                 internalType: 'address',
             },
+            {
+                name: 'fee',
+                type: 'uint24',
+                internalType: 'uint24',
+            },
         ],
         outputs: [
             {
-                name: 'pair',
+                name: 'pool',
                 type: 'address',
                 internalType: 'address',
             },
@@ -25,7 +30,7 @@ export const UNISWAP_V2_FACTORY_ABI = [
     },
     {
         type: 'event',
-        name: 'PairCreated',
+        name: 'PoolCreated',
         inputs: [
             {
                 name: 'token0',
@@ -40,16 +45,22 @@ export const UNISWAP_V2_FACTORY_ABI = [
                 internalType: 'address',
             },
             {
-                name: 'pair',
+                name: 'fee',
+                type: 'uint24',
+                indexed: true,
+                internalType: 'uint24',
+            },
+            {
+                name: 'tickSpacing',
+                type: 'int24',
+                indexed: false,
+                internalType: 'int24',
+            },
+            {
+                name: 'pool',
                 type: 'address',
                 indexed: false,
                 internalType: 'address',
-            },
-            {
-                name: 'allPairsLength',
-                type: 'uint256',
-                indexed: false,
-                internalType: 'uint256',
             },
         ],
         anonymous: false,
