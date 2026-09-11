@@ -108,8 +108,6 @@ export type {
     V3Token,
     V3TokenSnapshot,
 } from './ponder/entities.js'
-export { parseV3Swap, parseV2Swap } from './ponder/parse-swaps.js'
-export type { ParsedSwap } from './ponder/parse-swaps.js'
 export {
     LAUNCH_TOKEN_DETAIL_FIELDS,
     LAUNCH_TOKEN_META_FIELDS,
@@ -134,7 +132,6 @@ export type {
     TokenHolderFilter,
 } from './ponder/queries/launchpad.js'
 export {
-    fetchUserSwapEvents,
     fetchUserBondingCurveSwaps,
     fetchUserV3Swaps,
     fetchUserV2Swaps,
@@ -144,8 +141,6 @@ export {
     fetchTokenV3Swaps,
 } from './ponder/queries/swaps.js'
 export type {
-    V3Swap,
-    V2Swap,
     BondingCurveActivity,
     V3Activity,
     V2Activity,
@@ -153,7 +148,6 @@ export type {
     TransferActivity,
     BondingCurveSwapDetail,
     V3SwapDetail,
-    SwapScanFilter,
     ActivityArgs,
     TokenSwapPageArgs,
 } from './ponder/queries/swaps.js'

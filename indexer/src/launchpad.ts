@@ -297,9 +297,12 @@ async function handleSwap({ event, context }: HandlerArgs, chainId: number) {
 }
 
 async function handleGraduation({ event, context }: HandlerArgs) {
-    const { tokenAddr } = event.args
+    const tokenAddr = event.args.tokenAddr.toLowerCase()
 
-    await context.db.update(schema.launchToken, { tokenAddr: tokenAddr.toLowerCase() }).set({
+    const existing = await context.db.find(schema.launchToken, { tokenAddr })
+    if (!existing) return
+
+    await context.db.update(schema.launchToken, { tokenAddr }).set({
         isGraduated: 1,
         graduatedAt: Number(event.block.timestamp),
     })

@@ -6,13 +6,12 @@ import { cors } from 'hono/cors'
 import {
     computeReferralPoints,
     userStatPoints,
-    parseV2Swap,
-    parseV3Swap,
     calculatePrice,
     calculatePriceFromSqrtPrice,
     getWrappedNativeAddress,
     type TokenPnl,
 } from '@coshi190/juno-moneta-sdk'
+import { parseBondingCurveSwap, parseV2Swap, parseV3Swap, type ParsedSwap } from '../parse-swaps.js'
 import { finalizeTokenPnl, finalizePortfolioPnl, type PnlFold } from '../pnl-math.js'
 import { computeWindowedTraderStats, type LeaderboardSwapEvent } from '../trader-stats.js'
 import {
@@ -119,6 +118,50 @@ app.get('/user-pnl', async (c) => {
     return c.json({ perToken: perTokenObj, totals })
 })
 
+app.get('/user-swaps', async (c) => {
+    const chainId = Number(c.req.query('chainId'))
+    const user = c.req.query('user')?.toLowerCase()
+    if (!Number.isInteger(chainId) || !user) {
+        return c.json({ error: 'chainId and user are required' }, 400)
+    }
+
+    const wn = getWrappedNativeAddress(chainId)?.toLowerCase() ?? null
+
+    const [bcRows, v2Rows, v3Rows] = await Promise.all([
+        db
+            .select()
+            .from(schema.swapEvent)
+            .where(and(eq(schema.swapEvent.chainId, chainId), eq(schema.swapEvent.sender, user))),
+        db
+            .select()
+            .from(schema.v2SwapEvent)
+            .where(
+                and(eq(schema.v2SwapEvent.chainId, chainId), eq(schema.v2SwapEvent.txFrom, user))
+            ),
+        db
+            .select()
+            .from(schema.v3SwapEvent)
+            .where(
+                and(eq(schema.v3SwapEvent.chainId, chainId), eq(schema.v3SwapEvent.txFrom, user))
+            ),
+    ])
+
+    const swaps: ParsedSwap[] = bcRows.map(parseBondingCurveSwap)
+    if (wn) {
+        for (const r of v2Rows) {
+            const p = parseV2Swap(r, wn)
+            if (p) swaps.push(p)
+        }
+        for (const r of v3Rows) {
+            const p = parseV3Swap(r, wn)
+            if (p) swaps.push(p)
+        }
+    }
+    swaps.sort((a, b) => a.timestamp - b.timestamp)
+
+    return c.json({ swaps })
+})
+
 const PERIOD_SECONDS: Record<string, number> = { '24h': 86400, '7d': 604800, '30d': 2592000 }
 
 async function windowedLeaderboardTraders(chainId: number, since: number) {
@@ -151,46 +194,15 @@ async function windowedLeaderboardTraders(chainId: number, since: number) {
             ),
     ])
 
-    const events: LeaderboardSwapEvent[] = []
-    for (const r of bcRows) {
-        events.push({
-            tokenAddr: r.tokenAddr,
-            sender: r.sender,
-            isBuy: r.isBuy === 1,
-            amountIn: r.amountIn,
-            amountOut: r.amountOut,
-            timestamp: r.timestamp,
-            protocol: 'junoswap',
-        })
-    }
+    const events: LeaderboardSwapEvent[] = bcRows.map(parseBondingCurveSwap)
     if (wn) {
         for (const r of v2Rows) {
             const p = parseV2Swap(r, wn)
-            if (p) {
-                events.push({
-                    tokenAddr: p.tokenAddr,
-                    sender: p.sender,
-                    isBuy: p.isBuy,
-                    amountIn: p.amountIn,
-                    amountOut: p.amountOut,
-                    timestamp: p.timestamp,
-                    protocol: p.protocol,
-                })
-            }
+            if (p) events.push(p)
         }
         for (const r of v3Rows) {
             const p = parseV3Swap(r, wn)
-            if (p) {
-                events.push({
-                    tokenAddr: p.tokenAddr,
-                    sender: p.sender,
-                    isBuy: p.isBuy,
-                    amountIn: p.amountIn,
-                    amountOut: p.amountOut,
-                    timestamp: p.timestamp,
-                    protocol: p.protocol,
-                })
-            }
+            if (p) events.push(p)
         }
     }
     if (events.length === 0) return []

@@ -3,9 +3,9 @@ import schema from 'ponder:schema'
 import {
     parseTrackingTag,
     resolveBinding,
-    parseV2Swap,
     getWrappedNativeAddress,
 } from '@coshi190/juno-moneta-sdk'
+import { parseV2Swap } from './parse-swaps.js'
 import { upsertToken } from './v3-pools.js'
 import { getSeedV2Pool, getSeedV2Dex } from './seed.js'
 import { recordUserSwap } from './user-pnl.js'

@@ -6,15 +6,14 @@ import { foldTokenCandle } from './candles.js'
 import {
     parseTrackingTag,
     resolveBinding,
-    parseV3Swap,
     getWrappedNativeAddress,
     getStablecoins,
 } from '@coshi190/juno-moneta-sdk'
+import { parseV3Swap } from './parse-swaps.js'
 import { sanitizeUsdPrice, MAX_NATIVE_USD_PRICE, MAX_TOKEN_USD_PRICE } from './price-history.js'
 import { recordUserSwap } from './user-pnl.js'
 
 const Q96 = 2n ** 96n
-const WRAPPED_NATIVE = '0x700d3ba307e1256e509ed3e45d6f9dff441d6907'
 const GRADUATED_FEE_TIER = 10000
 const SECONDS_PER_DAY = 86400
 
@@ -444,6 +443,105 @@ export async function recordV3SwapEvent(
     }
 }
 
+async function updateGraduatedTokenSnapshot(
+    context: any,
+    chainId: number,
+    poolRecord: { token0: string; token1: string; fee: number },
+    sqrtPriceX96: bigint,
+    amount0: bigint,
+    amount1: bigint,
+    timestamp: number
+) {
+    if (poolRecord.fee !== GRADUATED_FEE_TIER) return
+
+    const wn = getWrappedNativeAddress(chainId)
+    if (!wn) return
+
+    const { token0, token1 } = poolRecord
+    const absAmount0 = amount0 < 0n ? -amount0 : amount0
+    const absAmount1 = amount1 < 0n ? -amount1 : amount1
+
+    let launchTokenAddr: string | null = null
+    let launchTokenIsToken0 = false
+
+    if (token1 === wn) {
+        const launchToken = await context.db.find(schema.launchToken, { tokenAddr: token0 })
+        if (launchToken?.isGraduated === 1) {
+            launchTokenAddr = token0
+            launchTokenIsToken0 = true
+        }
+    } else if (token0 === wn) {
+        const launchToken = await context.db.find(schema.launchToken, { tokenAddr: token1 })
+        if (launchToken?.isGraduated === 1) {
+            launchTokenAddr = token1
+            launchTokenIsToken0 = false
+        }
+    }
+
+    if (!launchTokenAddr) return
+
+    const priceNative = computePriceFromSqrtPriceX96(sqrtPriceX96, launchTokenIsToken0, 18, 18)
+    const marketCap = priceNative * 1_000_000_000
+
+    const nativePriceRecord = await context.db.find(schema.nativeUsdPrice, { chainId })
+    const nativeUsd = nativePriceRecord ? parseFloat(nativePriceRecord.price) : 0
+    const priceUsd = nativeUsd > 0 ? priceNative * nativeUsd : 0
+
+    const nativeVolume = launchTokenIsToken0 ? absAmount1 : absAmount0
+    const tokenAmount = launchTokenIsToken0 ? amount0 : amount1
+    const isBuy = tokenAmount < 0n
+
+    const existingSnapshot = await context.db.find(schema.tokenSnapshot, {
+        tokenAddr: launchTokenAddr,
+    })
+    if (!existingSnapshot) return
+
+    const athMarketCap = Math.max(
+        marketCap,
+        parseFloat(existingSnapshot.athMarketCapNative ?? '0')
+    ).toString()
+
+    let price1dAgo: string | null = existingSnapshot.price1dAgo ?? null
+    let price1dAgoTimestamp: number | null = existingSnapshot.price1dAgoTimestamp ?? null
+    let priceChange1dPct: string | null = existingSnapshot.priceChange1dPct ?? null
+
+    const currentDayStart = Math.floor(timestamp / 86400) * 86400
+    const refDayStart = existingSnapshot.price1dAgoTimestamp
+        ? Math.floor(existingSnapshot.price1dAgoTimestamp / 86400) * 86400
+        : null
+
+    if (refDayStart === null || currentDayStart > refDayStart) {
+        if ((existingSnapshot.lastSwapAt ?? 0) > 0) {
+            price1dAgo = existingSnapshot.lastPrice ?? '0'
+            price1dAgoTimestamp = existingSnapshot.lastSwapAt ?? null
+        }
+    }
+
+    if (price1dAgo !== null && price1dAgo !== '0') {
+        const pastPrice = parseFloat(price1dAgo)
+        if (pastPrice > 0 && priceNative > 0) {
+            priceChange1dPct = (((priceNative - pastPrice) / pastPrice) * 100).toString()
+        }
+    }
+
+    await context.db.update(schema.tokenSnapshot, { tokenAddr: launchTokenAddr }).set({
+        lastPrice: priceNative > 0 ? priceNative.toString() : existingSnapshot.lastPrice,
+        lastPriceUsd: priceUsd > 0 ? priceUsd.toString() : (existingSnapshot.lastPriceUsd ?? '0'),
+        marketCapNative: marketCap.toString(),
+        athMarketCapNative: athMarketCap,
+        totalBuys: (existingSnapshot.totalBuys ?? 0) + (isBuy ? 1 : 0),
+        totalSells: (existingSnapshot.totalSells ?? 0) + (isBuy ? 0 : 1),
+        totalVolumeNative: (
+            BigInt(existingSnapshot.totalVolumeNative ?? '0') + nativeVolume
+        ).toString(),
+        lastSwapAt: timestamp,
+        price1dAgo,
+        price1dAgoTimestamp,
+        priceChange1dPct,
+        updatedAt: timestamp,
+    })
+}
+
 ponder.on('V3Factory:PoolCreated', async ({ event, context }) => {
     const { token0, token1, fee, tickSpacing, pool } = event.args
     const address = pool.toLowerCase()
@@ -512,89 +610,15 @@ ponder.on('V3Pool:Swap', async ({ event, context }) => {
 
     await recordV3SwapEvent(context, 25925, event, poolRecord, poolAddress, timestamp)
 
-    const { token0, token1 } = poolRecord
-
-    if (poolRecord.fee !== GRADUATED_FEE_TIER) return
-
-    let launchTokenAddr: string | null = null
-    let launchTokenIsToken0 = false
-
-    if (token1 === WRAPPED_NATIVE) {
-        const launchToken = await context.db.find(schema.launchToken, { tokenAddr: token0 })
-        if (launchToken?.isGraduated === 1) {
-            launchTokenAddr = token0
-            launchTokenIsToken0 = true
-        }
-    } else if (token0 === WRAPPED_NATIVE) {
-        const launchToken = await context.db.find(schema.launchToken, { tokenAddr: token1 })
-        if (launchToken?.isGraduated === 1) {
-            launchTokenAddr = token1
-            launchTokenIsToken0 = false
-        }
-    }
-
-    if (!launchTokenAddr) return
-
-    const priceNative = computePriceFromSqrtPriceX96(sqrtPriceX96, launchTokenIsToken0, 18, 18)
-    const marketCap = priceNative * 1_000_000_000
-
-    const nativePriceRecord = await context.db.find(schema.nativeUsdPrice, { chainId: 25925 })
-    const nativeUsd = nativePriceRecord ? parseFloat(nativePriceRecord.price) : 0
-    const priceUsd = nativeUsd > 0 ? priceNative * nativeUsd : 0
-
-    const nativeVolume = launchTokenIsToken0 ? absAmount1 : absAmount0
-    const tokenAmount = launchTokenIsToken0 ? amount0 : amount1
-    const isBuy = tokenAmount < 0n
-
-    const existingSnapshot = await context.db.find(schema.tokenSnapshot, {
-        tokenAddr: launchTokenAddr,
-    })
-    if (!existingSnapshot) return
-
-    const athMarketCap = Math.max(
-        marketCap,
-        parseFloat(existingSnapshot.athMarketCapNative ?? '0')
-    ).toString()
-
-    let price1dAgo: string | null = existingSnapshot.price1dAgo ?? null
-    let price1dAgoTimestamp: number | null = existingSnapshot.price1dAgoTimestamp ?? null
-    let priceChange1dPct: string | null = existingSnapshot.priceChange1dPct ?? null
-
-    const currentDayStart = Math.floor(timestamp / 86400) * 86400
-    const refDayStart = existingSnapshot.price1dAgoTimestamp
-        ? Math.floor(existingSnapshot.price1dAgoTimestamp / 86400) * 86400
-        : null
-
-    if (refDayStart === null || currentDayStart > refDayStart) {
-        if ((existingSnapshot.lastSwapAt ?? 0) > 0) {
-            price1dAgo = existingSnapshot.lastPrice ?? '0'
-            price1dAgoTimestamp = existingSnapshot.lastSwapAt ?? null
-        }
-    }
-
-    if (price1dAgo !== null && price1dAgo !== '0') {
-        const pastPrice = parseFloat(price1dAgo)
-        if (pastPrice > 0 && priceNative > 0) {
-            priceChange1dPct = (((priceNative - pastPrice) / pastPrice) * 100).toString()
-        }
-    }
-
-    await context.db.update(schema.tokenSnapshot, { tokenAddr: launchTokenAddr }).set({
-        lastPrice: priceNative > 0 ? priceNative.toString() : existingSnapshot.lastPrice,
-        lastPriceUsd: priceUsd > 0 ? priceUsd.toString() : (existingSnapshot.lastPriceUsd ?? '0'),
-        marketCapNative: marketCap.toString(),
-        athMarketCapNative: athMarketCap,
-        totalBuys: (existingSnapshot.totalBuys ?? 0) + (isBuy ? 1 : 0),
-        totalSells: (existingSnapshot.totalSells ?? 0) + (isBuy ? 0 : 1),
-        totalVolumeNative: (
-            BigInt(existingSnapshot.totalVolumeNative ?? '0') + nativeVolume
-        ).toString(),
-        lastSwapAt: timestamp,
-        price1dAgo,
-        price1dAgoTimestamp,
-        priceChange1dPct,
-        updatedAt: timestamp,
-    })
+    await updateGraduatedTokenSnapshot(
+        context,
+        25925,
+        poolRecord,
+        sqrtPriceX96,
+        amount0,
+        amount1,
+        timestamp
+    )
 })
 
 ponder.on('V3FactoryBitkub:PoolCreated', async ({ event, context }) => {
@@ -663,6 +687,16 @@ ponder.on('V3PoolBitkub:Swap', async ({ event, context }) => {
     )
     await updateV3TokenSnapshot(context, 96, poolAddress, poolRecord, sqrtPriceX96, timestamp)
     await recordV3SwapEvent(context, 96, event, poolRecord, poolAddress, timestamp)
+
+    await updateGraduatedTokenSnapshot(
+        context,
+        96,
+        poolRecord,
+        sqrtPriceX96,
+        amount0,
+        amount1,
+        timestamp
+    )
 })
 
 ponder.on('V3FactoryJbc:PoolCreated', async ({ event, context }) => {
@@ -731,6 +765,16 @@ ponder.on('V3PoolJbc:Swap', async ({ event, context }) => {
     )
     await updateV3TokenSnapshot(context, 8899, poolAddress, poolRecord, sqrtPriceX96, timestamp)
     await recordV3SwapEvent(context, 8899, event, poolRecord, poolAddress, timestamp)
+
+    await updateGraduatedTokenSnapshot(
+        context,
+        8899,
+        poolRecord,
+        sqrtPriceX96,
+        amount0,
+        amount1,
+        timestamp
+    )
 })
 
 ponder.on('V3Pool:Mint', ({ event, context }) => handleV3Mint(context, 25925, event))

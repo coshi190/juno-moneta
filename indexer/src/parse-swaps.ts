@@ -1,5 +1,3 @@
-import type { V2Swap, V3Swap } from './queries/swaps.js'
-
 export interface ParsedSwap {
     tokenAddr: string
     sender: string
@@ -10,9 +8,53 @@ export interface ParsedSwap {
     protocol: string
 }
 
+export interface BondingCurveSwapRow {
+    tokenAddr: string
+    sender: string
+    isBuy: number
+    amountIn: string
+    amountOut: string
+    timestamp: number
+}
+
+export interface V3SwapRow {
+    tokenAddr: string
+    txFrom: string
+    amount0: string
+    amount1: string
+    token0Addr: string | null
+    token1Addr: string | null
+    timestamp: number
+    protocol: string
+}
+
+export interface V2SwapRow {
+    txFrom: string
+    token0Addr: string
+    token1Addr: string
+    amount0In: string
+    amount1In: string
+    amount0Out: string
+    amount1Out: string
+    timestamp: number
+    protocol: string
+}
+
 const abs = (x: bigint) => (x < 0n ? -x : x)
 
-export function parseV3Swap(e: V3Swap, wrappedNative: string): ParsedSwap | null {
+export function parseBondingCurveSwap(e: BondingCurveSwapRow): ParsedSwap {
+    return {
+        tokenAddr: e.tokenAddr.toLowerCase(),
+        sender: e.sender,
+        isBuy: e.isBuy === 1,
+        amountIn: e.amountIn,
+        amountOut: e.amountOut,
+        timestamp: e.timestamp,
+        protocol: 'junoswap',
+    }
+}
+
+export function parseV3Swap(e: V3SwapRow, wrappedNative: string): ParsedSwap | null {
     const token0 = e.token0Addr?.toLowerCase()
     const token1 = e.token1Addr?.toLowerCase()
     let nativeIsToken0: boolean
@@ -33,7 +75,7 @@ export function parseV3Swap(e: V3Swap, wrappedNative: string): ParsedSwap | null
     }
 }
 
-export function parseV2Swap(e: V2Swap, wrappedNative: string): ParsedSwap | null {
+export function parseV2Swap(e: V2SwapRow, wrappedNative: string): ParsedSwap | null {
     const token0 = e.token0Addr.toLowerCase()
     const token1 = e.token1Addr.toLowerCase()
     let nativeIn: bigint, nativeOut: bigint, tokenIn: bigint, tokenOut: bigint

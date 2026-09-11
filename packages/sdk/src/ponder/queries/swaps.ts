@@ -1,7 +1,4 @@
-import { isPonderError, type PonderClient } from '../client.js'
-import { getWrappedNativeAddress } from '../../configs/chains.js'
-import { getBondingCurveDeployment } from '../../configs/deployments.js'
-import { parseV2Swap, parseV3Swap, type ParsedSwap } from '../parse-swaps.js'
+import type { PonderClient } from '../client.js'
 import type {
     AggSwapEvent,
     SwapEvent,
@@ -9,39 +6,7 @@ import type {
     V2SwapEvent,
     V3SwapEvent,
 } from '../entities.js'
-import { sel, type CountedItems, type Items, type Page, type Row } from './internal.js'
-
-const BC_SWAP_FIELDS = [
-    'tokenAddr',
-    'sender',
-    'isBuy',
-    'amountIn',
-    'amountOut',
-    'timestamp',
-] as const satisfies readonly (keyof SwapEvent)[]
-
-const V3_SWAP_FIELDS = [
-    'tokenAddr',
-    'txFrom',
-    'amount0',
-    'amount1',
-    'token0Addr',
-    'token1Addr',
-    'timestamp',
-    'protocol',
-] as const satisfies readonly (keyof V3SwapEvent)[]
-
-const V2_SWAP_FIELDS = [
-    'txFrom',
-    'token0Addr',
-    'token1Addr',
-    'amount0In',
-    'amount1In',
-    'amount0Out',
-    'amount1Out',
-    'timestamp',
-    'protocol',
-] as const satisfies readonly (keyof V2SwapEvent)[]
+import { sel, type CountedItems, type Items, type Row } from './internal.js'
 
 const BC_ACTIVITY_FIELDS = [
     'id',
@@ -127,9 +92,6 @@ const V3_DETAIL_FIELDS = [
     'blockNumber',
 ] as const satisfies readonly (keyof V3SwapEvent)[]
 
-export type BondingCurveSwap = Row<SwapEvent, typeof BC_SWAP_FIELDS>
-export type V3Swap = Row<V3SwapEvent, typeof V3_SWAP_FIELDS>
-export type V2Swap = Row<V2SwapEvent, typeof V2_SWAP_FIELDS>
 export type BondingCurveActivity = Row<SwapEvent, typeof BC_ACTIVITY_FIELDS>
 export type V3Activity = Row<V3SwapEvent, typeof V3_ACTIVITY_FIELDS>
 export type V2Activity = Row<V2SwapEvent, typeof V2_ACTIVITY_FIELDS>
@@ -137,124 +99,6 @@ export type AggActivity = Row<AggSwapEvent, typeof AGG_ACTIVITY_FIELDS>
 export type TransferActivity = Row<TransferEvent, typeof TRANSFER_FIELDS>
 export type BondingCurveSwapDetail = Row<SwapEvent, typeof BC_DETAIL_FIELDS>
 export type V3SwapDetail = Row<V3SwapEvent, typeof V3_DETAIL_FIELDS>
-
-export interface SwapScanFilter {
-    chainId: number
-    sender?: string
-    senders?: string[]
-    since?: number
-}
-
-function scanWhere(filter: SwapScanFilter, senderField: 'sender' | 'txFrom') {
-    const where: Record<string, unknown> = { chainId: filter.chainId }
-    if (filter.sender) where[senderField] = filter.sender
-    if (filter.senders) where[`${senderField}_in`] = filter.senders
-    if (filter.since !== undefined) where.timestamp_gte = filter.since
-    return where
-}
-
-export function fetchBondingCurveSwaps(
-    client: PonderClient,
-    filter: SwapScanFilter
-): Promise<BondingCurveSwap[]> {
-    return client.fetchAllPages<{ swapEvents: Page<BondingCurveSwap> }, BondingCurveSwap>(
-        `query BondingCurveSwaps($where: swapEventFilter, $after: String) {
-            swapEvents(
-                where: $where
-                orderBy: "timestamp"
-                orderDirection: "asc"
-                limit: 1000
-                after: $after
-            ) {
-                pageInfo { hasNextPage endCursor }
-                items { ${sel(BC_SWAP_FIELDS)} }
-            }
-        }`,
-        { where: scanWhere(filter, 'sender') },
-        (r) => r.swapEvents
-    )
-}
-
-export function fetchV3Swaps(client: PonderClient, filter: SwapScanFilter): Promise<V3Swap[]> {
-    return client.fetchAllPages<{ v3SwapEvents: Page<V3Swap> }, V3Swap>(
-        `query V3Swaps($where: v3SwapEventFilter, $after: String) {
-            v3SwapEvents(
-                where: $where
-                orderBy: "timestamp"
-                orderDirection: "asc"
-                limit: 1000
-                after: $after
-            ) {
-                pageInfo { hasNextPage endCursor }
-                items { ${sel(V3_SWAP_FIELDS)} }
-            }
-        }`,
-        { where: scanWhere(filter, 'txFrom') },
-        (r) => r.v3SwapEvents
-    )
-}
-
-export function fetchV2Swaps(client: PonderClient, filter: SwapScanFilter): Promise<V2Swap[]> {
-    return client.fetchAllPages<{ v2SwapEvents: Page<V2Swap> }, V2Swap>(
-        `query V2Swaps($where: v2SwapEventFilter, $after: String) {
-            v2SwapEvents(
-                where: $where
-                orderBy: "timestamp"
-                orderDirection: "asc"
-                limit: 1000
-                after: $after
-            ) {
-                pageInfo { hasNextPage endCursor }
-                items { ${sel(V2_SWAP_FIELDS)} }
-            }
-        }`,
-        { where: scanWhere(filter, 'txFrom') },
-        (r) => r.v2SwapEvents
-    )
-}
-
-function parseBondingCurveSwap(e: BondingCurveSwap): ParsedSwap {
-    return {
-        tokenAddr: e.tokenAddr.toLowerCase(),
-        sender: e.sender,
-        isBuy: e.isBuy === 1,
-        amountIn: e.amountIn,
-        amountOut: e.amountOut,
-        timestamp: e.timestamp,
-        protocol: 'junoswap',
-    }
-}
-
-export async function fetchUserSwapEvents(
-    client: PonderClient,
-    params: { chainId: number; address: string }
-): Promise<ParsedSwap[]> {
-    const { chainId } = params
-    const wrappedNative = getWrappedNativeAddress(chainId)?.toLowerCase()
-    if (!wrappedNative) return []
-    const sender = params.address.toLowerCase()
-    const filter: SwapScanFilter = { chainId, sender }
-
-    try {
-        const [bondingCurveEvents, v3Rows, v2Rows] = await Promise.all([
-            getBondingCurveDeployment(chainId) !== undefined
-                ? fetchBondingCurveSwaps(client, filter)
-                : Promise.resolve([] as BondingCurveSwap[]),
-            fetchV3Swaps(client, filter),
-            fetchV2Swaps(client, filter),
-        ])
-        return [
-            ...bondingCurveEvents.map(parseBondingCurveSwap),
-            ...v3Rows.map((e) => parseV3Swap(e, wrappedNative)),
-            ...v2Rows.map((e) => parseV2Swap(e, wrappedNative)),
-        ]
-            .filter((s): s is ParsedSwap => s !== null)
-            .sort((a, b) => a.timestamp - b.timestamp)
-    } catch (e) {
-        if (isPonderError(e)) return []
-        throw e
-    }
-}
 
 export interface ActivityArgs {
     chainId: number
