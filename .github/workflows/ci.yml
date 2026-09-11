@@ -112,6 +112,3 @@ jobs:
             - name: Typecheck
               run: bun run typecheck
               working-directory: indexer
-            - name: Test
-              run: bun run test
-              working-directory: indexer

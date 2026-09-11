@@ -176,19 +176,8 @@ export type {
 } from './ponder/queries/pools.js'
 export { fetchUserPositions, fetchPositionsByTokenIds } from './ponder/queries/positions.js'
 export type { V3PositionRow } from './ponder/queries/positions.js'
-export {
-    fetchIncentives,
-    fetchDepositsByOwner,
-    fetchIncentiveAnalytics,
-} from './ponder/queries/incentives.js'
-export type {
-    IncentiveRow,
-    DepositRow,
-    IncentiveStatus,
-    IncentiveMetrics,
-    IncentiveTotals,
-    IncentiveAnalytics,
-} from './ponder/queries/incentives.js'
+export { fetchIncentives, fetchDepositsByOwner } from './ponder/queries/incentives.js'
+export type { IncentiveRow, DepositRow } from './ponder/queries/incentives.js'
 export {
     fetchBondingCurveHistory,
     fetchV3History,

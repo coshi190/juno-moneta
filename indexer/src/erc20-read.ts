@@ -3,7 +3,6 @@ import {
     getDexConfig,
     ERC20_ABI,
     NONFUNGIBLE_POSITION_MANAGER_ABI,
-    UNISWAP_V3_POOL_ABI,
 } from '@coshi190/juno-moneta-sdk'
 
 export async function readERC20Metadata(
@@ -36,49 +35,6 @@ export async function readERC20Metadata(
         return { name: name as string, symbol: symbol as string, decimals: decimals as number }
     } catch {
         return { name: '', symbol: '', decimals: 18 }
-    }
-}
-
-export async function readV3PoolImmutables(
-    client: any,
-    address: string
-): Promise<{ token0: string; token1: string; fee: number; tickSpacing: number } | null> {
-    const addr = address as `0x${string}`
-    try {
-        const [token0, token1, fee, tickSpacing] = await Promise.all([
-            client.readContract({
-                abi: UNISWAP_V3_POOL_ABI,
-                functionName: 'token0',
-                address: addr,
-                cache: 'immutable',
-            }),
-            client.readContract({
-                abi: UNISWAP_V3_POOL_ABI,
-                functionName: 'token1',
-                address: addr,
-                cache: 'immutable',
-            }),
-            client.readContract({
-                abi: UNISWAP_V3_POOL_ABI,
-                functionName: 'fee',
-                address: addr,
-                cache: 'immutable',
-            }),
-            client.readContract({
-                abi: UNISWAP_V3_POOL_ABI,
-                functionName: 'tickSpacing',
-                address: addr,
-                cache: 'immutable',
-            }),
-        ])
-        return {
-            token0: (token0 as string).toLowerCase(),
-            token1: (token1 as string).toLowerCase(),
-            fee: Number(fee),
-            tickSpacing: Number(tickSpacing),
-        }
-    } catch {
-        return null
     }
 }
 

@@ -14,7 +14,6 @@ import {
     createPonderClient,
     fetchAllReferralBindings,
     fetchDepositsByOwner,
-    fetchIncentiveAnalytics,
     fetchIncentives,
     fetchIndexerStatus,
     fetchLaunchTokens,
@@ -35,12 +34,12 @@ import {
     getCurveState,
     getDexConfig,
     getSupportedDexs,
-    type IncentiveMetrics,
     type LaunchToken,
     type TokenHolder,
     type TokenSnapshot,
 } from '@coshi190/juno-moneta-sdk'
 import { createReadClient, resolveAggregatePlan } from './chain.js'
+import { fetchIncentiveAnalytics, toTableRow } from './incentive-analytics.js'
 import {
     optionalAddress,
     optionalAddressList,
@@ -131,22 +130,6 @@ function chainCommand(group: string, describe: string, fn: (chainId: number) => 
         flags: CHAIN_FLAG,
         describe,
         run: (args) => fn(parseChainId(args.chainId)),
-    }
-}
-
-function toTableRow(program: IncentiveMetrics) {
-    return {
-        status: program.status,
-        pair: program.poolLabel,
-        symbol: program.rewardSymbol,
-        reward: program.reward,
-        perDay: program.rewardPerDay,
-        usdPerDay: program.rewardUsdPerDay,
-        progress: program.progressPercent,
-        daysLeft: program.remainingDays,
-        tvlUsd: program.poolTvlUsd,
-        apr: program.rewardAprPoolTvlPercent,
-        feeApr: program.feeAprPercent,
     }
 }
 
