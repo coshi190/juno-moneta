@@ -231,15 +231,7 @@ export { MAX_TICK, MIN_TICK, isInRange, sortTokens } from './pool/tick-math.js'
 export { computePositionValueUsd, fetchPositions } from './pool/positions.js'
 export type { DescribedPosition, FetchPositionsParams, PositionInput } from './pool/positions.js'
 
-export { computeNetWorthHistory, needsPriceHistory } from './portfolio/net-worth.js'
-export type { NetWorthHistoryParams, NetWorthTokenInput } from './portfolio/net-worth.js'
-export type {
-    NetWorthPoint,
-    PricePoint,
-    TokenPnl,
-    PortfolioPnlTotals,
-    PnlSwapEvent,
-} from './portfolio/ledger.js'
+export type { TokenPnl, PortfolioPnlTotals, PnlSwapEvent } from './portfolio/pnl.js'
 
 export {
     isJunoswapProtocol,
