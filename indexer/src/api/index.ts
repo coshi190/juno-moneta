@@ -4,15 +4,13 @@ import { graphql, eq, and, gte, inArray } from 'ponder'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import {
-    computeReferralPoints,
-    userStatPoints,
+    computePnl,
+    computePoints,
     calculatePrice,
     calculatePriceFromSqrtPrice,
     getWrappedNativeAddress,
-    type TokenPnl,
 } from '@coshi190/juno-moneta-sdk'
 import { parseBondingCurveSwap, parseV2Swap, parseV3Swap, type ParsedSwap } from '../parse-swaps.js'
-import { finalizeTokenPnl, finalizePortfolioPnl, type PnlFold } from '../pnl-math.js'
 import { computeWindowedTraderStats, type LeaderboardSwapEvent } from '../trader-stats.js'
 import {
     makePriceAt,
@@ -78,7 +76,7 @@ function foldOf(row: {
     costPoolUsd: number
     realizedUsd: number
     totalInvestedUsd: number
-}): PnlFold {
+}) {
     return {
         position: row.position,
         costPoolUsd: row.costPoolUsd,
@@ -104,18 +102,11 @@ app.get('/user-pnl', async (c) => {
         rows.map((r) => r.tokenAddr)
     )
 
-    const folds = new Map<string, PnlFold>()
-    const balances = new Map<string, number>()
-    for (const r of rows) {
-        folds.set(r.tokenAddr, foldOf(r))
-        balances.set(r.tokenAddr, r.position)
-    }
+    const folds = new Map(rows.map((r) => [r.tokenAddr, foldOf(r)]))
 
-    const { perToken, totals } = finalizePortfolioPnl(folds, balances, prices)
-    const perTokenObj: Record<string, TokenPnl> = {}
-    for (const [tokenAddr, pnl] of perToken) perTokenObj[tokenAddr] = pnl
+    const { perToken, totals } = computePnl({ folds, priceUsdByToken: prices })
 
-    return c.json({ perToken: perTokenObj, totals })
+    return c.json({ perToken: Object.fromEntries(perToken), totals })
 })
 
 app.get('/user-swaps', async (c) => {
@@ -253,7 +244,7 @@ async function withReferredPoints<T extends { address: string; points: number }>
 
     return traders.map((t) => ({
         ...t,
-        referredPoints: computeReferralPoints(byReferrer.get(t.address.toLowerCase()) ?? []),
+        referredPoints: computePoints(byReferrer.get(t.address.toLowerCase()) ?? []),
     }))
 }
 
@@ -277,26 +268,32 @@ app.get('/leaderboard', async (c) => {
 
     const prices = await priceMapForTokens(chainId, [...new Set(pnlRows.map((r) => r.tokenAddr))])
 
-    const pnlByUser = new Map<string, { pnlUsd: number; investedUsd: number }>()
+    const foldsByUser = new Map<string, Map<string, ReturnType<typeof foldOf>>>()
     for (const r of pnlRows) {
-        const price = prices.get(r.tokenAddr) ?? null
-        const tp = finalizeTokenPnl(foldOf(r), r.position, price)
-        const agg = pnlByUser.get(r.user) ?? { pnlUsd: 0, investedUsd: 0 }
-        agg.pnlUsd += tp.totalPnlUsd
-        agg.investedUsd += tp.totalInvestedUsd
-        pnlByUser.set(r.user, agg)
+        let folds = foldsByUser.get(r.user)
+        if (!folds) {
+            folds = new Map()
+            foldsByUser.set(r.user, folds)
+        }
+        folds.set(r.tokenAddr, foldOf(r))
+    }
+
+    const pnlByUser = new Map<string, { pnlUsd: number; pnlPercent: number }>()
+    for (const [user, folds] of foldsByUser) {
+        const { totals } = computePnl({ folds, priceUsdByToken: prices })
+        pnlByUser.set(user, { pnlUsd: totals.totalPnlUsd, pnlPercent: totals.totalPnlPercent })
     }
 
     const traders = statRows.map((s) => {
-        const agg = pnlByUser.get(s.user) ?? { pnlUsd: 0, investedUsd: 0 }
+        const agg = pnlByUser.get(s.user) ?? { pnlUsd: 0, pnlPercent: 0 }
         return {
             address: s.user,
             pnlUsd: agg.pnlUsd,
-            pnlPercent: agg.investedUsd > 0 ? (agg.pnlUsd / agg.investedUsd) * 100 : 0,
+            pnlPercent: agg.pnlPercent,
             volumeNative: s.volumeNative,
             junoVolumeNative: s.junoVolumeNative,
             externalVolumeNative: s.externalVolumeNative,
-            points: userStatPoints(s),
+            points: computePoints(s),
             tradeCount: s.tradeCount,
             buyCount: s.buyCount,
             sellCount: s.sellCount,

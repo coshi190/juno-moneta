@@ -1,3 +1,7 @@
+export function isJunoswapProtocol(protocol: string): boolean {
+    return protocol === 'junoswap'
+}
+
 export interface ParsedSwap {
     tokenAddr: string
     sender: string

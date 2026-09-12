@@ -4,8 +4,6 @@ import { computeReferralRewards, type ReferralRewardsResult } from '../../reward
 import { sel, type Page, type Row } from './internal.js'
 import { fetchUserStats } from './user-stats.js'
 
-export type { ReferralRewardsResult, ReferredTrader } from '../../rewards/points.js'
-
 const BINDING_FIELDS = ['referee', 'referrer'] as const satisfies readonly (keyof ReferralBinding)[]
 
 export type Binding = Row<ReferralBinding, typeof BINDING_FIELDS>

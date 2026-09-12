@@ -2,6 +2,7 @@ import { encodeAbiParameters, type Abi, type Address, type Hex } from 'viem'
 import { AGG_ROUTER_JUNOSWAP_ABI } from '../abis/agg-router-junoswap.js'
 import { getAggRouterDeployment } from '../configs/deployments.js'
 import { getDexConfig, ProtocolType } from '../configs/dex.js'
+import { DEFAULT_REFERRER } from '../rewards/tracking.js'
 import { isNativeToken, resolveSwapPath, shouldSkipUnwrap } from './native.js'
 import { SwapPlanError, type SwapPlan } from './plan-swap.js'
 import type { CrossDexHop, CrossDexLeg } from './cross-dex-routing.js'
@@ -26,7 +27,7 @@ export interface PlanAggregateInput {
     amountOutMin: bigint
     recipient: Address
     deadline: number
-    referrer: Address
+    referrer: Address | null
     plan: AggregatePlan
 }
 
@@ -174,7 +175,7 @@ export function planAggregateSwap(input: PlanAggregateInput): SwapPlan {
         recipient,
         deadline: BigInt(deadline),
         unwrapOut: isNativeToken(tokenOut) && !shouldSkipUnwrap(chainId),
-        referrer: input.referrer,
+        referrer: input.referrer ?? DEFAULT_REFERRER,
     }
 
     return {

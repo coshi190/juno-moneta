@@ -1,18 +1,13 @@
-export function isJunoswapProtocol(protocol: string): boolean {
-    return protocol === 'junoswap'
-}
-
-export function computePoints(junoVolumeNative: number, externalVolumeNative: number): number {
-    return Math.floor(junoVolumeNative / 50 + externalVolumeNative / 500)
-}
-
 export interface UserStatVolumes {
     junoVolumeNative: number
     externalVolumeNative: number
 }
 
-export function userStatPoints(row: UserStatVolumes): number {
-    return computePoints(row.junoVolumeNative, row.externalVolumeNative)
+export function computePoints(input: UserStatVolumes | number[]): number {
+    if (Array.isArray(input)) {
+        return Math.floor(input.reduce((sum, p) => sum + p, 0) * 0.1)
+    }
+    return Math.floor(input.junoVolumeNative / 50 + input.externalVolumeNative / 500)
 }
 
 interface RefereeStat {
@@ -33,10 +28,6 @@ export interface ReferralRewardsResult {
     referees: ReferredTrader[]
 }
 
-export function computeReferralPoints(refereePoints: number[]): number {
-    return Math.floor(refereePoints.reduce((sum, p) => sum + p, 0) * 0.1)
-}
-
 export function computeReferralRewards(
     referees: string[],
     stats: RefereeStat[]
@@ -53,7 +44,7 @@ export function computeReferralRewards(
     })
     traders.sort((a, b) => b.points - a.points)
     return {
-        referralPoints: computeReferralPoints(traders.map((r) => r.points)),
+        referralPoints: computePoints(traders.map((r) => r.points)),
         refereeCount: traders.length,
         referees: traders,
     }

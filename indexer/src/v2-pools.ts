@@ -1,10 +1,6 @@
 import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
-import {
-    parseTrackingTag,
-    resolveBinding,
-    getWrappedNativeAddress,
-} from '@coshi190/juno-moneta-sdk'
+import { readTrackingTag, getWrappedNativeAddress } from '@coshi190/juno-moneta-sdk'
 import { parseV2Swap } from './parse-swaps.js'
 import { upsertToken } from './v3-pools.js'
 import { getSeedV2Pool, getSeedV2Dex } from './seed.js'
@@ -65,7 +61,7 @@ async function recordV2Pool(context: any, chainId: number, event: any, dex: stri
 }
 
 async function recordV2SwapEvent(context: any, chainId: number, event: any, dex: string) {
-    const tag = parseTrackingTag(event.transaction.input)
+    const tag = readTrackingTag(event.transaction.input, event.transaction.from)
     if (!tag) return
 
     const poolAddress = event.log.address.toLowerCase()
@@ -105,7 +101,7 @@ async function recordV2SwapEvent(context: any, chainId: number, event: any, dex:
         })
         .onConflictDoNothing()
 
-    const binding = resolveBinding(event.transaction.from, tag.referrer)
+    const binding = tag.binding
     if (binding) {
         await context.db
             .insert(schema.referralBinding)

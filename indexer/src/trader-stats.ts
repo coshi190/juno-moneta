@@ -1,8 +1,13 @@
 import { formatEther } from 'viem'
-import { computePoints, isJunoswapProtocol, type PnlSwapEvent } from '@coshi190/juno-moneta-sdk'
-import { finalizePortfolioPnl, foldEventsByToken } from './pnl-math.js'
+import { computePnl, computePoints } from '@coshi190/juno-moneta-sdk'
+import { isJunoswapProtocol } from './parse-swaps.js'
 
-export interface LeaderboardSwapEvent extends PnlSwapEvent {
+export interface LeaderboardSwapEvent {
+    tokenAddr: string
+    isBuy: boolean
+    amountIn: string
+    amountOut: string
+    timestamp: number
     sender: string
     protocol?: string
 }
@@ -49,11 +54,12 @@ export function computeWindowedTraderStats(
             else sellCount++
         }
 
-        const foldsByToken = foldEventsByToken(addrEvents, priceAt, decimalsByToken)
-        const balanceByToken = new Map<string, number>()
-        for (const [token, fold] of foldsByToken) balanceByToken.set(token, fold.position)
-
-        const { totals } = finalizePortfolioPnl(foldsByToken, balanceByToken, currentPriceByToken)
+        const { totals } = computePnl({
+            events: addrEvents,
+            nativeUsdAt: priceAt,
+            decimalsByToken,
+            priceUsdByToken: currentPriceByToken,
+        })
 
         statsByAddress.set(address, {
             pnlUsd: totals.totalPnlUsd,
@@ -61,7 +67,7 @@ export function computeWindowedTraderStats(
             volumeNative: junoVolumeNative + externalVolumeNative,
             junoVolumeNative,
             externalVolumeNative,
-            points: computePoints(junoVolumeNative, externalVolumeNative),
+            points: computePoints({ junoVolumeNative, externalVolumeNative }),
             tradeCount: addrEvents.length,
             buyCount,
             sellCount,

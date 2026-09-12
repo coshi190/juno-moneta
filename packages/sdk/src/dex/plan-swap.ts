@@ -251,7 +251,7 @@ function skipsUnwrap(input: PlanSwapInput): boolean {
     return !input.forceUnwrapNative && shouldSkipUnwrap(input.chainId)
 }
 
-export function encodeSwapCalldata(plan: SwapPlan, referrer: Address): Hex {
+export function encodeSwapCalldata(plan: SwapPlan, referrer: Address | null): Hex {
     const data = encodeFunctionData({
         abi: plan.call.abi,
         functionName: plan.call.functionName,

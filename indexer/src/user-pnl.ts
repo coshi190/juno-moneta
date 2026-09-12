@@ -1,7 +1,7 @@
 import schema from 'ponder:schema'
 import { formatEther } from 'viem'
-import { isJunoswapProtocol } from '@coshi190/juno-moneta-sdk'
-import { applyFoldEvent, EMPTY_FOLD, type PnlFold } from './pnl-math.js'
+import { computePnl } from '@coshi190/juno-moneta-sdk'
+import { isJunoswapProtocol } from './parse-swaps.js'
 import { sanitizeUsdPrice, MAX_NATIVE_USD_PRICE } from './price-history.js'
 
 export async function recordUserSwap(
@@ -24,19 +24,27 @@ export async function recordUserSwap(
 
     const pnlId = `${chainId}-${t}-${u}`
     const existing = await context.db.find(schema.userTokenPnl, { id: pnlId })
-    const prev: PnlFold = existing
-        ? {
-              position: existing.position,
-              costPoolUsd: existing.costPoolUsd,
-              realizedUsd: existing.realizedUsd,
-              totalInvestedUsd: existing.totalInvestedUsd,
-          }
-        : EMPTY_FOLD
-    const next = applyFoldEvent(
-        prev,
-        { isBuy, amountIn: amountInWei, amountOut: amountOutWei, nativeUsd: safeNativeUsd },
-        decimals
-    )
+    const { foldsByToken } = computePnl({
+        folds: existing
+            ? new Map([
+                  [
+                      t,
+                      {
+                          position: existing.position,
+                          costPoolUsd: existing.costPoolUsd,
+                          realizedUsd: existing.realizedUsd,
+                          totalInvestedUsd: existing.totalInvestedUsd,
+                      },
+                  ],
+              ])
+            : undefined,
+        events: [
+            { tokenAddr: t, isBuy, amountIn: amountInWei, amountOut: amountOutWei, timestamp },
+        ],
+        nativeUsdAt: () => safeNativeUsd,
+        decimalsByToken: new Map([[t, decimals]]),
+    })
+    const next = foldsByToken.get(t)!
     if (existing) {
         await context.db.update(schema.userTokenPnl, { id: pnlId }).set({
             position: next.position,

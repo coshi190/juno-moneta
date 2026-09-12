@@ -1,7 +1,7 @@
 import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
 import { upsertToken, recordV3SwapEvent } from './v3-pools.js'
-import { parseTrackingTag } from '@coshi190/juno-moneta-sdk'
+import { readTrackingTag } from '@coshi190/juno-moneta-sdk'
 import { getSeedV3Pool } from './seed.js'
 
 async function recordExternalV3Pool(context: any, chainId: number, event: any) {
@@ -63,7 +63,7 @@ async function getOrSeedKublerxPool(context: any, poolAddress: string, event: an
 }
 
 async function recordKublerxSwap(context: any, event: any) {
-    if (!parseTrackingTag(event.transaction.input)) return
+    if (!readTrackingTag(event.transaction.input, event.transaction.from)) return
     const poolAddress = event.log.address.toLowerCase()
     const poolRecord = await getOrSeedKublerxPool(context, poolAddress, event)
     if (!poolRecord) return

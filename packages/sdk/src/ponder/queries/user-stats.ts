@@ -1,6 +1,6 @@
 import type { PonderClient } from '../client.js'
 import type { UserStat } from '../entities.js'
-import { userStatPoints } from '../../rewards/points.js'
+import { computePoints } from '../../rewards/points.js'
 import { sel, MAX_LIMIT, type Page, type Row } from './internal.js'
 
 const USER_STAT_FIELDS = [
@@ -47,7 +47,7 @@ export async function fetchUserStats(
     const price = nativeUsdPrice ?? 0
     return rows.map((row) => ({
         ...row,
-        points: userStatPoints(row),
+        points: computePoints(row),
         volumeUsd: row.volumeNative * price,
     }))
 }

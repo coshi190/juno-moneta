@@ -193,7 +193,7 @@ export {
     fetchReferralBindings,
     fetchReferralRewards,
 } from './ponder/queries/referrals.js'
-export type { Binding, ReferralRewardsArgs } from './ponder/queries/referrals.js'
+export type { Binding } from './ponder/queries/referrals.js'
 export { fetchUserStats } from './ponder/queries/user-stats.js'
 export type { UserStatRow } from './ponder/queries/user-stats.js'
 export { fetchIndexerStatus } from './ponder/queries/status.js'
@@ -231,19 +231,7 @@ export { MAX_TICK, MIN_TICK, isInRange, sortTokens } from './pool/tick-math.js'
 export { computePositionValueUsd, fetchPositions } from './pool/positions.js'
 export type { DescribedPosition, FetchPositionsParams, PositionInput } from './pool/positions.js'
 
-export type { TokenPnl, PortfolioPnlTotals, PnlSwapEvent } from './portfolio/pnl.js'
+export { computePnl } from './portfolio/pnl.js'
 
-export {
-    isJunoswapProtocol,
-    computePoints,
-    userStatPoints,
-    computeReferralPoints,
-} from './rewards/points.js'
-export type { UserStatVolumes, ReferredTrader, ReferralRewardsResult } from './rewards/points.js'
-export {
-    DEFAULT_REFERRER,
-    appendTrackingTag,
-    normalizeReferrer,
-    parseTrackingTag,
-    resolveBinding,
-} from './rewards/tracking.js'
+export { computePoints } from './rewards/points.js'
+export { readTrackingTag } from './rewards/tracking.js'

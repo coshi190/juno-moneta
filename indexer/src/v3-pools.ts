@@ -3,12 +3,7 @@ import schema from 'ponder:schema'
 import { formatEther } from 'viem'
 import { readERC20Metadata } from './erc20-read.js'
 import { foldTokenCandle } from './candles.js'
-import {
-    parseTrackingTag,
-    resolveBinding,
-    getWrappedNativeAddress,
-    getStablecoins,
-} from '@coshi190/juno-moneta-sdk'
+import { readTrackingTag, getWrappedNativeAddress, getStablecoins } from '@coshi190/juno-moneta-sdk'
 import { parseV3Swap } from './parse-swaps.js'
 import { sanitizeUsdPrice, MAX_NATIVE_USD_PRICE, MAX_TOKEN_USD_PRICE } from './price-history.js'
 import { recordUserSwap } from './user-pnl.js'
@@ -345,7 +340,7 @@ export async function recordV3SwapEvent(
         tokenIsToken0 = true
     }
 
-    const tag = parseTrackingTag(event.transaction.input)
+    const tag = readTrackingTag(event.transaction.input, event.transaction.from)
     const id = `${chainId}-${event.block.number}-${event.log.logIndex}`
     await context.db
         .insert(schema.v3SwapEvent)
@@ -374,7 +369,7 @@ export async function recordV3SwapEvent(
         })
         .onConflictDoNothing()
 
-    const binding = resolveBinding(event.transaction.from, tag?.referrer ?? null)
+    const binding = tag?.binding ?? null
     if (binding) {
         await context.db
             .insert(schema.referralBinding)
