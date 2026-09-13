@@ -15,7 +15,7 @@ import {
     priceFromSqrtPriceX96,
     type PoolBalances,
     type PoolUsdMeta,
-} from '../../pool/pool-usd-math.js'
+} from '../../pool/pool-math.js'
 import { sel, MAX_LIMIT, type Items, type Page, type Row } from './internal.js'
 
 const POOL_FIELDS = [

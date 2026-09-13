@@ -1,22 +1,13 @@
+import { calculateMinAmounts, getAmountsForLiquidity } from './liquidity-math.js'
 import {
-    calculateAmount0FromAmount1,
-    calculateAmount1FromAmount0,
-    calculateMinAmounts,
-    getAmountsForLiquidity,
-} from './liquidity-math.js'
-import { priceToSqrtPriceX96, sortTokens, tickToSqrtPriceX96 } from './tick-math.js'
-import { snapTickRange, type TickRange } from './tick-ranges.js'
+    priceToSqrtPriceX96,
+    snapTickRange,
+    sortTokens,
+    tickToSqrtPriceX96,
+    type TickRange,
+} from './tick-math.js'
 
-export interface DependentAmountParams {
-    sqrtPriceX96: bigint
-    tickLower: number
-    tickUpper: number
-    amount: bigint
-    side: 'token0' | 'token1'
-    invert?: boolean
-}
-
-export interface InitialPriceParams {
+interface InitialPriceParams {
     price: string
     decimals0: number
     decimals1: number
@@ -98,29 +89,7 @@ function mirrorRange(tickLower: number, tickUpper: number, invert: boolean | und
     return { tickLower: -tickUpper, tickUpper: -tickLower }
 }
 
-export function computeDependentAmount(params: DependentAmountParams): bigint {
-    const { tickLower, tickUpper } = mirrorRange(params.tickLower, params.tickUpper, params.invert)
-    const sqrtPriceLowerX96 = tickToSqrtPriceX96(tickLower)
-    const sqrtPriceUpperX96 = tickToSqrtPriceX96(tickUpper)
-    const poolSide = params.invert ? (params.side === 'token0' ? 'token1' : 'token0') : params.side
-
-    if (poolSide === 'token0') {
-        return calculateAmount1FromAmount0(
-            params.sqrtPriceX96,
-            sqrtPriceLowerX96,
-            sqrtPriceUpperX96,
-            params.amount
-        )
-    }
-    return calculateAmount0FromAmount1(
-        params.sqrtPriceX96,
-        sqrtPriceLowerX96,
-        sqrtPriceUpperX96,
-        params.amount
-    )
-}
-
-export function computeInitialSqrtPriceX96(params: InitialPriceParams): bigint {
+function computeInitialSqrtPriceX96(params: InitialPriceParams): bigint {
     const parsed = parseFloat(params.price)
     const oriented = params.invert && parsed > 0 ? 1 / parsed : parsed
     return priceToSqrtPriceX96(String(oriented), params.decimals0, params.decimals1)

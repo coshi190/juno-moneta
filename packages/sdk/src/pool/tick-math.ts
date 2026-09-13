@@ -102,16 +102,6 @@ export function sqrtPriceX96ToTick(sqrtPriceX96: bigint): number {
     return tickToSqrtPriceX96(tickHigh) <= sqrtPriceX96 ? tickHigh : tickLow
 }
 
-export function priceToTick(price: string, decimals0: number, decimals1: number): number {
-    const priceNum = parseFloat(price)
-    if (priceNum <= 0) return MIN_TICK
-
-    const adjustedPrice = priceNum * Math.pow(10, decimals1 - decimals0)
-
-    const tick = Math.floor(Math.log(adjustedPrice) / Math.log(1.0001))
-    return Math.max(MIN_TICK, Math.min(MAX_TICK, tick))
-}
-
 export function priceToSqrtPriceX96(price: string, decimals0: number, decimals1: number): bigint {
     const priceNum = parseFloat(price)
     if (priceNum <= 0) return MIN_SQRT_RATIO
@@ -128,6 +118,29 @@ export function nearestUsableTick(tick: number, tickSpacing: number): number {
     if (rounded < MIN_TICK) return MIN_TICK + (tickSpacing - (MIN_TICK % tickSpacing))
     if (rounded > MAX_TICK) return MAX_TICK - (MAX_TICK % tickSpacing)
     return rounded
+}
+
+export interface TickRange {
+    tickLower: number
+    tickUpper: number
+}
+
+const FULL_RANGE_TOLERANCE = 256
+
+export function snapTickRange(
+    tickLower: number,
+    tickUpper: number,
+    tickSpacing: number
+): TickRange {
+    const snappedLower = nearestUsableTick(tickLower, tickSpacing)
+    let snappedUpper = nearestUsableTick(tickUpper, tickSpacing)
+    if (snappedUpper <= snappedLower) snappedUpper = snappedLower + tickSpacing
+    return { tickLower: snappedLower, tickUpper: snappedUpper }
+}
+
+export function isFullRange(tickLower: number, tickUpper: number, tolerance?: number): boolean {
+    const slack = tolerance ?? FULL_RANGE_TOLERANCE
+    return tickLower <= MIN_TICK + slack && tickUpper >= MAX_TICK - slack
 }
 
 export function isInRange(currentTick: number, tickLower: number, tickUpper: number): boolean {

@@ -167,7 +167,11 @@ export type {
     PoolMetricsToken,
     PoolMetrics,
 } from './ponder/queries/pools.js'
-export { fetchUserPositions, fetchPositionsByTokenIds } from './ponder/queries/positions.js'
+export {
+    fetchUserPositions,
+    fetchPositionsByTokenIds,
+    fetchPositions,
+} from './ponder/queries/positions.js'
 export type { V3PositionRow } from './ponder/queries/positions.js'
 export { fetchIncentives, fetchDepositsByOwner } from './ponder/queries/incentives.js'
 export type { IncentiveRow, DepositRow } from './ponder/queries/incentives.js'
@@ -201,35 +205,10 @@ export type { IndexerBlock, IndexerChainStatus, IndexerStatus } from './ponder/q
 export type { Items, Page, CountedItems, Row, OrderDirection } from './ponder/queries/internal.js'
 
 export {
-    computePoolPrice,
-    computeTickPrice,
-    getTickForPrice,
-    invertSqrtPriceX96,
-} from './pool/pool-price.js'
-export type { PoolPriceParams, TickPriceParams, TickForPriceParams } from './pool/pool-price.js'
-export { snapTickRange, getFullRange, isFullRange } from './pool/tick-ranges.js'
-export type { TickRange } from './pool/tick-ranges.js'
-export {
-    computeDependentAmount,
-    computeInitialSqrtPriceX96,
     planAddLiquidity,
     planIncreaseLiquidity,
     planRemoveLiquidity,
 } from './pool/plan-liquidity.js'
-export type {
-    DependentAmountParams,
-    InitialPriceParams,
-    LiquidityPlan,
-    PlanAddLiquidityParams,
-    AddLiquidityPlan,
-    PlanIncreaseLiquidityParams,
-    IncreaseLiquidityPlan,
-    PlanRemoveLiquidityParams,
-    RemoveLiquidityPlan,
-} from './pool/plan-liquidity.js'
-export { MAX_TICK, MIN_TICK, isInRange, sortTokens } from './pool/tick-math.js'
-export { computePositionValueUsd, fetchPositions } from './pool/positions.js'
-export type { DescribedPosition, FetchPositionsParams, PositionInput } from './pool/positions.js'
 
 export { computePnl } from './portfolio/pnl.js'
 

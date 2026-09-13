@@ -22,29 +22,6 @@ function bitLength(n: bigint): bigint {
     return len
 }
 
-function getLiquidityForAmount0(
-    sqrtPriceAX96: bigint,
-    sqrtPriceBX96: bigint,
-    amount0: bigint
-): bigint {
-    if (sqrtPriceAX96 > sqrtPriceBX96) {
-        ;[sqrtPriceAX96, sqrtPriceBX96] = [sqrtPriceBX96, sqrtPriceAX96]
-    }
-    const intermediate = (sqrtPriceAX96 * sqrtPriceBX96) / Q96
-    return (amount0 * intermediate) / (sqrtPriceBX96 - sqrtPriceAX96)
-}
-
-function getLiquidityForAmount1(
-    sqrtPriceAX96: bigint,
-    sqrtPriceBX96: bigint,
-    amount1: bigint
-): bigint {
-    if (sqrtPriceAX96 > sqrtPriceBX96) {
-        ;[sqrtPriceAX96, sqrtPriceBX96] = [sqrtPriceBX96, sqrtPriceAX96]
-    }
-    return (amount1 * Q96) / (sqrtPriceBX96 - sqrtPriceAX96)
-}
-
 function getAmount0ForLiquidity(
     sqrtPriceAX96: bigint,
     sqrtPriceBX96: bigint,
@@ -92,50 +69,6 @@ export function getAmountsForLiquidity(
             amount0: 0n,
             amount1: getAmount1ForLiquidity(sqrtPriceAX96, sqrtPriceBX96, liquidity),
         }
-    }
-}
-
-export function calculateAmount1FromAmount0(
-    sqrtPriceX96: bigint,
-    sqrtPriceLowerX96: bigint,
-    sqrtPriceUpperX96: bigint,
-    amount0: bigint
-): bigint {
-    if (amount0 === 0n) return 0n
-
-    if (sqrtPriceLowerX96 > sqrtPriceUpperX96) {
-        ;[sqrtPriceLowerX96, sqrtPriceUpperX96] = [sqrtPriceUpperX96, sqrtPriceLowerX96]
-    }
-
-    if (sqrtPriceX96 <= sqrtPriceLowerX96) {
-        return 0n
-    } else if (sqrtPriceX96 >= sqrtPriceUpperX96) {
-        return 0n
-    } else {
-        const liquidity = getLiquidityForAmount0(sqrtPriceX96, sqrtPriceUpperX96, amount0)
-        return getAmount1ForLiquidity(sqrtPriceLowerX96, sqrtPriceX96, liquidity)
-    }
-}
-
-export function calculateAmount0FromAmount1(
-    sqrtPriceX96: bigint,
-    sqrtPriceLowerX96: bigint,
-    sqrtPriceUpperX96: bigint,
-    amount1: bigint
-): bigint {
-    if (amount1 === 0n) return 0n
-
-    if (sqrtPriceLowerX96 > sqrtPriceUpperX96) {
-        ;[sqrtPriceLowerX96, sqrtPriceUpperX96] = [sqrtPriceUpperX96, sqrtPriceLowerX96]
-    }
-
-    if (sqrtPriceX96 <= sqrtPriceLowerX96) {
-        return 0n
-    } else if (sqrtPriceX96 >= sqrtPriceUpperX96) {
-        return 0n
-    } else {
-        const liquidity = getLiquidityForAmount1(sqrtPriceLowerX96, sqrtPriceX96, amount1)
-        return getAmount0ForLiquidity(sqrtPriceX96, sqrtPriceUpperX96, liquidity)
     }
 }
 

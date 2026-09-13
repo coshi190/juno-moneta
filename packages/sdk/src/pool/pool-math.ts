@@ -1,5 +1,6 @@
 import { formatEther } from 'viem'
 import type { V3PoolDayVolumeRow } from '../ponder/queries/pools.js'
+import { tickToSqrtPriceX96 } from './tick-math.js'
 
 const Q96 = 2n ** 96n
 const SECONDS_PER_DAY = 86400
@@ -39,6 +40,20 @@ export function priceFromSqrtPriceX96(
     const SCALE = 10n ** 18n
     const rawX = (sqrtPriceX96 * sqrtPriceX96 * SCALE) / (Q96 * Q96)
     return (Number(rawX) / 1e18) * 10 ** (token0Decimals - token1Decimals)
+}
+
+interface TickPriceParams {
+    tick: number
+    decimals0: number
+    decimals1: number
+}
+
+export function computeTickPrice(params: TickPriceParams): number {
+    return priceFromSqrtPriceX96(
+        tickToSqrtPriceX96(params.tick),
+        params.decimals0,
+        params.decimals1
+    )
 }
 
 export function deriveNativeUsdPrice(
