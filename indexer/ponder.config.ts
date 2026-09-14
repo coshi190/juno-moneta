@@ -4,7 +4,6 @@ import {
     getDexConfig,
     AGG_ROUTER_JUNOSWAP_ABI,
     BONDING_CURVE_JUNOSWAP_ABI,
-    getCurveCreationEvent,
     getChains,
     ERC20_ABI,
     NONFUNGIBLE_POSITION_MANAGER_ABI,
@@ -69,7 +68,7 @@ const abiEvent = <TAbi extends readonly { type: string; name?: string }[], TName
 
 const PAIR_CREATED_EVENT = abiEvent(V2_FACTORY_ABI, 'PairCreated')
 const V3_POOL_CREATED_EVENT = abiEvent(V3_FACTORY_ABI, 'PoolCreated')
-const CURVE_CREATION_EVENT = getCurveCreationEvent()
+const CURVE_CREATION_EVENT = abiEvent(BONDING_CURVE_JUNOSWAP_ABI, 'Creation')
 
 const BONDING_CURVE_TESTNET = getBondingCurveDeployment(CHAINS.kubTestnet)!
 const BONDING_CURVE_BITKUB = getBondingCurveDeployment(CHAINS.bitkub)

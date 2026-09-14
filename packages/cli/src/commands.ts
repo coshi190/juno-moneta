@@ -1,17 +1,7 @@
-import type { Address } from 'viem'
 import {
     getChains,
-    LAUNCH_TOKEN_CARD_FIELDS,
-    LAUNCH_TOKEN_DETAIL_FIELDS,
-    LAUNCH_TOKEN_META_FIELDS,
     getStablecoins,
-    TOKEN_HOLDER_ADDRESS_FIELDS,
-    TOKEN_HOLDER_BALANCE_FIELDS,
-    TOKEN_SNAPSHOT_CREATOR_FIELDS,
-    TOKEN_SNAPSHOT_HOLDER_COUNT_FIELDS,
-    TOKEN_SNAPSHOT_LIST_FIELDS,
     getWrappedNativeAddress,
-    createPonderClient,
     fetchAllReferralBindings,
     fetchDepositsByOwner,
     fetchIncentives,
@@ -31,14 +21,11 @@ import {
     fetchV3TokenSnapshots,
     getAggRouterDeployment,
     getBondingCurveDeployment,
-    getCurveState,
     getDexConfig,
     getSupportedDexs,
-    type LaunchToken,
-    type TokenHolder,
-    type TokenSnapshot,
 } from '@coshi190/juno-moneta-sdk'
-import { createReadClient, resolveAggregatePlan } from './chain.js'
+import { resolveAggregatePlan } from './chain.js'
+import { createPonderClient } from './ponder-client.js'
 import { fetchIncentiveAnalytics, toTableRow } from './incentive-analytics.js'
 import {
     optionalAddress,
@@ -101,6 +88,114 @@ const CHAIN_FLAG = '--chainId <id|slug>'
 const CONFIG_FLAGS = `${CHAIN_FLAG} [--dexId <dex=junoswap>] [--protocolType v2|v3]`
 const OPTIONAL_CHAIN_FLAG = '[--chainId <id|slug>]'
 const PONDER_FLAG = '[--ponderUrl <url>]'
+
+interface LaunchToken {
+    tokenAddr: string
+    chainId: number
+    creator: string
+    name: string | null
+    symbol: string | null
+    logo: string | null
+    description: string | null
+    link1: string | null
+    link2: string | null
+    link3: string | null
+    createdTime: number
+    isGraduated: number | null
+    graduatedAt: number | null
+    createdAtBlock: number
+}
+
+interface TokenHolder {
+    id: string
+    chainId: number
+    tokenAddr: string
+    address: string
+    balance: string
+}
+
+interface TokenSnapshot {
+    tokenAddr: string
+    chainId: number
+    lastPrice: string | null
+    lastPriceUsd: string | null
+    marketCapNative: string | null
+    athMarketCapNative: string | null
+    totalBuys: number | null
+    totalSells: number | null
+    totalVolumeNative: string | null
+    holderCount: number | null
+    creatorFeeNative: string | null
+    creatorFeeClaimedNative: string | null
+    creatorFeeToken: string | null
+    creatorFeeClaimedToken: string | null
+    lastSwapAt: number | null
+    price1dAgo: string | null
+    price1dAgoTimestamp: number | null
+    priceChange1dPct: string | null
+    updatedAt: number
+}
+
+const LAUNCH_TOKEN_DETAIL_FIELDS = [
+    'tokenAddr',
+    'creator',
+    'name',
+    'symbol',
+    'logo',
+    'description',
+    'link1',
+    'link2',
+    'link3',
+    'createdTime',
+    'isGraduated',
+    'graduatedAt',
+] as const satisfies readonly (keyof LaunchToken)[]
+
+const LAUNCH_TOKEN_META_FIELDS = [
+    'tokenAddr',
+    'name',
+    'symbol',
+    'logo',
+] as const satisfies readonly (keyof LaunchToken)[]
+
+const LAUNCH_TOKEN_CARD_FIELDS = [
+    'tokenAddr',
+    'name',
+    'symbol',
+    'logo',
+    'isGraduated',
+] as const satisfies readonly (keyof LaunchToken)[]
+
+const TOKEN_SNAPSHOT_LIST_FIELDS = [
+    'tokenAddr',
+    'lastSwapAt',
+    'marketCapNative',
+    'athMarketCapNative',
+    'lastPrice',
+    'price1dAgoTimestamp',
+    'priceChange1dPct',
+] as const satisfies readonly (keyof TokenSnapshot)[]
+
+const TOKEN_SNAPSHOT_CREATOR_FIELDS = [
+    'tokenAddr',
+    'marketCapNative',
+    'creatorFeeNative',
+    'creatorFeeClaimedNative',
+    'creatorFeeToken',
+    'creatorFeeClaimedToken',
+    'lastPriceUsd',
+] as const satisfies readonly (keyof TokenSnapshot)[]
+
+const TOKEN_SNAPSHOT_HOLDER_COUNT_FIELDS = [
+    'holderCount',
+] as const satisfies readonly (keyof TokenSnapshot)[]
+
+const TOKEN_HOLDER_ADDRESS_FIELDS = ['address'] as const satisfies readonly (keyof TokenHolder)[]
+
+const TOKEN_HOLDER_BALANCE_FIELDS = [
+    'tokenAddr',
+    'balance',
+] as const satisfies readonly (keyof TokenHolder)[]
 
 const LAUNCH_TOKEN_PRESETS: Record<string, readonly (keyof LaunchToken)[]> = {
     detail: LAUNCH_TOKEN_DETAIL_FIELDS,
@@ -193,20 +288,6 @@ export const COMMANDS: Record<string, Command> = {
                     ].join(' → '),
                 })),
             }
-        },
-    },
-
-    getCurveState: {
-        group: DEX,
-        flags: `${CHAIN_FLAG} [--tokenAddr <addr>] [--rpcUrl <url=$JUNO_MONETA_RPC_URL>]`,
-        describe:
-            'Bonding curve fee and graduation globals on a chain, plus a token’s reserves with --tokenAddr',
-        run: (args) => {
-            const chainId = parseChainId(args.chainId)
-            return getCurveState(createReadClient(parseRpcUrl(args.rpcUrl, chainId)), {
-                chainId,
-                token: optionalAddress(args.tokenAddr) as Address | undefined,
-            })
         },
     },
 

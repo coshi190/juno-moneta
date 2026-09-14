@@ -23,6 +23,7 @@
     },
     "dependencies": {
         "@coshi190/juno-moneta-sdk": "file:../sdk",
+        "graphql-request": "^7.4.0",
         "viem": "^2.25.0"
     },
     "devDependencies": {

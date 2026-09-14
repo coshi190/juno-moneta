@@ -2,21 +2,6 @@ import type { PonderClient } from '../client.js'
 import type { LaunchToken, TokenSnapshot, SwapEvent, TokenHolder } from '../entities.js'
 import { sel, MAX_LIMIT, type Items, type Page, type Row, type OrderDirection } from './internal.js'
 
-export const LAUNCH_TOKEN_DETAIL_FIELDS = [
-    'tokenAddr',
-    'creator',
-    'name',
-    'symbol',
-    'logo',
-    'description',
-    'link1',
-    'link2',
-    'link3',
-    'createdTime',
-    'isGraduated',
-    'graduatedAt',
-] as const satisfies readonly (keyof LaunchToken)[]
-
 export const LAUNCH_TOKEN_META_FIELDS = [
     'tokenAddr',
     'name',
@@ -24,43 +9,7 @@ export const LAUNCH_TOKEN_META_FIELDS = [
     'logo',
 ] as const satisfies readonly (keyof LaunchToken)[]
 
-export const LAUNCH_TOKEN_CARD_FIELDS = [
-    'tokenAddr',
-    'name',
-    'symbol',
-    'logo',
-    'isGraduated',
-] as const satisfies readonly (keyof LaunchToken)[]
-
-export const TOKEN_SNAPSHOT_LIST_FIELDS = [
-    'tokenAddr',
-    'lastSwapAt',
-    'marketCapNative',
-    'athMarketCapNative',
-    'lastPrice',
-    'price1dAgoTimestamp',
-    'priceChange1dPct',
-] as const satisfies readonly (keyof TokenSnapshot)[]
-
-export const TOKEN_SNAPSHOT_CREATOR_FIELDS = [
-    'tokenAddr',
-    'marketCapNative',
-    'creatorFeeNative',
-    'creatorFeeClaimedNative',
-    'creatorFeeToken',
-    'creatorFeeClaimedToken',
-    'lastPriceUsd',
-] as const satisfies readonly (keyof TokenSnapshot)[]
-
-export const TOKEN_SNAPSHOT_HOLDER_COUNT_FIELDS = [
-    'holderCount',
-] as const satisfies readonly (keyof TokenSnapshot)[]
-
-export type LaunchTokenDetail = Row<LaunchToken, typeof LAUNCH_TOKEN_DETAIL_FIELDS>
 export type LaunchTokenMeta = Row<LaunchToken, typeof LAUNCH_TOKEN_META_FIELDS>
-export type LaunchTokenCard = Row<LaunchToken, typeof LAUNCH_TOKEN_CARD_FIELDS>
-export type LaunchTokenListSnapshot = Row<TokenSnapshot, typeof TOKEN_SNAPSHOT_LIST_FIELDS>
-export type CreatorTokenSnapshot = Row<TokenSnapshot, typeof TOKEN_SNAPSHOT_CREATOR_FIELDS>
 
 export interface LaunchTokenFilter {
     chainId?: number
@@ -188,15 +137,6 @@ export async function fetchRecentSwaps(
     )
     return { swaps: data.swapEvents.items, tokens: data.launchTokens.items }
 }
-
-export const TOKEN_HOLDER_ADDRESS_FIELDS = [
-    'address',
-] as const satisfies readonly (keyof TokenHolder)[]
-
-export const TOKEN_HOLDER_BALANCE_FIELDS = [
-    'tokenAddr',
-    'balance',
-] as const satisfies readonly (keyof TokenHolder)[]
 
 export interface TokenHolderFilter {
     chainId?: number

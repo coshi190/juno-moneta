@@ -1,4 +1,4 @@
-import { getChains, ProtocolType, type ChainSlug, type QueryOrder } from '@coshi190/juno-moneta-sdk'
+import { getChains, ProtocolType, type ChainSlug } from '@coshi190/juno-moneta-sdk'
 
 export class UsageError extends Error {}
 
@@ -152,6 +152,11 @@ export function parseFields<TEntity>(
         }
         return name as keyof TEntity
     })
+}
+
+interface QueryOrder<TEntity> {
+    orderBy: keyof TEntity
+    orderDirection?: 'asc' | 'desc'
 }
 
 export function optionalOrder<TEntity>(

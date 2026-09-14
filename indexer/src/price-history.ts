@@ -42,3 +42,28 @@ export function makePriceAt(
         return points[ans]!.price
     }
 }
+
+const Q96 = 2n ** 96n
+
+export function computePriceFromSqrtPriceX96(
+    sqrtPriceX96: bigint,
+    tokenIsToken0: boolean,
+    tokenDecimals: number,
+    pairedDecimals: number
+): number {
+    if (sqrtPriceX96 <= 0n) return 0
+    const SCALE = 10n ** 18n
+    let scaled: bigint
+    if (tokenIsToken0) {
+        scaled = (sqrtPriceX96 * sqrtPriceX96 * SCALE) / (Q96 * Q96)
+    } else {
+        scaled = (Q96 * Q96 * SCALE) / (sqrtPriceX96 * sqrtPriceX96)
+    }
+    const diff = tokenDecimals - pairedDecimals
+    if (diff > 0) {
+        scaled = scaled * 10n ** BigInt(diff)
+    } else if (diff < 0) {
+        scaled = scaled / 10n ** BigInt(-diff)
+    }
+    return Number(scaled) / 1e18
+}

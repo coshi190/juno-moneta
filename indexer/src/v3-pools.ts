@@ -5,34 +5,16 @@ import { readERC20Metadata } from './erc20-read.js'
 import { foldTokenCandle } from './candles.js'
 import { readTrackingTag, getWrappedNativeAddress, getStablecoins } from '@coshi190/juno-moneta-sdk'
 import { parseV3Swap } from './parse-swaps.js'
-import { sanitizeUsdPrice, MAX_NATIVE_USD_PRICE, MAX_TOKEN_USD_PRICE } from './price-history.js'
+import {
+    sanitizeUsdPrice,
+    computePriceFromSqrtPriceX96,
+    MAX_NATIVE_USD_PRICE,
+    MAX_TOKEN_USD_PRICE,
+} from './price-history.js'
 import { recordUserSwap } from './user-pnl.js'
 
-const Q96 = 2n ** 96n
 const GRADUATED_FEE_TIER = 10000
 const SECONDS_PER_DAY = 86400
-
-function computePriceFromSqrtPriceX96(
-    sqrtPriceX96: bigint,
-    tokenIsToken0: boolean,
-    tokenDecimals: number,
-    pairedDecimals: number
-): number {
-    const SCALE = 10n ** 18n
-    let scaled: bigint
-    if (tokenIsToken0) {
-        scaled = (sqrtPriceX96 * sqrtPriceX96 * SCALE) / (Q96 * Q96)
-    } else {
-        scaled = (Q96 * Q96 * SCALE) / (sqrtPriceX96 * sqrtPriceX96)
-    }
-    const diff = tokenDecimals - pairedDecimals
-    if (diff > 0) {
-        scaled = scaled * 10n ** BigInt(diff)
-    } else if (diff < 0) {
-        scaled = scaled / 10n ** BigInt(-diff)
-    }
-    return Number(scaled) / 1e18
-}
 
 export async function upsertToken(
     context: any,

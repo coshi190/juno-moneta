@@ -6,14 +6,14 @@ import { cors } from 'hono/cors'
 import {
     computePnl,
     computePoints,
-    calculatePrice,
-    calculatePriceFromSqrtPrice,
+    computeCurve,
     getWrappedNativeAddress,
 } from '@coshi190/juno-moneta-sdk'
 import { parseBondingCurveSwap, parseV2Swap, parseV3Swap, type ParsedSwap } from '../parse-swaps.js'
 import { computeWindowedTraderStats, type LeaderboardSwapEvent } from '../trader-stats.js'
 import {
     makePriceAt,
+    computePriceFromSqrtPriceX96,
     sanitizePricePoints,
     sanitizeUsdPrice,
     MAX_TOKEN_USD_PRICE,
@@ -345,14 +345,10 @@ app.get('/token-price-history', async (c) => {
         for (const r of rows) {
             raw.push({
                 timestamp: r.timestamp,
-                price: calculatePrice({
-                    timestamp: r.timestamp,
-                    isBuy: r.isBuy === 1,
-                    amountIn: 0n,
-                    amountOut: 0n,
-                    reserveIn: BigInt(r.reserveIn),
-                    reserveOut: BigInt(r.reserveOut),
-                }),
+                price: computeCurve({
+                    nativeReserve: r.isBuy === 1 ? BigInt(r.reserveIn) : BigInt(r.reserveOut),
+                    tokenReserve: r.isBuy === 1 ? BigInt(r.reserveOut) : BigInt(r.reserveIn),
+                }).price,
             })
         }
     } else {
@@ -369,7 +365,12 @@ app.get('/token-price-history', async (c) => {
         for (const r of rows) {
             raw.push({
                 timestamp: r.timestamp,
-                price: calculatePriceFromSqrtPrice(BigInt(r.sqrtPriceX96), r.tokenIsToken0 === 1),
+                price: computePriceFromSqrtPriceX96(
+                    BigInt(r.sqrtPriceX96),
+                    r.tokenIsToken0 === 1,
+                    18,
+                    18
+                ),
             })
         }
     }

@@ -93,15 +93,6 @@ export function fromAmountsOut(amounts: readonly bigint[], gasEstimate = 150000n
     }
 }
 
-export function wrapQuoteResult(amountIn: bigint, operation: 'wrap' | 'unwrap'): QuoteResult {
-    return {
-        amountOut: amountIn,
-        sqrtPriceX96After: 0n,
-        initializedTicksCrossed: 0,
-        gasEstimate: operation === 'wrap' ? 50000n : 40000n,
-    }
-}
-
 const REFERENCE_DIVISOR = 1000n
 
 export function computePriceImpactPercent(

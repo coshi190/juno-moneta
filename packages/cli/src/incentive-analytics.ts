@@ -4,16 +4,51 @@ import {
     fetchPoolMetrics,
     fetchV3TokenSnapshots,
     fetchV3Tokens,
-    type IncentiveRow,
-    type PonderClient,
-    type PoolMetrics,
-    type V3TokenPrice,
 } from '@coshi190/juno-moneta-sdk'
+import type { PonderClient } from './ponder-client.js'
 
 const SECONDS_PER_DAY = 86400
 const DAYS_PER_YEAR = 365
 
 export type IncentiveStatus = 'pending' | 'active' | 'ended'
+
+interface IncentiveRow {
+    incentiveId: string
+    rewardToken: string
+    pool: string
+    startTime: number
+    endTime: number
+    reward: string
+}
+
+interface PoolMetricsToken {
+    address: string
+    symbol: string
+    name: string
+    decimals: number
+}
+
+interface PoolMetrics {
+    address: string
+    fee: number
+    tickSpacing: number
+    token0: PoolMetricsToken
+    token1: PoolMetricsToken
+    sqrtPriceX96: bigint
+    tick: number | null
+    liquidity: bigint
+    price: number
+    tvlUsd: number | null
+    volume1dUsd: number | null
+    volume30dUsd: number | null
+    feeAprPercent: number | null
+}
+
+interface V3TokenPrice {
+    tokenAddr: string
+    lastPriceNative: string | null
+    lastPriceUsd: string | null
+}
 
 export interface IncentiveMetrics {
     incentiveId: string
