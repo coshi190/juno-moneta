@@ -172,9 +172,7 @@ export function computeCurve(input: CurveInputs): CurveResult {
         const preNative = swap.isBuy
             ? nativeReserve - swap.amountIn
             : nativeReserve + swap.amountOut
-        const preToken = swap.isBuy
-            ? tokenReserve + swap.amountOut
-            : tokenReserve - swap.amountIn
+        const preToken = swap.isBuy ? tokenReserve + swap.amountOut : tokenReserve - swap.amountIn
         preSwapPrice =
             preNative < 0n || preToken <= 0n ? 0 : spotPrice(preNative, preToken, virtualAmount)
     }
