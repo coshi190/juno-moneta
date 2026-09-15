@@ -34,7 +34,7 @@ export interface SplitQuoteGrid<T extends SplitRouteInput = SplitRouteInput> {
     aggFeeBps: number
 }
 
-export function selectSplitCandidates<T extends SplitRouteInput>(allRoutes: T[]): [T, T] | null {
+function selectSplitCandidates<T extends SplitRouteInput>(allRoutes: T[]): [T, T] | null {
     const bestPerDex = new Map<string, T>()
     for (const r of allRoutes) {
         if (r.route.isMultiHop) continue
@@ -49,7 +49,7 @@ export function selectSplitCandidates<T extends SplitRouteInput>(allRoutes: T[])
     return [sorted[0]!, sorted[1]!]
 }
 
-export function computeGridAmounts(
+function computeGridAmounts(
     amountIn: bigint,
     fractions: number[]
 ): { amountsInA: bigint[]; amountsInB: bigint[] } {
@@ -64,9 +64,7 @@ export function computeGridAmounts(
     return { amountsInA, amountsInB }
 }
 
-export function pickBestSplit<T extends SplitRouteInput>(
-    g: SplitQuoteGrid<T>
-): SplitAllocation<T> | null {
+function pickBestSplit<T extends SplitRouteInput>(g: SplitQuoteGrid<T>): SplitAllocation<T> | null {
     const feeMul = BigInt(10000 - g.aggFeeBps)
     let best: SplitAllocation<T> | null = null
 
@@ -116,8 +114,6 @@ export interface SplitQuoteParams<T extends SplitRouteInput> {
 
 export interface SplitQuoteResult<T extends SplitRouteInput> {
     allocation: SplitAllocation<T> | null
-    predictedNetOut: bigint | null
-    bestSingleOut: bigint | null
     aggFeeBps: number
 }
 
@@ -155,8 +151,6 @@ export async function getSplitQuote<T extends SplitRouteInput>(
     const { chainId, tokenIn, tokenOut, amountIn, routes, fractions = SPLIT_FRACTIONS } = params
     const empty: SplitQuoteResult<T> = {
         allocation: null,
-        predictedNetOut: null,
-        bestSingleOut: null,
         aggFeeBps: 0,
     }
 
@@ -207,8 +201,6 @@ export async function getSplitQuote<T extends SplitRouteInput>(
 
     return {
         allocation,
-        predictedNetOut: allocation?.predictedNetOut ?? null,
-        bestSingleOut,
         aggFeeBps,
     }
 }

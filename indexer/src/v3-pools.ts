@@ -87,7 +87,7 @@ async function upsertPoolDayVolume(
     }
 }
 
-export async function applyReserveDelta(
+async function applyReserveDelta(
     context: any,
     chainId: number,
     poolAddress: string,
@@ -134,24 +134,6 @@ export async function applyReserveDelta(
             liquidity: liq,
             updatedAt: timestamp,
         })
-    }
-
-    const dayTimestamp = getDayTimestamp(timestamp)
-    const dayId = `${chainId}-${poolAddress}-${dayTimestamp}`
-    const dayVals = {
-        reserve0: reserve0.toString(),
-        reserve1: reserve1.toString(),
-        sqrtPriceX96: sp,
-        updatedAt: timestamp,
-    }
-    const existingDay = await context.db.find(schema.v3PoolTvlDay, { id: dayId })
-    if (!existingDay) {
-        await context.db
-            .insert(schema.v3PoolTvlDay)
-            .values({ id: dayId, chainId, poolAddress, dayTimestamp, ...dayVals })
-            .onConflictDoNothing()
-    } else {
-        await context.db.update(schema.v3PoolTvlDay, { id: dayId }).set(dayVals)
     }
 }
 

@@ -38,10 +38,8 @@ import {
     parseTokenIds,
 } from './args.js'
 
-export interface CommandArgs {
+interface CommandArgs {
     chainId?: string | undefined
-    dexId?: string | undefined
-    protocolType?: string | undefined
     protocol?: string | undefined
     users?: string | undefined
     owner?: string | undefined

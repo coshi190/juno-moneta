@@ -2,7 +2,7 @@ import type { PonderClient } from '../client.js'
 import type { LaunchToken, TokenSnapshot, SwapEvent, TokenHolder } from '../entities.js'
 import { sel, MAX_LIMIT, type Items, type Page, type Row, type OrderDirection } from './internal.js'
 
-export const LAUNCH_TOKEN_META_FIELDS = [
+const LAUNCH_TOKEN_META_FIELDS = [
     'tokenAddr',
     'name',
     'symbol',

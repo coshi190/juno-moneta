@@ -8,8 +8,6 @@ import { render } from './render.js'
 
 const OPTIONS = {
     chainId: { type: 'string' },
-    dexId: { type: 'string' },
-    protocolType: { type: 'string' },
     protocol: { type: 'string' },
     users: { type: 'string' },
     owner: { type: 'string' },

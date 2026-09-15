@@ -1,8 +1,8 @@
-export const PUMP_FEE_BPS = 100n
-export const CREATOR_FEE_SHARE_BPS = 5000n
+const PUMP_FEE_BPS = 100n
+const CREATOR_FEE_SHARE_BPS = 5000n
 export const VIRTUAL_AMOUNT = 3400n * 10n ** 18n
 
-export function pumpFeeFromNetAmountIn(netAmountIn: bigint): bigint {
+function pumpFeeFromNetAmountIn(netAmountIn: bigint): bigint {
     if (netAmountIn <= 0n) return 0n
     return (netAmountIn * PUMP_FEE_BPS) / (10000n - PUMP_FEE_BPS)
 }

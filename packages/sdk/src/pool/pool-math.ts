@@ -56,7 +56,7 @@ export function computeTickPrice(params: TickPriceParams): number {
     )
 }
 
-export function deriveNativeUsdPrice(
+function deriveNativeUsdPrice(
     pools: PoolUsdMeta[],
     wrappedNative: string | undefined,
     usdStable: string | undefined
@@ -90,7 +90,7 @@ function amountsToNative(
     return amount0 + (amount1 * Q96 * Q96) / (sqrtPriceX96 * sqrtPriceX96)
 }
 
-export function computeValueUsd(
+function computeValueUsd(
     amount0: bigint,
     amount1: bigint,
     sqrtPriceX96: bigint,
@@ -104,7 +104,7 @@ export function computeValueUsd(
     return Number(formatEther(native)) * nativeUsdPrice
 }
 
-export function computeValueFromPrices(
+function computeValueFromPrices(
     amount0: bigint,
     decimals0: number,
     amount1: bigint,

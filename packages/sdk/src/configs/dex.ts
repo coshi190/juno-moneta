@@ -25,7 +25,6 @@ export interface V3Dex extends DexBase {
     positionManager?: Address
     staker?: Address
     feeTiers: number[]
-    defaultFeeTier?: number
 }
 
 export type Dex = V2Dex | V3Dex

@@ -114,7 +114,7 @@ export async function fetchV3Tokens(
     return data.v3Tokens.items
 }
 
-export async function fetchV3PoolDayVolumes(
+async function fetchV3PoolDayVolumes(
     client: PonderClient,
     {
         chainId,
@@ -144,7 +144,7 @@ export async function fetchV3PoolDayVolumes(
     return data.v3PoolDayVolumes.items
 }
 
-export async function fetchV3PoolReserves(
+async function fetchV3PoolReserves(
     client: PonderClient,
     {
         chainId,
@@ -253,7 +253,7 @@ const VOLUME_WINDOW_DAYS = 30
 const FEE_DENOMINATOR = 1_000_000
 const VOLUME_LOOKBACK_SECONDS = 31 * 86400
 
-export function computeFeeAprPercent(
+function computeFeeAprPercent(
     fee: number,
     tvlUsd: number | null,
     volume30dUsd: number
@@ -272,7 +272,7 @@ function toMetricsToken(row: V3TokenRow | undefined, address: string): PoolMetri
     }
 }
 
-export function toTokenPriceMap(rows: V3TokenPrice[]): Map<string, number> {
+function toTokenPriceMap(rows: V3TokenPrice[]): Map<string, number> {
     const priceMap = new Map<string, number>()
     for (const row of rows) {
         const price = row.lastPriceUsd === null ? NaN : parseFloat(row.lastPriceUsd)

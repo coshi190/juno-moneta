@@ -14,7 +14,7 @@ import {
 import type { ContractCall } from './plan-swap.js'
 
 export const MAX_HOPS = 3
-export const MAX_DEEP_CONNECTORS = 3
+const MAX_DEEP_CONNECTORS = 3
 export const MAX_ROUTE_QUOTES = 80
 
 export interface V3QuoteOutcome {
@@ -58,7 +58,7 @@ export function enumerateHopPaths(
     return paths
 }
 
-export function crossProduct(perLeg: number[][]): number[][] {
+function crossProduct(perLeg: number[][]): number[][] {
     return perLeg.reduce<number[][]>(
         (acc, fees) => acc.flatMap((combo) => fees.map((f) => [...combo, f])),
         [[]]
@@ -79,7 +79,7 @@ export interface V3RouteCandidate {
     tokens: Address[]
 }
 
-export function buildRouteCandidates(
+function buildRouteCandidates(
     params: Omit<RouteQuoteParams, 'amountIn' | 'maxRouteQuotes'>
 ): V3RouteCandidate[] {
     const { chainId, tokenIn, tokenOut, connectors, dexId, maxHops = MAX_HOPS } = params
@@ -143,7 +143,7 @@ interface RouteMeta {
     fees: number[]
 }
 
-export function buildRouteMetas(
+function buildRouteMetas(
     candidates: readonly V3RouteCandidate[],
     existing: ReadonlyMap<string, Address>,
     maxRouteQuotes: number = MAX_ROUTE_QUOTES

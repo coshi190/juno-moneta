@@ -1,6 +1,6 @@
 export const CANDLE_DURATIONS = [60, 300, 900, 3600, 14400, 86400] as const
 
-export interface Candle {
+interface Candle {
     open: number
     high: number
     low: number

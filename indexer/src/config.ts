@@ -6,7 +6,7 @@ const CHAIN_IDS = {
     jbc: 8899,
 } as const
 
-export type ChainSlug = keyof typeof CHAIN_IDS
+type ChainSlug = keyof typeof CHAIN_IDS
 
 export function getChains(): Readonly<Record<ChainSlug, number>> {
     return CHAIN_IDS
@@ -39,7 +39,7 @@ export function getStablecoins(chainId: number): ReadonlySet<string> | undefined
     return STABLECOIN_ADDRESSES[chainId]
 }
 
-export interface Deployment {
+interface Deployment {
     address: Address
     startBlock: number
 }

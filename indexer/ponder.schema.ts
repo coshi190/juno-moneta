@@ -211,17 +211,6 @@ export const v3PoolState = onchainTable('v3_pool_state', (t) => ({
     updatedAt: t.integer().notNull(),
 }))
 
-export const v3PoolTvlDay = onchainTable('v3_pool_tvl_day', (t) => ({
-    id: t.text().primaryKey(),
-    chainId: t.integer().notNull(),
-    poolAddress: t.text().notNull(),
-    dayTimestamp: t.integer().notNull(),
-    reserve0: t.text().notNull(),
-    reserve1: t.text().notNull(),
-    sqrtPriceX96: t.text().notNull(),
-    updatedAt: t.integer().notNull(),
-}))
-
 export const tokenCandle = onchainTable('token_candle', (t) => ({
     id: t.text().primaryKey(),
     chainId: t.integer().notNull(),

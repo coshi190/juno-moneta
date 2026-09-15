@@ -95,7 +95,7 @@ export function fromAmountsOut(amounts: readonly bigint[], gasEstimate = 150000n
 
 const REFERENCE_DIVISOR = 1000n
 
-export function computePriceImpactPercent(
+function computePriceImpactPercent(
     fullAmountOut: bigint,
     amountIn: bigint,
     referenceAmountOut: bigint,

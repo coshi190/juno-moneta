@@ -23,7 +23,7 @@ export interface V2QuoteOutcome {
     error: Error | null
 }
 
-export function pairKey(factory: Address, tokenA: Address, tokenB: Address): string {
+function pairKey(factory: Address, tokenA: Address, tokenB: Address): string {
     const a = tokenA.toLowerCase()
     const b = tokenB.toLowerCase()
     const [token0, token1] = a < b ? [a, b] : [b, a]
@@ -36,7 +36,7 @@ export interface V2RouteCandidate {
     tokens: Address[]
 }
 
-export function buildV2RouteCandidates(
+function buildV2RouteCandidates(
     params: Omit<RouteQuoteParams, 'amountIn' | 'maxRouteQuotes'>
 ): V2RouteCandidate[] {
     const { chainId, tokenIn, tokenOut, connectors, dexId, maxHops = MAX_HOPS } = params
@@ -92,7 +92,7 @@ function collectLegQueries(candidates: readonly V2RouteCandidate[]): LegQuery[] 
     return [...seen.values()]
 }
 
-export function buildViableRoutes(
+function buildViableRoutes(
     candidates: readonly V2RouteCandidate[],
     existing: ReadonlyMap<string, Address>,
     maxRouteQuotes: number = MAX_ROUTE_QUOTES

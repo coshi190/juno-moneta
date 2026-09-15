@@ -10,7 +10,7 @@ import type { PonderClient } from './ponder-client.js'
 const SECONDS_PER_DAY = 86400
 const DAYS_PER_YEAR = 365
 
-export type IncentiveStatus = 'pending' | 'active' | 'ended'
+type IncentiveStatus = 'pending' | 'active' | 'ended'
 
 interface IncentiveRow {
     incentiveId: string
@@ -50,7 +50,7 @@ interface V3TokenPrice {
     lastPriceUsd: string | null
 }
 
-export interface IncentiveMetrics {
+interface IncentiveMetrics {
     incentiveId: string
     status: IncentiveStatus
     pool: string
@@ -74,7 +74,7 @@ export interface IncentiveMetrics {
     rewardAprPoolTvlPercent: number | null
 }
 
-export interface IncentiveTotals {
+interface IncentiveTotals {
     programs: number
     pending: number
     active: number
@@ -83,7 +83,7 @@ export interface IncentiveTotals {
     activeRewardUsdPerDay: number | null
 }
 
-export interface IncentiveAnalytics {
+interface IncentiveAnalytics {
     totals: IncentiveTotals
     programs: IncentiveMetrics[]
 }

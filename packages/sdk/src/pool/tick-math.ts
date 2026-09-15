@@ -1,10 +1,10 @@
 const Q96 = 2n ** 96n
 
-export const MIN_TICK = -887272
+const MIN_TICK = -887272
 
-export const MAX_TICK = 887272
+const MAX_TICK = 887272
 
-export const MIN_SQRT_RATIO = 4295128739n
+const MIN_SQRT_RATIO = 4295128739n
 
 export function tickToSqrtPriceX96(tick: number): bigint {
     const absTick = Math.abs(tick)
@@ -43,65 +43,6 @@ export function tickToSqrtPriceX96(tick: number): bigint {
     return sqrtPriceX96
 }
 
-export function sqrtPriceX96ToTick(sqrtPriceX96: bigint): number {
-    const ratio = sqrtPriceX96 << 32n
-
-    let msb = 0n
-    let r = ratio
-    if (r >= 0x100000000000000000000000000000000n) {
-        r >>= 128n
-        msb += 128n
-    }
-    if (r >= 0x10000000000000000n) {
-        r >>= 64n
-        msb += 64n
-    }
-    if (r >= 0x100000000n) {
-        r >>= 32n
-        msb += 32n
-    }
-    if (r >= 0x10000n) {
-        r >>= 16n
-        msb += 16n
-    }
-    if (r >= 0x100n) {
-        r >>= 8n
-        msb += 8n
-    }
-    if (r >= 0x10n) {
-        r >>= 4n
-        msb += 4n
-    }
-    if (r >= 0x4n) {
-        r >>= 2n
-        msb += 2n
-    }
-    if (r >= 0x2n) {
-        msb += 1n
-    }
-
-    r = msb >= 128n ? ratio >> (msb - 127n) : ratio << (127n - msb)
-
-    let log2 = (msb - 128n) << 64n
-
-    for (let i = 63n; i >= 50n; i--) {
-        r = (r * r) >> 127n
-        const f = r >> 128n
-        log2 |= f << i
-        r >>= f
-    }
-
-    const log_sqrt10001 = log2 * 255738958999603826347141n
-    const tickLow = Number((log_sqrt10001 - 3402992956809132418596140100660247210n) >> 128n)
-    const tickHigh = Number((log_sqrt10001 + 291339464771989622907027621153398088495n) >> 128n)
-
-    if (tickLow === tickHigh) {
-        return tickLow
-    }
-
-    return tickToSqrtPriceX96(tickHigh) <= sqrtPriceX96 ? tickHigh : tickLow
-}
-
 export function priceToSqrtPriceX96(price: string, decimals0: number, decimals1: number): bigint {
     const priceNum = parseFloat(price)
     if (priceNum <= 0) return MIN_SQRT_RATIO
@@ -113,7 +54,7 @@ export function priceToSqrtPriceX96(price: string, decimals0: number, decimals1:
     return sqrtPriceX96
 }
 
-export function nearestUsableTick(tick: number, tickSpacing: number): number {
+function nearestUsableTick(tick: number, tickSpacing: number): number {
     const rounded = Math.round(tick / tickSpacing) * tickSpacing
     if (rounded < MIN_TICK) return MIN_TICK + (tickSpacing - (MIN_TICK % tickSpacing))
     if (rounded > MAX_TICK) return MAX_TICK - (MAX_TICK % tickSpacing)

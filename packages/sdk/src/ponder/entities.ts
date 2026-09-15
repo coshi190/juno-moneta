@@ -163,29 +163,6 @@ export interface UserStat {
     updatedAt: number
 }
 
-export interface UserTokenPnl {
-    id: string
-    chainId: number
-    tokenAddr: string
-    user: string
-    position: number
-    costPoolUsd: number
-    realizedUsd: number
-    totalInvestedUsd: number
-    updatedAt: number
-}
-
-export interface V2Pool {
-    id: string
-    chainId: number
-    address: string
-    token0: string
-    token1: string
-    createdAtBlock: number
-    createdAtTimestamp: number
-    protocol: string
-}
-
 export interface V2SwapEvent {
     id: string
     chainId: number
@@ -242,17 +219,6 @@ export interface V3PoolState {
     sqrtPriceX96: string
     tick: number | null
     liquidity: string
-    updatedAt: number
-}
-
-export interface V3PoolTvlDay {
-    id: string
-    chainId: number
-    poolAddress: string
-    dayTimestamp: number
-    reserve0: string
-    reserve1: string
-    sqrtPriceX96: string
     updatedAt: number
 }
 
@@ -315,31 +281,4 @@ export interface V3TokenSnapshot {
     lastPriceUsd: string | null
     lastSwapAt: number | null
     updatedAt: number
-}
-
-export interface PonderRootFields {
-    aggSwapEvents: 'AggSwapEvent'
-    deposits: 'Deposit'
-    incentives: 'Incentive'
-    launchTokens: 'LaunchToken'
-    nativeUsdPrices: 'NativeUsdPrice'
-    nativeUsdPriceSnapshots: 'NativeUsdPriceSnapshot'
-    referralBindings: 'ReferralBinding'
-    swapEvents: 'SwapEvent'
-    tokenCandles: 'TokenCandle'
-    tokenHolders: 'TokenHolder'
-    tokenSnapshots: 'TokenSnapshot'
-    transferEvents: 'TransferEvent'
-    userStats: 'UserStat'
-    userTokenPnls: 'UserTokenPnl'
-    v2Pools: 'V2Pool'
-    v2SwapEvents: 'V2SwapEvent'
-    v3Pools: 'V3Pool'
-    v3PoolDayVolumes: 'V3PoolDayVolume'
-    v3PoolStates: 'V3PoolState'
-    v3PoolTvlDays: 'V3PoolTvlDay'
-    v3Positions: 'V3Position'
-    v3SwapEvents: 'V3SwapEvent'
-    v3Tokens: 'V3Token'
-    v3TokenSnapshots: 'V3TokenSnapshot'
 }

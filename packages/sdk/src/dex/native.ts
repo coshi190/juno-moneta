@@ -1,7 +1,7 @@
 import type { Address } from 'viem'
 import { getChains, getWrappedNativeAddress } from '../configs/chains.js'
 
-export const NATIVE_TOKEN_ADDRESS: Address = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
+const NATIVE_TOKEN_ADDRESS: Address = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
 
 export function isNativeToken(address: Address): boolean {
     return address.toLowerCase() === NATIVE_TOKEN_ADDRESS

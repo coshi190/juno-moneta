@@ -1,6 +1,5 @@
 import type { Address } from 'viem'
 import { getDexes, type Protocol, type DEXType } from '../configs/dex.js'
-import { poolKey } from './v3-routes.js'
 import * as native from './native.js'
 import { buildQuoteCall } from './quote-call.js'
 import { parseQuoteAmountOut } from './split-routing.js'
@@ -13,7 +12,6 @@ export interface HopOption {
     dexId: DEXType
     protocol: Protocol
     factory: Address
-    quoteAddress: Address
     tokenIn: Address
     tokenOut: Address
     fee?: number
@@ -31,14 +29,9 @@ export interface CrossDexHop {
 export interface CrossDexLeg {
     hops: CrossDexHop[]
     predictedOut: bigint
-    poolKeys: string[]
 }
 
-export function candidateHopOptions(
-    tokenInW: Address,
-    tokenOutW: Address,
-    chainId: number
-): HopOption[] {
+function candidateHopOptions(tokenInW: Address, tokenOutW: Address, chainId: number): HopOption[] {
     if (tokenInW.toLowerCase() === tokenOutW.toLowerCase()) return []
     const options: HopOption[] = []
 
@@ -48,7 +41,6 @@ export function candidateHopOptions(
             dexId: cfg.dexId,
             protocol: 'v2',
             factory: cfg.factory,
-            quoteAddress: cfg.router,
             tokenIn: tokenInW,
             tokenOut: tokenOutW,
         })
@@ -61,7 +53,6 @@ export function candidateHopOptions(
                 dexId: cfg.dexId,
                 protocol: 'v3',
                 factory: cfg.factory,
-                quoteAddress: cfg.quoter,
                 tokenIn: tokenInW,
                 tokenOut: tokenOutW,
                 fee,
@@ -72,7 +63,7 @@ export function candidateHopOptions(
     return options
 }
 
-export function pickBestHopOption(
+function pickBestHopOption(
     options: readonly HopOption[],
     outputs: readonly (bigint | null)[]
 ): { option: HopOption; output: bigint } | null {
@@ -96,22 +87,17 @@ function toCrossDexHop(o: HopOption): CrossDexHop {
     }
 }
 
-function optionPoolKey(o: HopOption): string {
-    return poolKey(o.factory, o.tokenIn, o.tokenOut, o.fee ?? 0)
-}
-
-export function buildCrossDexLeg(
+function buildCrossDexLeg(
     hop1: { option: HopOption; output: bigint },
     hop2: { option: HopOption; output: bigint }
 ): CrossDexLeg {
     return {
         hops: [toCrossDexHop(hop1.option), toCrossDexHop(hop2.option)],
         predictedOut: hop2.output,
-        poolKeys: [optionPoolKey(hop1.option), optionPoolKey(hop2.option)],
     }
 }
 
-export function selectConnectors(
+function selectConnectors(
     tokenInW: Address,
     tokenOutW: Address,
     connectors: readonly Address[],

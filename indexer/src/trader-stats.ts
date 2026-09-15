@@ -12,7 +12,7 @@ export interface LeaderboardSwapEvent {
     protocol?: string
 }
 
-export interface AddressTraderStats {
+interface AddressTraderStats {
     pnlUsd: number
     pnlPercent: number
     volumeNative: number

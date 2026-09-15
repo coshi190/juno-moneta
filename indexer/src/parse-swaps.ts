@@ -12,7 +12,7 @@ export interface ParsedSwap {
     protocol: string
 }
 
-export interface BondingCurveSwapRow {
+interface BondingCurveSwapRow {
     tokenAddr: string
     sender: string
     isBuy: number
@@ -21,7 +21,7 @@ export interface BondingCurveSwapRow {
     timestamp: number
 }
 
-export interface V3SwapRow {
+interface V3SwapRow {
     tokenAddr: string
     txFrom: string
     amount0: string
@@ -32,7 +32,7 @@ export interface V3SwapRow {
     protocol: string
 }
 
-export interface V2SwapRow {
+interface V2SwapRow {
     txFrom: string
     token0Addr: string
     token1Addr: string

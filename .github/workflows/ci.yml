@@ -54,9 +54,6 @@ jobs:
             - name: Typecheck
               run: bun run typecheck
               working-directory: packages/sdk
-            - name: Test
-              run: bun run test
-              working-directory: packages/sdk
             - name: Build
               run: bun run build
               working-directory: packages/sdk

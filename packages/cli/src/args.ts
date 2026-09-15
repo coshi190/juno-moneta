@@ -89,7 +89,7 @@ export function optionalChainId(value: string | undefined): number | undefined {
     return value === undefined ? undefined : resolveChainId(value)
 }
 
-export function optionalPositiveInt(value: string | undefined, flag: string): number | undefined {
+function optionalPositiveInt(value: string | undefined, flag: string): number | undefined {
     if (value === undefined) return undefined
     if (!/^\d+$/.test(value) || Number(value) === 0) {
         throw new UsageError(`invalid --${flag} "${value}" (expected a positive integer)`)

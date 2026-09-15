@@ -65,7 +65,7 @@ export interface FetchPositionsParams {
     fullRangeTolerance?: number
 }
 
-export function getPositionPoolKey(token0: string, token1: string, fee: number): string {
+function getPositionPoolKey(token0: string, token1: string, fee: number): string {
     return `${token0.toLowerCase()}-${token1.toLowerCase()}-${fee}`
 }
 

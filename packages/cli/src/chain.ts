@@ -24,11 +24,11 @@ interface NamedHop {
     symbolOut: string
 }
 
-export interface ResolvedAggregatePlan extends Omit<PickedPlan, 'legs'> {
+interface ResolvedAggregatePlan extends Omit<PickedPlan, 'legs'> {
     legs: { percent: number; hops: NamedHop[] }[]
 }
 
-export interface AggregatePlanParams {
+interface AggregatePlanParams {
     chainId: number
     tokenIn: string
     tokenOut: string

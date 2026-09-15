@@ -2,7 +2,7 @@ import { GraphQLClient } from 'graphql-request'
 
 const REQUEST_TIMEOUT_MS = 5_000
 
-export interface PonderPageInfo {
+interface PonderPageInfo {
     hasNextPage: boolean
     endCursor: string | null
 }
