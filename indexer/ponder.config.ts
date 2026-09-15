@@ -1,18 +1,6 @@
 import { createConfig, factory } from 'ponder'
-import {
-    ProtocolType,
-    getDexConfig,
-    AGG_ROUTER_JUNOSWAP_ABI,
-    BONDING_CURVE_JUNOSWAP_ABI,
-    getChains,
-    ERC20_ABI,
-    NONFUNGIBLE_POSITION_MANAGER_ABI,
-    V2_FACTORY_ABI,
-    V3_FACTORY_ABI,
-    V3_POOL_ABI,
-    getAggRouterDeployment,
-    getBondingCurveDeployment,
-} from '@coshi190/juno-moneta-sdk'
+import { getAbi, getDexes } from '@coshi190/juno-moneta-sdk'
+import { getAggRouterDeployment, getBondingCurveDeployment, getChains } from './src/config.js'
 import { V3_STAKER_ABI } from './src/abis/v3-staker.js'
 import { V2_PAIR_ABI } from './src/abis/v2-pair.js'
 import externalPools from './external-pools.json'
@@ -31,25 +19,25 @@ const seed = (dex: keyof typeof externalPools) =>
     )
 
 function v2Factory(chainId: number, dexId: string): `0x${string}` {
-    const factoryAddress = getDexConfig(chainId, dexId, ProtocolType.V2)?.factory
+    const factoryAddress = getDexes(chainId, 'v2').find((dex) => dex.dexId === dexId)?.factory
     if (!factoryAddress) throw new Error(`No enabled V2 config for ${dexId} on chain ${chainId}`)
     return factoryAddress
 }
 
 function v3Factory(chainId: number, dexId: string): `0x${string}` {
-    const factoryAddress = getDexConfig(chainId, dexId, ProtocolType.V3)?.factory
+    const factoryAddress = getDexes(chainId, 'v3').find((dex) => dex.dexId === dexId)?.factory
     if (!factoryAddress) throw new Error(`No enabled V3 config for ${dexId} on chain ${chainId}`)
     return factoryAddress
 }
 
 function v3PositionManager(chainId: number, dexId: string): `0x${string}` {
-    const address = getDexConfig(chainId, dexId, ProtocolType.V3)?.positionManager
+    const address = getDexes(chainId, 'v3').find((dex) => dex.dexId === dexId)?.positionManager
     if (!address) throw new Error(`No positionManager for ${dexId} on chain ${chainId}`)
     return address
 }
 
 function v3Staker(chainId: number, dexId: string): `0x${string}` {
-    const address = getDexConfig(chainId, dexId, ProtocolType.V3)?.staker
+    const address = getDexes(chainId, 'v3').find((dex) => dex.dexId === dexId)?.staker
     if (!address) throw new Error(`No V3 staker for ${dexId} on chain ${chainId}`)
     return address
 }
@@ -66,9 +54,9 @@ const abiEvent = <TAbi extends readonly { type: string; name?: string }[], TName
     return event
 }
 
-const PAIR_CREATED_EVENT = abiEvent(V2_FACTORY_ABI, 'PairCreated')
-const V3_POOL_CREATED_EVENT = abiEvent(V3_FACTORY_ABI, 'PoolCreated')
-const CURVE_CREATION_EVENT = abiEvent(BONDING_CURVE_JUNOSWAP_ABI, 'Creation')
+const PAIR_CREATED_EVENT = abiEvent(getAbi('v2Factory'), 'PairCreated')
+const V3_POOL_CREATED_EVENT = abiEvent(getAbi('v3Factory'), 'PoolCreated')
+const CURVE_CREATION_EVENT = abiEvent(getAbi('bondingCurve'), 'Creation')
 
 const BONDING_CURVE_TESTNET = getBondingCurveDeployment(CHAINS.kubTestnet)!
 const BONDING_CURVE_BITKUB = getBondingCurveDeployment(CHAINS.bitkub)
@@ -107,13 +95,13 @@ export default createConfig({
     },
     contracts: {
         BondingCurveJunoswap: {
-            abi: BONDING_CURVE_JUNOSWAP_ABI,
+            abi: getAbi('bondingCurve'),
             chain: 'kubTestnet',
             address: BONDING_CURVE_TESTNET.address,
             startBlock: BONDING_CURVE_TESTNET.startBlock,
         },
         LaunchToken: {
-            abi: ERC20_ABI,
+            abi: getAbi('erc20'),
             chain: 'kubTestnet',
             address: factory({
                 address: BONDING_CURVE_TESTNET.address,
@@ -125,13 +113,13 @@ export default createConfig({
         ...(BONDING_CURVE_BITKUB
             ? {
                   BondingCurveJunoswapBitkub: {
-                      abi: BONDING_CURVE_JUNOSWAP_ABI,
+                      abi: getAbi('bondingCurve'),
                       chain: 'bitkub',
                       address: BONDING_CURVE_BITKUB.address,
                       startBlock: BONDING_CURVE_BITKUB.startBlock,
                   },
                   LaunchTokenBitkub: {
-                      abi: ERC20_ABI,
+                      abi: getAbi('erc20'),
                       chain: 'bitkub',
                       address: factory({
                           address: BONDING_CURVE_BITKUB.address,
@@ -143,13 +131,13 @@ export default createConfig({
               }
             : {}),
         V3Factory: {
-            abi: V3_FACTORY_ABI,
+            abi: getAbi('v3Factory'),
             chain: 'kubTestnet',
             address: v3Factory(CHAINS.kubTestnet, 'junoswap'),
             startBlock: V3_TESTNET_START,
         },
         V3Pool: {
-            abi: V3_POOL_ABI,
+            abi: getAbi('v3Pool'),
             chain: 'kubTestnet',
             address: factory({
                 address: v3Factory(CHAINS.kubTestnet, 'junoswap'),
@@ -159,13 +147,13 @@ export default createConfig({
             startBlock: V3_TESTNET_START,
         },
         V3FactoryBitkub: {
-            abi: V3_FACTORY_ABI,
+            abi: getAbi('v3Factory'),
             chain: 'bitkub',
             address: v3Factory(CHAINS.bitkub, 'junoswap'),
             startBlock: V3_BITKUB_START,
         },
         V3PoolBitkub: {
-            abi: V3_POOL_ABI,
+            abi: getAbi('v3Pool'),
             chain: 'bitkub',
             address: factory({
                 address: v3Factory(CHAINS.bitkub, 'junoswap'),
@@ -175,13 +163,13 @@ export default createConfig({
             startBlock: V3_BITKUB_START,
         },
         V3FactoryJbc: {
-            abi: V3_FACTORY_ABI,
+            abi: getAbi('v3Factory'),
             chain: 'jbc',
             address: v3Factory(CHAINS.jbc, 'junoswap'),
             startBlock: V3_JBC_START,
         },
         V3PoolJbc: {
-            abi: V3_POOL_ABI,
+            abi: getAbi('v3Pool'),
             chain: 'jbc',
             address: factory({
                 address: v3Factory(CHAINS.jbc, 'junoswap'),
@@ -191,19 +179,19 @@ export default createConfig({
             startBlock: V3_JBC_START,
         },
         NftPositionManager: {
-            abi: NONFUNGIBLE_POSITION_MANAGER_ABI,
+            abi: getAbi('positionManager'),
             chain: 'kubTestnet',
             address: v3PositionManager(CHAINS.kubTestnet, 'junoswap'),
             startBlock: V3_TESTNET_START,
         },
         NftPositionManagerBitkub: {
-            abi: NONFUNGIBLE_POSITION_MANAGER_ABI,
+            abi: getAbi('positionManager'),
             chain: 'bitkub',
             address: v3PositionManager(CHAINS.bitkub, 'junoswap'),
             startBlock: V3_BITKUB_START,
         },
         NftPositionManagerJbc: {
-            abi: NONFUNGIBLE_POSITION_MANAGER_ABI,
+            abi: getAbi('positionManager'),
             chain: 'jbc',
             address: v3PositionManager(CHAINS.jbc, 'junoswap'),
             startBlock: V3_JBC_START,
@@ -227,7 +215,7 @@ export default createConfig({
             startBlock: V3_STAKER_JBC_START,
         },
         JibswapFactory: {
-            abi: V2_FACTORY_ABI,
+            abi: getAbi('v2Factory'),
             chain: 'jbc',
             address: v2Factory(CHAINS.jbc, 'jibswap'),
             startBlock: JBC_SWAP_START,
@@ -249,7 +237,7 @@ export default createConfig({
             startBlock: JBC_SWAP_START,
         },
         UdonswapFactory: {
-            abi: V2_FACTORY_ABI,
+            abi: getAbi('v2Factory'),
             chain: 'bitkub',
             address: v2Factory(CHAINS.bitkub, 'udonswap'),
             startBlock: BITKUB_SWAP_START,
@@ -271,7 +259,7 @@ export default createConfig({
             startBlock: BITKUB_SWAP_START,
         },
         PonderFactory: {
-            abi: V2_FACTORY_ABI,
+            abi: getAbi('v2Factory'),
             chain: 'bitkub',
             address: v2Factory(CHAINS.bitkub, 'ponder'),
             startBlock: BITKUB_SWAP_START,
@@ -293,7 +281,7 @@ export default createConfig({
             startBlock: BITKUB_SWAP_START,
         },
         DiamonFactory: {
-            abi: V2_FACTORY_ABI,
+            abi: getAbi('v2Factory'),
             chain: 'bitkub',
             address: v2Factory(CHAINS.bitkub, 'diamon'),
             startBlock: BITKUB_SWAP_START,
@@ -315,19 +303,19 @@ export default createConfig({
             startBlock: BITKUB_SWAP_START,
         },
         KublerxV3Factory: {
-            abi: V3_FACTORY_ABI,
+            abi: getAbi('v3Factory'),
             chain: 'bitkub',
             address: v3Factory(CHAINS.bitkub, 'kublerx'),
             startBlock: BITKUB_SWAP_START,
         },
         KublerxV3PoolSeeded: {
-            abi: V3_POOL_ABI,
+            abi: getAbi('v3Pool'),
             chain: 'bitkub',
             address: seed('kublerx'),
             startBlock: BITKUB_SWAP_START,
         },
         KublerxV3Pool: {
-            abi: V3_POOL_ABI,
+            abi: getAbi('v3Pool'),
             chain: 'bitkub',
             address: factory({
                 address: v3Factory(CHAINS.bitkub, 'kublerx'),
@@ -337,7 +325,7 @@ export default createConfig({
             startBlock: BITKUB_SWAP_START,
         },
         AggRouterJunoswap: {
-            abi: AGG_ROUTER_JUNOSWAP_ABI,
+            abi: getAbi('aggRouter'),
             chain: 'bitkub',
             address: AGG_ROUTER_BITKUB.address,
             startBlock: AGG_ROUTER_BITKUB.startBlock,

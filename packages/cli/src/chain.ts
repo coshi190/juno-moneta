@@ -1,26 +1,31 @@
-import { createPublicClient, http, parseUnits, type Address } from 'viem'
-import {
-    ERC20_ABI,
-    ProtocolType,
-    getAggRouterDeployment,
-    getCrossDexQuote,
-    getSplitQuote,
-    getStablecoins,
-    getSwapAddress,
-    getV2Quotes,
-    getV3Quotes,
-    getWrappedNativeAddress,
-    pickAggregatePlan,
-    type PickedAggregatePlan,
-    type ReadClient,
-    type SplitRouteInput,
-    type V2QuoteResult,
-    type V3QuoteResult,
-} from '@coshi190/juno-moneta-sdk'
+import { createPublicClient, http, parseUnits, type Abi, type Address } from 'viem'
+import { getAbi, getAggregatePlan, getV2Quotes, getV3Quotes } from '@coshi190/juno-moneta-sdk'
+import { getAggRouterDeployment, getStablecoins, getWrappedNativeAddress } from './config.js'
 import { UsageError } from './args.js'
 
-export interface ResolvedAggregatePlan extends PickedAggregatePlan {
-    bestSingleOut: bigint
+interface ContractCall {
+    address: Address
+    abi: Abi
+    functionName: string
+    args: readonly unknown[]
+    value?: bigint
+}
+
+interface ReadClient {
+    multicall(args: { contracts: readonly ContractCall[]; allowFailure: true }): Promise<unknown>
+    readContract(args: ContractCall): Promise<unknown>
+}
+
+type PickedPlan = NonNullable<Awaited<ReturnType<typeof getAggregatePlan>>>
+
+interface NamedHop {
+    dexId: string
+    symbolIn: string
+    symbolOut: string
+}
+
+export interface ResolvedAggregatePlan extends Omit<PickedPlan, 'legs'> {
+    legs: { percent: number; hops: NamedHop[] }[]
 }
 
 export interface AggregatePlanParams {
@@ -36,7 +41,14 @@ function createReadClient(rpcUrl: string): ReadClient {
 }
 
 function readErc20(client: ReadClient, token: Address, functionName: string): Promise<unknown> {
-    return client.readContract({ address: token, abi: ERC20_ABI, functionName, args: [] })
+    return client.readContract({ address: token, abi: getAbi('erc20'), functionName, args: [] })
+}
+
+const NATIVE_TOKEN_ADDRESS = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
+
+function getSwapAddress(token: Address, chainId: number): Address {
+    if (token.toLowerCase() !== NATIVE_TOKEN_ADDRESS) return token
+    return getWrappedNativeAddress(chainId) ?? token
 }
 
 function connectorsFor(chainId: number): Address[] {
@@ -46,47 +58,41 @@ function connectorsFor(chainId: number): Address[] {
     return [...new Map(tokens.map((token) => [token.toLowerCase(), token])).values()]
 }
 
-function toSplitRoutes(
-    tokenIn: Address,
-    tokenOut: Address,
-    v2: V2QuoteResult,
-    v3: V3QuoteResult
-): SplitRouteInput[] {
-    const routes: SplitRouteInput[] = []
-    const direct = { path: [tokenIn, tokenOut], isMultiHop: false }
+type V2Quotes = Awaited<ReturnType<typeof getV2Quotes>>
+type V3Quotes = Awaited<ReturnType<typeof getV3Quotes>>
 
-    for (const [dexId, outcome] of v2.direct) {
+type Protocol = 'v2' | 'v3'
+
+interface SplitRoute {
+    dexId: string
+    protocolType: Protocol
+    quote: { amountOut: bigint }
+    route: { path: Address[]; fees?: number[]; isMultiHop: boolean }
+}
+
+function toSplitRoutes(v2: V2Quotes, v3: V3Quotes): SplitRoute[] {
+    const routes: SplitRoute[] = []
+
+    for (const outcome of v2) {
         if (!outcome.quote) continue
         routes.push({
-            dexId,
-            protocolType: ProtocolType.V2,
+            dexId: outcome.dexId,
+            protocolType: 'v2',
             quote: { amountOut: outcome.quote.amountOut },
-            route: { ...direct },
+            route: { path: outcome.path, isMultiHop: outcome.path.length > 2 },
         })
     }
-    for (const [dexId, outcome] of v3.direct) {
-        if (!outcome.quote || outcome.fee === null) continue
+    for (const outcome of v3) {
+        if (!outcome.quote) continue
         routes.push({
-            dexId,
-            protocolType: ProtocolType.V3,
+            dexId: outcome.dexId,
+            protocolType: 'v3',
             quote: { amountOut: outcome.quote.amountOut },
-            route: { ...direct, fees: [outcome.fee] },
-        })
-    }
-    for (const route of v2.routes) {
-        routes.push({
-            dexId: route.dexId,
-            protocolType: ProtocolType.V2,
-            quote: { amountOut: route.quote.amountOut },
-            route: { path: route.path, isMultiHop: route.path.length > 2 },
-        })
-    }
-    for (const route of v3.routes) {
-        routes.push({
-            dexId: route.dexId,
-            protocolType: ProtocolType.V3,
-            quote: { amountOut: route.quote.amountOut },
-            route: { path: route.path, fees: route.fees, isMultiHop: route.path.length > 2 },
+            route: {
+                path: outcome.path,
+                fees: outcome.fees,
+                isMultiHop: outcome.path.length > 2,
+            },
         })
     }
     return routes
@@ -130,32 +136,31 @@ export async function resolveAggregatePlan({
     const connectors = connectorsFor(chainId)
     const params = { chainId, tokenIn: sell, tokenOut: buy, amountIn, connectors }
 
-    const [v2, v3] = await Promise.all([getV2Quotes(client, params), getV3Quotes(client, params)])
-    const routes = toSplitRoutes(sell, buy, v2, v3)
+    const [v2Quotes, v3Quotes] = await Promise.all([
+        getV2Quotes(client, params),
+        getV3Quotes(client, params),
+    ])
+    const routes = toSplitRoutes(v2Quotes, v3Quotes)
 
-    const [split, crossDexLeg, symbolOf] = await Promise.all([
-        getSplitQuote(client, { chainId, tokenIn: sell, tokenOut: buy, amountIn, routes }),
-        getCrossDexQuote(client, params),
+    const [picked, symbolOf] = await Promise.all([
+        getAggregatePlan(client, { ...params, routes }),
         symbolLookup(client, [
             getSwapAddress(sell, chainId),
             getSwapAddress(buy, chainId),
             ...connectors,
         ]),
     ])
-
-    const picked = pickAggregatePlan({
-        chainId,
-        amountIn,
-        aggFeeBps: split.aggFeeBps,
-        allocation: split.allocation,
-        crossDexLeg,
-        symbolOf,
-    })
     if (!picked) return null
 
-    const bestSingleOut = routes.reduce(
-        (best, route) => (route.quote.amountOut > best ? route.quote.amountOut : best),
-        0n
-    )
-    return { ...picked, bestSingleOut }
+    return {
+        ...picked,
+        legs: picked.legs.map((leg) => ({
+            percent: leg.percent,
+            hops: leg.hops.map((h) => ({
+                dexId: h.dexId,
+                symbolIn: symbolOf(h.tokenIn),
+                symbolOut: symbolOf(h.tokenOut),
+            })),
+        })),
+    }
 }

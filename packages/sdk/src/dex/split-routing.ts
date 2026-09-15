@@ -1,5 +1,5 @@
 import type { Abi, Address } from 'viem'
-import { ProtocolType, type DEXType } from '../configs/dex.js'
+import { type Protocol, type DEXType } from '../configs/dex.js'
 import { getAggRouterDeployment } from '../configs/deployments.js'
 import { AGG_ROUTER_JUNOSWAP_ABI } from '../abis/agg-router-junoswap.js'
 import { buildQuoteCall } from './quote-call.js'
@@ -10,7 +10,7 @@ const SPLIT_FRACTIONS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 
 export interface SplitRouteInput {
     dexId: DEXType
-    protocolType: ProtocolType
+    protocolType: Protocol
     quote: { amountOut: bigint }
     route: { path: Address[]; fees?: number[]; isMultiHop: boolean }
 }
@@ -32,16 +32,6 @@ export interface SplitQuoteGrid<T extends SplitRouteInput = SplitRouteInput> {
     grossB: (bigint | null)[]
     bestSingleOut: bigint
     aggFeeBps: number
-}
-
-export function splitClearsMargin(
-    predictedNetOut: bigint | null,
-    bestSingleOut: bigint | null,
-    marginBps: number
-): boolean {
-    if (predictedNetOut == null) return false
-    if (bestSingleOut == null) return true
-    return predictedNetOut * 10000n > bestSingleOut * BigInt(10000 + marginBps)
 }
 
 export function selectSplitCandidates<T extends SplitRouteInput>(allRoutes: T[]): [T, T] | null {
@@ -102,11 +92,11 @@ export function pickBestSplit<T extends SplitRouteInput>(
 }
 
 export function parseQuoteAmountOut(
-    protocol: ProtocolType,
+    protocol: Protocol,
     result: ReadResult | undefined
 ): bigint | null {
     if (!result || result.status !== 'success' || result.result == null) return null
-    if (protocol === ProtocolType.V3) {
+    if (protocol === 'v3') {
         const out = (result.result as readonly bigint[])[0]
         return out != null && out > 0n ? out : null
     }
@@ -139,7 +129,7 @@ function buildLegQuoteCall<T extends SplitRouteInput>(
     chainId: number
 ): ContractCall | null {
     const fee = route.route.fees?.[0]
-    if (route.protocolType === ProtocolType.V3 && fee == null) return null
+    if (route.protocolType === 'v3' && fee == null) return null
 
     return (
         buildQuoteCall({

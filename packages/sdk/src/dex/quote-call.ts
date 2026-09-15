@@ -1,13 +1,13 @@
 import type { Abi, Address } from 'viem'
 import { V2_ROUTER_ABI } from '../abis/v2-router.js'
 import { V3_QUOTER_V2_ABI } from '../abis/v3-quoter.js'
-import { getDexConfig, ProtocolType, type DEXType } from '../configs/dex.js'
+import { findDex, type Protocol, type DEXType } from '../configs/dex.js'
 import { encodeV3Path, type ContractCall } from './plan-swap.js'
-import { getSwapAddress, resolveSwapPath } from './native.js'
+import * as native from './native.js'
 import { batchRead, type ReadClient } from './multicall.js'
 
 interface QuoteCallInput {
-    protocol: ProtocolType
+    protocol: Protocol
     chainId: number
     dexId?: DEXType
     tokenIn: Address
@@ -21,8 +21,8 @@ interface QuoteCallInput {
 export function buildQuoteCall(input: QuoteCallInput): ContractCall | undefined {
     const { protocol, chainId, dexId, tokenIn, tokenOut, amountIn } = input
 
-    if (protocol === ProtocolType.V2) {
-        const config = getDexConfig(chainId, dexId, ProtocolType.V2)
+    if (protocol === 'v2') {
+        const config = findDex(chainId, dexId, 'v2')
         if (!config) return undefined
         return {
             address: config.router,
@@ -30,12 +30,12 @@ export function buildQuoteCall(input: QuoteCallInput): ContractCall | undefined 
             functionName: 'getAmountsOut',
             args: [
                 amountIn,
-                resolveSwapPath(input.path ?? [tokenIn, tokenOut], chainId, config.wnative),
+                native.resolveSwapPath(input.path ?? [tokenIn, tokenOut], chainId, config.wnative),
             ],
         }
     }
 
-    const config = getDexConfig(chainId, dexId, ProtocolType.V3)
+    const config = findDex(chainId, dexId, 'v3')
     if (!config) return undefined
 
     if (input.path && input.path.length > 2 && input.fees) {
@@ -43,7 +43,7 @@ export function buildQuoteCall(input: QuoteCallInput): ContractCall | undefined 
             address: config.quoter,
             abi: V3_QUOTER_V2_ABI as Abi,
             functionName: 'quoteExactInput',
-            args: [encodeV3Path(resolveSwapPath(input.path, chainId), input.fees), amountIn],
+            args: [encodeV3Path(native.resolveSwapPath(input.path, chainId), input.fees), amountIn],
         }
     }
 
@@ -56,8 +56,8 @@ export function buildQuoteCall(input: QuoteCallInput): ContractCall | undefined 
         functionName: 'quoteExactInputSingle',
         args: [
             {
-                tokenIn: getSwapAddress(tokenIn, chainId),
-                tokenOut: getSwapAddress(tokenOut, chainId),
+                tokenIn: native.getSwapAddress(tokenIn, chainId),
+                tokenOut: native.getSwapAddress(tokenOut, chainId),
                 amountIn,
                 fee,
                 sqrtPriceLimitX96: 0n,
@@ -120,10 +120,11 @@ export async function quoteWithReference<T>(
     amountIn: bigint,
     targets: readonly T[],
     buildCall: (target: T, amount: bigint) => ContractCall | undefined,
-    decode: (raw: unknown) => QuoteResult
+    decode: (raw: unknown, target: T) => QuoteResult,
+    opts: { withReference?: boolean } = {}
 ): Promise<ReferencedQuote<T>[]> {
     const referenceAmountIn = amountIn / REFERENCE_DIVISOR
-    const withReference = referenceAmountIn > 0n
+    const withReference = (opts.withReference ?? true) && referenceAmountIn > 0n
 
     const calls: ContractCall[] = []
     const entries = targets.flatMap((target) => {
@@ -144,9 +145,9 @@ export async function quoteWithReference<T>(
         }
 
         const refResult = withReference ? results[index + 1] : undefined
-        const quote = decode(result.result)
+        const quote = decode(result.result, target)
         const referenceAmountOut =
-            refResult?.status === 'success' ? decode(refResult.result).amountOut : 0n
+            refResult?.status === 'success' ? decode(refResult.result, target).amountOut : 0n
 
         return {
             target,
@@ -168,8 +169,19 @@ export interface QuoteParams {
     tokenOut: Address
     amountIn: bigint
     dexId?: DEXType | DEXType[]
-    connectors?: Address[]
+}
+
+export interface RouteQuoteParams extends QuoteParams {
+    connectors: Address[]
     maxHops?: number
     maxRouteQuotes?: number
-    includeDirect?: boolean
+    withPriceImpact?: boolean
+}
+
+export function sortByAmountOut<T extends { quote: QuoteResult | null }>(outcomes: T[]): T[] {
+    return outcomes.sort((a, b) => {
+        if (!a.quote || !b.quote) return a.quote ? -1 : b.quote ? 1 : 0
+        if (a.quote.amountOut === b.quote.amountOut) return 0
+        return a.quote.amountOut > b.quote.amountOut ? -1 : 1
+    })
 }

@@ -4,28 +4,21 @@ import dexRegistry from './data/dex-registry.json' with { type: 'json' }
 
 export type DEXType = string
 
-const DEFAULT_DEX_ID = 'junoswap'
+export type Protocol = 'v2' | 'v3'
 
-export enum ProtocolType {
-    V2 = 'v2',
-    V3 = 'v3',
+interface DexBase {
+    dexId: DEXType
 }
 
-interface BaseProtocolConfig {
-    protocolType: ProtocolType
-    chainId: number
-    enabled: boolean
-}
-
-interface V2Config extends BaseProtocolConfig {
-    protocolType: ProtocolType.V2
+export interface V2Dex extends DexBase {
+    protocol: 'v2'
     factory: Address
     router: Address
     wnative?: Address
 }
 
-interface V3Config extends BaseProtocolConfig {
-    protocolType: ProtocolType.V3
+export interface V3Dex extends DexBase {
+    protocol: 'v3'
     factory: Address
     quoter: Address
     swapRouter: Address
@@ -35,17 +28,10 @@ interface V3Config extends BaseProtocolConfig {
     defaultFeeTier?: number
 }
 
-type ProtocolConfig = V2Config | V3Config
-
-interface DEXConfiguration {
-    dexId: DEXType
-    defaultProtocol: ProtocolType
-    protocols: Record<number, Partial<Record<ProtocolType, ProtocolConfig>>>
-}
+export type Dex = V2Dex | V3Dex
 
 interface RawDexRegistry {
     [dexId: string]: {
-        defaultProtocol: string
         protocols: Record<string, Record<string, Record<string, unknown>>>
     }
 }
@@ -64,64 +50,50 @@ export function getTickSpacing(fee: number): number {
     return TICK_SPACING_BY_FEE[fee] ?? DEFAULT_TICK_SPACING
 }
 
-const DEX_CONFIGS_REGISTRY = Object.fromEntries(
-    Object.entries(dexRegistry as RawDexRegistry).map(([dexId, dex]) => {
-        const protocols = byChainId(dex.protocols, (byProtocol, chainId) => {
-            const entry: Partial<Record<ProtocolType, ProtocolConfig>> = {}
-            for (const [proto, cfg] of Object.entries(byProtocol)) {
-                entry[proto as ProtocolType] = {
-                    ...cfg,
-                    protocolType: proto as ProtocolType,
-                    chainId,
-                } as ProtocolConfig
+const DEXES_BY_CHAIN: Record<number, Dex[]> = (() => {
+    const byChain: Record<number, Dex[]> = {}
+    for (const [dexId, dex] of Object.entries(dexRegistry as RawDexRegistry)) {
+        const perChain = byChainId(dex.protocols, (byProtocol) => byProtocol)
+        for (const [chainId, byProtocol] of Object.entries(perChain)) {
+            for (const [protocol, cfg] of Object.entries(byProtocol)) {
+                if (!cfg.enabled) continue
+                const { enabled: _enabled, ...rest } = cfg
+                const entry = { ...rest, dexId, protocol } as Dex
+                ;(byChain[Number(chainId)] ??= []).push(entry)
             }
-            return entry
-        })
-        return [
-            dexId,
-            {
-                dexId: dexId as DEXType,
-                defaultProtocol: dex.defaultProtocol as ProtocolType,
-                protocols,
-            },
-        ]
-    })
-) as Record<DEXType, DEXConfiguration>
+        }
+    }
+    return byChain
+})()
 
-export function getDexConfig(
-    chainId: number,
-    dexId: DEXType | undefined,
-    protocol: ProtocolType.V2
-): V2Config | undefined
-export function getDexConfig(
-    chainId: number,
-    dexId: DEXType | undefined,
-    protocol: ProtocolType.V3
-): V3Config | undefined
-export function getDexConfig(
-    chainId: number,
-    dexId?: DEXType,
-    protocol?: ProtocolType
-): ProtocolConfig | undefined
-export function getDexConfig(
-    chainId: number,
-    dexId?: DEXType,
-    protocol?: ProtocolType
-): ProtocolConfig | undefined {
-    const dex = DEX_CONFIGS_REGISTRY[dexId || DEFAULT_DEX_ID]
-    const config = dex?.protocols[chainId]?.[protocol ?? dex.defaultProtocol]
-    if (!config) return undefined
-    if (protocol === undefined) return config
-    return config.protocolType === protocol && config.enabled ? config : undefined
+export function getDexes(chainId: number, protocol: 'v2'): V2Dex[]
+export function getDexes(chainId: number, protocol: 'v3'): V3Dex[]
+export function getDexes(chainId: number, protocol?: Protocol): Dex[]
+export function getDexes(chainId: number, protocol?: Protocol): Dex[] {
+    const dexes = DEXES_BY_CHAIN[chainId] ?? []
+    return protocol === undefined ? dexes : dexes.filter((dex) => dex.protocol === protocol)
 }
 
-export function getSupportedDexs(chainId: number, protocol?: ProtocolType): DEXType[] {
-    return Object.entries(DEX_CONFIGS_REGISTRY)
-        .filter(([, dex]) => {
-            const byProtocol = dex.protocols[chainId] ?? {}
-            return protocol === undefined
-                ? Object.values(byProtocol).some((p) => p.enabled)
-                : (byProtocol[protocol]?.enabled ?? false)
-        })
-        .map(([dexId]) => dexId as DEXType)
+export function findDex(
+    chainId: number,
+    dexId: DEXType | undefined,
+    protocol: 'v2'
+): V2Dex | undefined
+export function findDex(
+    chainId: number,
+    dexId: DEXType | undefined,
+    protocol: 'v3'
+): V3Dex | undefined
+export function findDex(
+    chainId: number,
+    dexId: DEXType | undefined,
+    protocol: Protocol
+): Dex | undefined
+export function findDex(
+    chainId: number,
+    dexId: DEXType | undefined,
+    protocol: Protocol
+): Dex | undefined {
+    const dexes = getDexes(chainId, protocol)
+    return dexId === undefined ? dexes[0] : dexes.find((dex) => dex.dexId === dexId)
 }

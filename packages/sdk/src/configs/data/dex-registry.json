@@ -1,6 +1,5 @@
 {
     "junoswap": {
-        "defaultProtocol": "v3",
         "protocols": {
             "kubTestnet": {
                 "v3": {
@@ -41,7 +40,6 @@
         }
     },
     "kublerx": {
-        "defaultProtocol": "v3",
         "protocols": {
             "bitkub": {
                 "v3": {
@@ -57,7 +55,6 @@
         }
     },
     "uniswap": {
-        "defaultProtocol": "v3",
         "protocols": {
             "worldchain": {
                 "v3": {
@@ -82,7 +79,6 @@
         }
     },
     "jibswap": {
-        "defaultProtocol": "v2",
         "protocols": {
             "jbc": {
                 "v2": {
@@ -95,7 +91,6 @@
         }
     },
     "udonswap": {
-        "defaultProtocol": "v2",
         "protocols": {
             "bitkub": {
                 "v2": {
@@ -107,7 +102,6 @@
         }
     },
     "ponder": {
-        "defaultProtocol": "v2",
         "protocols": {
             "bitkub": {
                 "v2": {
@@ -119,7 +113,6 @@
         }
     },
     "diamon": {
-        "defaultProtocol": "v2",
         "protocols": {
             "bitkub": {
                 "v2": {
@@ -131,7 +124,6 @@
         }
     },
     "pancakeswap": {
-        "defaultProtocol": "v3",
         "protocols": {
             "bsc": {
                 "v3": {

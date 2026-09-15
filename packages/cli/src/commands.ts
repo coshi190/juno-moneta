@@ -1,7 +1,4 @@
 import {
-    getChains,
-    getStablecoins,
-    getWrappedNativeAddress,
     fetchAllReferralBindings,
     fetchDepositsByOwner,
     fetchIncentives,
@@ -19,10 +16,6 @@ import {
     fetchUserStats,
     fetchUserPositions,
     fetchV3TokenSnapshots,
-    getAggRouterDeployment,
-    getBondingCurveDeployment,
-    getDexConfig,
-    getSupportedDexs,
 } from '@coshi190/juno-moneta-sdk'
 import { resolveAggregatePlan } from './chain.js'
 import { createPonderClient } from './ponder-client.js'
@@ -35,7 +28,6 @@ import {
     optionalLimit,
     optionalOrder,
     optionalProtocol,
-    optionalProtocolType,
     parseAddress,
     parseAddressList,
     parseChainId,
@@ -79,13 +71,10 @@ export interface Command {
     run: (args: CommandArgs) => unknown
 }
 
-const CHAINS = 'chains'
 const DEX = 'dex'
-const DEPLOYMENTS = 'deployments'
 const PONDER = 'ponder'
 
 const CHAIN_FLAG = '--chainId <id|slug>'
-const CONFIG_FLAGS = `${CHAIN_FLAG} [--dexId <dex=junoswap>] [--protocolType v2|v3]`
 const OPTIONAL_CHAIN_FLAG = '[--chainId <id|slug>]'
 const PONDER_FLAG = '[--ponderUrl <url>]'
 
@@ -219,47 +208,7 @@ function selectFlags(presets: Record<string, unknown>): string {
     return `${fields} [--orderBy <field>] [--orderDirection asc|desc=asc]`
 }
 
-function chainCommand(group: string, describe: string, fn: (chainId: number) => unknown): Command {
-    return {
-        group,
-        flags: CHAIN_FLAG,
-        describe,
-        run: (args) => fn(parseChainId(args.chainId)),
-    }
-}
-
-function constantCommand(group: string, describe: string, value: unknown): Command {
-    return { group, flags: '', describe, run: () => value }
-}
-
 export const COMMANDS: Record<string, Command> = {
-    getChains: constantCommand(CHAINS, 'Chain slug to chain id', getChains()),
-    getWrappedNativeAddress: chainCommand(
-        CHAINS,
-        'Wrapped native token address for a chain',
-        getWrappedNativeAddress
-    ),
-    getStablecoins: chainCommand(CHAINS, 'Stablecoin addresses for a chain', getStablecoins),
-
-    getDexConfig: {
-        group: DEX,
-        flags: CONFIG_FLAGS,
-        describe: 'Config for a chain and dex, at --protocolType or the dex default',
-        run: (args) =>
-            getDexConfig(
-                parseChainId(args.chainId),
-                args.dexId,
-                optionalProtocolType(args.protocolType)
-            ),
-    },
-    getSupportedDexs: {
-        group: DEX,
-        flags: `${CHAIN_FLAG} [--protocolType v2|v3]`,
-        describe: 'Dex ids with an enabled protocol on a chain',
-        run: (args) =>
-            getSupportedDexs(parseChainId(args.chainId), optionalProtocolType(args.protocolType)),
-    },
-
     pickAggregatePlan: {
         group: DEX,
         flags: `${CHAIN_FLAG} --tokenIn <sold> --tokenOut <bought> --amountIn <tokens> [--rpcUrl <url=$JUNO_MONETA_RPC_URL>]`,
@@ -279,7 +228,7 @@ export const COMMANDS: Record<string, Command> = {
                 kind: picked.plan.kind,
                 predictedNetOut: picked.plan.predictedNetOut,
                 bestSingleOut: picked.bestSingleOut,
-                beatsSingle: picked.plan.predictedNetOut > picked.bestSingleOut,
+                beatsSingle: picked.beatsSingle,
                 legs: picked.legs.map((leg) => ({
                     percent: leg.percent,
                     route: [
@@ -290,17 +239,6 @@ export const COMMANDS: Record<string, Command> = {
             }
         },
     },
-
-    getBondingCurveDeployment: chainCommand(
-        DEPLOYMENTS,
-        'Bonding curve address and start block for a chain',
-        getBondingCurveDeployment
-    ),
-    getAggRouterDeployment: chainCommand(
-        DEPLOYMENTS,
-        'Aggregator router address and start block for a chain',
-        getAggRouterDeployment
-    ),
 
     fetchUserStats: {
         group: PONDER,

@@ -1,7 +1,7 @@
 import type { Address } from 'viem'
-import { getDexConfig, ProtocolType, getSupportedDexs, type DEXType } from '../configs/dex.js'
+import { getDexes, type Protocol, type DEXType } from '../configs/dex.js'
 import { poolKey } from './v3-routes.js'
-import { getSwapAddress } from './native.js'
+import * as native from './native.js'
 import { buildQuoteCall } from './quote-call.js'
 import { parseQuoteAmountOut } from './split-routing.js'
 import { batchRead, type ReadClient } from './multicall.js'
@@ -11,7 +11,7 @@ const MAX_CROSS_CONNECTORS = 3
 
 export interface HopOption {
     dexId: DEXType
-    protocol: ProtocolType
+    protocol: Protocol
     factory: Address
     quoteAddress: Address
     tokenIn: Address
@@ -21,7 +21,7 @@ export interface HopOption {
 
 export interface CrossDexHop {
     dexId: DEXType
-    protocol: ProtocolType
+    protocol: Protocol
     factory: Address
     tokenIn: Address
     tokenOut: Address
@@ -42,12 +42,11 @@ export function candidateHopOptions(
     if (tokenInW.toLowerCase() === tokenOutW.toLowerCase()) return []
     const options: HopOption[] = []
 
-    for (const dexId of getSupportedDexs(chainId, ProtocolType.V2)) {
-        const cfg = getDexConfig(chainId, dexId, ProtocolType.V2)
-        if (!cfg?.factory || !cfg.router) continue
+    for (const cfg of getDexes(chainId, 'v2')) {
+        if (!cfg.factory || !cfg.router) continue
         options.push({
-            dexId,
-            protocol: ProtocolType.V2,
+            dexId: cfg.dexId,
+            protocol: 'v2',
             factory: cfg.factory,
             quoteAddress: cfg.router,
             tokenIn: tokenInW,
@@ -55,13 +54,12 @@ export function candidateHopOptions(
         })
     }
 
-    for (const dexId of getSupportedDexs(chainId, ProtocolType.V3)) {
-        const cfg = getDexConfig(chainId, dexId, ProtocolType.V3)
-        if (!cfg?.factory || !cfg.quoter) continue
+    for (const cfg of getDexes(chainId, 'v3')) {
+        if (!cfg.factory || !cfg.quoter) continue
         for (const fee of cfg.feeTiers) {
             options.push({
-                dexId,
-                protocol: ProtocolType.V3,
+                dexId: cfg.dexId,
+                protocol: 'v3',
                 factory: cfg.factory,
                 quoteAddress: cfg.quoter,
                 tokenIn: tokenInW,
@@ -183,8 +181,8 @@ export async function getCrossDexQuote(
     const { chainId, amountIn, connectors, maxConnectors } = params
     if (amountIn <= 0n) return null
 
-    const tokenInW = getSwapAddress(params.tokenIn, chainId)
-    const tokenOutW = getSwapAddress(params.tokenOut, chainId)
+    const tokenInW = native.getSwapAddress(params.tokenIn, chainId)
+    const tokenOutW = native.getSwapAddress(params.tokenOut, chainId)
     if (tokenInW.toLowerCase() === tokenOutW.toLowerCase()) return null
 
     const selected = selectConnectors(tokenInW, tokenOutW, connectors, maxConnectors)

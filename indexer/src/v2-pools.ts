@@ -1,6 +1,7 @@
 import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
-import { readTrackingTag, getWrappedNativeAddress } from '@coshi190/juno-moneta-sdk'
+import { readTrackingTag } from '@coshi190/juno-moneta-sdk'
+import { getWrappedNativeAddress } from './config.js'
 import { parseV2Swap } from './parse-swaps.js'
 import { upsertToken } from './v3-pools.js'
 import { getSeedV2Pool, getSeedV2Dex } from './seed.js'

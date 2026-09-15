@@ -1,6 +1,6 @@
 import type { Abi, Address } from 'viem'
 import { NONFUNGIBLE_POSITION_MANAGER_ABI } from '../../abis/nonfungible-position-manager.js'
-import { ProtocolType, getDexConfig } from '../../configs/dex.js'
+import { findDex } from '../../configs/dex.js'
 import { batchRead, type ReadClient, type SimulateClient } from '../../dex/multicall.js'
 import {
     buildPoolAddressCalls,
@@ -106,7 +106,7 @@ export async function fetchPositions(
     client: ReadClient,
     params: FetchPositionsParams
 ): Promise<DescribedPosition[]> {
-    const config = getDexConfig(params.chainId, params.dexId, ProtocolType.V3)
+    const config = findDex(params.chainId, params.dexId, 'v3')
     if (!config) return []
 
     const rows = params.positions

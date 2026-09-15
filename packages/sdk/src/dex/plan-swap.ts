@@ -1,17 +1,23 @@
-import { encodeFunctionData, concat, pad, toHex, type Abi, type Address, type Hex } from 'viem'
+import {
+    encodeAbiParameters,
+    encodeFunctionData,
+    concat,
+    pad,
+    toHex,
+    type Abi,
+    type Address,
+    type Hex,
+} from 'viem'
+import { AGG_ROUTER_JUNOSWAP_ABI } from '../abis/agg-router-junoswap.js'
 import { V2_ROUTER_ABI } from '../abis/v2-router.js'
 import { V3_SWAP_ROUTER_ABI } from '../abis/v3-swap-router.js'
 import { WETH9_ABI } from '../abis/weth9.js'
-import { getDexConfig, ProtocolType, type DEXType } from '../configs/dex.js'
-import { appendTrackingTag } from '../rewards/tracking.js'
+import { getAggRouterDeployment } from '../configs/deployments.js'
+import { findDex, type Protocol, type DEXType } from '../configs/dex.js'
+import { appendTrackingTag, DEFAULT_REFERRER } from '../rewards/tracking.js'
 import { getWrappedNativeAddress } from '../configs/chains.js'
-import {
-    getSwapAddress,
-    getWrapOperation,
-    isNativeToken,
-    resolveSwapPath,
-    shouldSkipUnwrap,
-} from './native.js'
+import type { AggregatePlan } from './aggregate-plan.js'
+import * as native from './native.js'
 
 export interface ContractCall {
     address: Address
@@ -27,23 +33,37 @@ export interface SwapPlan {
     kind: SwapKind
     call: ContractCall
     taggable: boolean
+    data: Hex
 }
 
-export interface PlanSwapInput {
-    protocol: ProtocolType
+type PlannedCall = Omit<SwapPlan, 'data'>
+
+interface SwapInputBase {
     chainId: number
-    dexId?: DEXType
     tokenIn: Address
     tokenOut: Address
     amountIn: bigint
     amountOutMin: bigint
     recipient: Address
     deadline: number
+    referrer?: Address | null
+}
+
+export interface DirectSwapInput extends SwapInputBase {
+    protocol: Protocol
+    dexId?: DEXType
     path?: Address[]
     fees?: number[]
     fee?: number
     forceUnwrapNative?: boolean
+    aggregate?: undefined
 }
+
+export interface AggregateSwapInput extends SwapInputBase {
+    aggregate: AggregatePlan
+}
+
+export type PlanSwapInput = DirectSwapInput | AggregateSwapInput
 
 export class SwapPlanError extends Error {}
 
@@ -110,15 +130,28 @@ function encodeUnwrapWETH9(amountMinimum: bigint, recipient: Address): Hex {
 }
 
 export function planSwap(input: PlanSwapInput): SwapPlan {
-    const { chainId, tokenIn, tokenOut, amountIn } = input
-
-    const wrapOperation = getWrapOperation(tokenIn, tokenOut, chainId)
-    if (wrapOperation) return planWrap(wrapOperation, chainId, amountIn)
-
-    return input.protocol === ProtocolType.V2 ? planV2Swap(input) : planV3Swap(input)
+    const plan = buildPlan(input)
+    const data = encodeFunctionData({
+        abi: plan.call.abi,
+        functionName: plan.call.functionName,
+        args: plan.call.args,
+    })
+    return {
+        ...plan,
+        data: plan.taggable ? appendTrackingTag(data, input.referrer ?? null) : data,
+    }
 }
 
-function planWrap(operation: 'wrap' | 'unwrap', chainId: number, amountIn: bigint): SwapPlan {
+function buildPlan(input: PlanSwapInput): PlannedCall {
+    if (input.aggregate) return planAggregateSwap(input)
+
+    const wrapOperation = native.getWrapOperation(input.tokenIn, input.tokenOut, input.chainId)
+    if (wrapOperation) return planWrap(wrapOperation, input.chainId, input.amountIn)
+
+    return input.protocol === 'v2' ? planV2Swap(input) : planV3Swap(input)
+}
+
+function planWrap(operation: 'wrap' | 'unwrap', chainId: number, amountIn: bigint): PlannedCall {
     const wrapped = getWrappedNativeAddress(chainId)
     if (!wrapped) {
         throw new SwapPlanError(`No wrapped native token configured for chain ${chainId}`)
@@ -145,17 +178,21 @@ function planWrap(operation: 'wrap' | 'unwrap', chainId: number, amountIn: bigin
     }
 }
 
-function planV2Swap(input: PlanSwapInput): SwapPlan {
+function planV2Swap(input: DirectSwapInput): PlannedCall {
     const { chainId, dexId, tokenIn, tokenOut, amountIn, amountOutMin, recipient, deadline } = input
 
-    const config = getDexConfig(chainId, dexId, ProtocolType.V2)
+    const config = findDex(chainId, dexId, 'v2')
     if (!config) {
-        throw new SwapPlanError(`No V2 config for dex "${dexId ?? 'junoswap'}" on chain ${chainId}`)
+        throw new SwapPlanError(
+            dexId === undefined
+                ? `No V2 dex on chain ${chainId}`
+                : `No V2 config for dex "${dexId}" on chain ${chainId}`
+        )
     }
 
-    const path = resolveSwapPath(input.path ?? [tokenIn, tokenOut], chainId, config.wnative)
-    const nativeIn = isNativeToken(tokenIn)
-    const unwrapOut = isNativeToken(tokenOut) && !skipsUnwrap(input)
+    const path = native.resolveSwapPath(input.path ?? [tokenIn, tokenOut], chainId, config.wnative)
+    const nativeIn = native.isNativeToken(tokenIn)
+    const unwrapOut = native.isNativeToken(tokenOut) && !skipsUnwrap(input)
     const deadlineArg = BigInt(deadline)
 
     const call = (
@@ -195,16 +232,20 @@ function planV2Swap(input: PlanSwapInput): SwapPlan {
     }
 }
 
-function planV3Swap(input: PlanSwapInput): SwapPlan {
+function planV3Swap(input: DirectSwapInput): PlannedCall {
     const { chainId, dexId, tokenIn, tokenOut, amountIn, amountOutMin, recipient } = input
 
-    const config = getDexConfig(chainId, dexId, ProtocolType.V3)
+    const config = findDex(chainId, dexId, 'v3')
     if (!config) {
-        throw new SwapPlanError(`No V3 config for dex "${dexId ?? 'junoswap'}" on chain ${chainId}`)
+        throw new SwapPlanError(
+            dexId === undefined
+                ? `No V3 dex on chain ${chainId}`
+                : `No V3 config for dex "${dexId}" on chain ${chainId}`
+        )
     }
 
-    const unwrapOut = isNativeToken(tokenOut) && !skipsUnwrap(input)
-    const value = isNativeToken(tokenIn) ? amountIn : undefined
+    const unwrapOut = native.isNativeToken(tokenOut) && !skipsUnwrap(input)
+    const value = native.isNativeToken(tokenIn) ? amountIn : undefined
 
     const swapRecipient = unwrapOut ? ADDRESS_THIS : recipient
     const base = { address: config.swapRouter, abi: V3_SWAP_ROUTER_ABI as Abi, value }
@@ -217,7 +258,7 @@ function planV3Swap(input: PlanSwapInput): SwapPlan {
 
     if (input.path && input.path.length > 2 && input.fees) {
         const params = {
-            path: encodeV3Path(resolveSwapPath(input.path, chainId), input.fees),
+            path: encodeV3Path(native.resolveSwapPath(input.path, chainId), input.fees),
             recipient: swapRecipient,
             amountIn,
             amountOutMinimum: amountOutMin,
@@ -233,8 +274,8 @@ function planV3Swap(input: PlanSwapInput): SwapPlan {
     }
 
     const params = {
-        tokenIn: getSwapAddress(tokenIn, chainId),
-        tokenOut: getSwapAddress(tokenOut, chainId),
+        tokenIn: native.getSwapAddress(tokenIn, chainId),
+        tokenOut: native.getSwapAddress(tokenOut, chainId),
         fee: input.fee,
         recipient: swapRecipient,
         amountIn,
@@ -247,15 +288,73 @@ function planV3Swap(input: PlanSwapInput): SwapPlan {
     return { kind: 'swap', taggable: true, call }
 }
 
-function skipsUnwrap(input: PlanSwapInput): boolean {
-    return !input.forceUnwrapNative && shouldSkipUnwrap(input.chainId)
+function skipsUnwrap(input: DirectSwapInput): boolean {
+    return !input.forceUnwrapNative && native.shouldSkipUnwrap(input.chainId)
 }
 
-export function encodeSwapCalldata(plan: SwapPlan, referrer: Address | null): Hex {
-    const data = encodeFunctionData({
-        abi: plan.call.abi,
-        functionName: plan.call.functionName,
-        args: plan.call.args,
+interface EncodedHop {
+    factory: Address
+    swapData: Hex
+}
+
+function encodeHopSwapData(tokenOut: Address, fee?: number): Hex {
+    if (fee === undefined) {
+        return encodeAbiParameters([{ type: 'address' }], [tokenOut])
+    }
+    return encodeAbiParameters([{ type: 'address' }, { type: 'uint24' }], [tokenOut, fee])
+}
+
+function encodeHops(hops: AggregatePlan['legs'][number]['hops']): EncodedHop[] {
+    if (hops.length === 0) throw new SwapPlanError('Aggregate leg has no hops')
+    return hops.map((h, i) => {
+        if (h.tokenIn.toLowerCase() === h.tokenOut.toLowerCase()) {
+            throw new SwapPlanError(`Hop ${i} resolves to the same token`)
+        }
+        const isV3 = h.protocol === 'v3'
+        if (isV3 && h.fee === undefined) throw new SwapPlanError(`V3 hop ${i} requires a fee tier`)
+        return {
+            factory: h.factory,
+            swapData: encodeHopSwapData(h.tokenOut, isV3 ? h.fee : undefined),
+        }
     })
-    return plan.taggable ? appendTrackingTag(data, referrer) : data
+}
+
+function planAggregateSwap(input: AggregateSwapInput): PlannedCall {
+    const { chainId, tokenIn, tokenOut, amountIn, amountOutMin, recipient, deadline } = input
+    const plan = input.aggregate
+
+    const router = getAggRouterDeployment(chainId)?.address
+    if (!router) throw new SwapPlanError(`No aggregation router deployed on chain ${chainId}`)
+    if (plan.legs.length === 0) throw new SwapPlanError('Aggregate swap has no legs')
+
+    const total = plan.legs.reduce((sum, leg) => sum + leg.amountIn, 0n)
+    if (total !== amountIn) throw new SwapPlanError(`Legs sum to ${total}, expected ${amountIn}`)
+
+    const legs = plan.legs.map((leg) => ({
+        amountIn: leg.amountIn,
+        hops: encodeHops(leg.hops),
+    }))
+
+    const params = {
+        tokenIn,
+        tokenOut,
+        amountIn,
+        minAmountOut: amountOutMin,
+        recipient,
+        deadline: BigInt(deadline),
+        unwrapOut: native.isNativeToken(tokenOut) && !native.shouldSkipUnwrap(chainId),
+        referrer: input.referrer ?? DEFAULT_REFERRER,
+    }
+
+    return {
+        kind: 'swap',
+        taggable: true,
+        call: {
+            address: router,
+            abi: AGG_ROUTER_JUNOSWAP_ABI as Abi,
+            functionName: 'aggregate',
+            args: [params, legs],
+            value: native.isNativeToken(tokenIn) ? amountIn : undefined,
+        },
+    }
 }

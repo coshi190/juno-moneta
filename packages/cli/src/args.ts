@@ -1,4 +1,4 @@
-import { getChains, ProtocolType, type ChainSlug } from '@coshi190/juno-moneta-sdk'
+import { getChains, type ChainSlug } from './config.js'
 
 export class UsageError extends Error {}
 
@@ -106,17 +106,6 @@ export function optionalProtocol(value: string | undefined): string | undefined 
     const protocol = value.trim()
     if (protocol.length === 0) throw new UsageError('--protocol requires a name')
     return protocol
-}
-
-function parseProtocolType(value: string | undefined): ProtocolType {
-    if (value === undefined) throw new UsageError('missing required flag --protocolType')
-    if (value === 'v2') return ProtocolType.V2
-    if (value === 'v3') return ProtocolType.V3
-    throw new UsageError(`unknown protocol "${value}" (expected v2 or v3)`)
-}
-
-export function optionalProtocolType(value: string | undefined): ProtocolType | undefined {
-    return value === undefined ? undefined : parseProtocolType(value)
 }
 
 export function optionalGraduated(value: string | undefined): 0 | 1 | undefined {

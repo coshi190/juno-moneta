@@ -1,15 +1,15 @@
 import { zeroAddress, type Abi, type Address } from 'viem'
 import { V3_FACTORY_ABI } from '../abis/v3-factory.js'
-import { V3_POOL_ABI } from '../abis/v3-pool.js'
-import { getDexConfig, ProtocolType, getSupportedDexs, type DEXType } from '../configs/dex.js'
-import { getSwapAddress } from './native.js'
-import { batchRead, type ReadClient, type ReadResult } from './multicall.js'
+import { findDex, getDexes, type DEXType } from '../configs/dex.js'
+import * as native from './native.js'
+import { batchRead, type ReadClient } from './multicall.js'
 import {
     buildQuoteCall,
     fromQuoterV2,
     quoteWithReference,
-    type QuoteParams,
+    sortByAmountOut,
     type QuoteResult,
+    type RouteQuoteParams,
 } from './quote-call.js'
 import type { ContractCall } from './plan-swap.js'
 
@@ -17,22 +17,14 @@ export const MAX_HOPS = 3
 export const MAX_DEEP_CONNECTORS = 3
 export const MAX_ROUTE_QUOTES = 80
 
-export interface V3RouteQuote {
+export interface V3QuoteOutcome {
     dexId: DEXType
     path: Address[]
     fees: number[]
-    quote: QuoteResult
-}
-
-interface V3RouteParams {
-    chainId: number
-    tokenIn: Address
-    tokenOut: Address
-    amountIn: bigint
-    connectors: Address[]
-    dexId?: DEXType | DEXType[]
-    maxHops?: number
-    maxRouteQuotes?: number
+    pool: Address | null
+    quote: QuoteResult | null
+    priceImpact: number | undefined
+    error: Error | null
 }
 
 export function enumerateHopPaths(
@@ -48,8 +40,11 @@ export function enumerateHopPaths(
         return l !== inL && l !== outL
     })
 
-    const paths: Address[][] = []
-    for (const c of conns) paths.push([tokenIn, c, tokenOut])
+    const paths: Address[][] = [[tokenIn, tokenOut]]
+
+    if (maxHops >= 2) {
+        for (const c of conns) paths.push([tokenIn, c, tokenOut])
+    }
 
     if (maxHops >= 3) {
         const deep = conns.slice(0, MAX_DEEP_CONNECTORS)
@@ -85,11 +80,12 @@ export interface V3RouteCandidate {
 }
 
 export function buildRouteCandidates(
-    params: Omit<V3RouteParams, 'amountIn' | 'maxRouteQuotes'>
+    params: Omit<RouteQuoteParams, 'amountIn' | 'maxRouteQuotes'>
 ): V3RouteCandidate[] {
     const { chainId, tokenIn, tokenOut, connectors, dexId, maxHops = MAX_HOPS } = params
 
-    const dexIds = dexId === undefined ? getSupportedDexs(chainId, ProtocolType.V3) : [dexId].flat()
+    const dexIds =
+        dexId === undefined ? getDexes(chainId, 'v3').map((dex) => dex.dexId) : [dexId].flat()
     if (dexIds.length === 0) return []
 
     const rawPaths = enumerateHopPaths(tokenIn, tokenOut, connectors, maxHops)
@@ -97,12 +93,12 @@ export function buildRouteCandidates(
 
     const candidates: V3RouteCandidate[] = []
     for (const id of dexIds) {
-        const cfg = getDexConfig(chainId, id, ProtocolType.V3)
+        const cfg = findDex(chainId, id, 'v3')
         if (!cfg?.factory || !cfg?.quoter) continue
         const feeTiers = cfg.feeTiers
 
         for (const rawPath of rawPaths) {
-            const tokens = rawPath.map((a) => getSwapAddress(a, chainId))
+            const tokens = rawPath.map((a) => native.getSwapAddress(a, chainId))
             const collapsed = tokens.some(
                 (t, i) => i > 0 && t.toLowerCase() === tokens[i - 1]!.toLowerCase()
             )
@@ -149,7 +145,7 @@ interface RouteMeta {
 
 export function buildRouteMetas(
     candidates: readonly V3RouteCandidate[],
-    existing: ReadonlySet<string>,
+    existing: ReadonlyMap<string, Address>,
     maxRouteQuotes: number = MAX_ROUTE_QUOTES
 ): RouteMeta[] {
     const metas: RouteMeta[] = []
@@ -176,11 +172,24 @@ export function buildRouteMetas(
     return metas
 }
 
-export async function getV3Routes(
+function decodeV3Quote(raw: unknown, meta: RouteMeta): QuoteResult {
+    if (meta.candidate.tokens.length === 2) {
+        return fromQuoterV2(raw as [bigint, bigint, number | bigint, bigint])
+    }
+    const [amountOut, , , gasEstimate] = raw as [bigint, bigint[], number[], bigint]
+    return {
+        amountOut,
+        sqrtPriceX96After: 0n,
+        initializedTicksCrossed: 0,
+        gasEstimate: gasEstimate ?? 0n,
+    }
+}
+
+export async function getV3Quotes(
     client: ReadClient,
-    params: V3RouteParams
-): Promise<V3RouteQuote[]> {
-    const { chainId, amountIn, maxRouteQuotes = MAX_ROUTE_QUOTES } = params
+    params: RouteQuoteParams
+): Promise<V3QuoteOutcome[]> {
+    const { chainId, amountIn, maxRouteQuotes = MAX_ROUTE_QUOTES, withPriceImpact = false } = params
 
     const candidates = buildRouteCandidates(params)
     if (candidates.length === 0) return []
@@ -191,277 +200,61 @@ export async function getV3Routes(
         legQueries.map((q) => q.call)
     )
 
-    const existing = new Set<string>()
+    const existing = new Map<string, Address>()
     legQueries.forEach((q, index) => {
         const result = poolResults[index]
         if (result?.status !== 'success') return
         const pool = result.result as Address | undefined
-        if (pool && pool.toLowerCase() !== zeroAddress) existing.add(q.key)
+        if (pool && pool.toLowerCase() !== zeroAddress) existing.set(q.key, pool)
     })
 
     const metas = buildRouteMetas(candidates, existing, maxRouteQuotes)
     if (metas.length === 0) return []
 
-    const quoteEntries = metas.flatMap((meta) => {
-        const { candidate, fees } = meta
-        const call = buildQuoteCall({
-            protocol: ProtocolType.V3,
-            chainId,
-            dexId: candidate.dexId,
-            tokenIn: candidate.tokens[0]!,
-            tokenOut: candidate.tokens[candidate.tokens.length - 1]!,
-            amountIn,
-            path: candidate.tokens,
-            fees,
-        })
-        return call ? [{ meta, call }] : []
-    })
-
-    const quoteResults = await batchRead(
-        client,
-        quoteEntries.map((e) => e.call)
-    )
-
-    const routes: V3RouteQuote[] = []
-    quoteResults.forEach((result, index) => {
-        if (result?.status !== 'success') return
-        const [amountOut, , , gasEstimate] = result.result as [bigint, bigint[], number[], bigint]
-        if (!amountOut || amountOut === 0n) return
-
-        const { candidate, fees } = quoteEntries[index]!.meta
-        routes.push({
-            dexId: candidate.dexId,
-            path: candidate.tokens,
-            fees,
-            quote: {
-                amountOut,
-                sqrtPriceX96After: 0n,
-                initializedTicksCrossed: 0,
-                gasEstimate: gasEstimate ?? 0n,
-            },
-        })
-    })
-
-    return routes.sort((a, b) => {
-        if (a.quote.amountOut === b.quote.amountOut) return 0
-        return a.quote.amountOut > b.quote.amountOut ? -1 : 1
-    })
-}
-
-export type V3QuoteParams = QuoteParams
-
-export interface V3QuoteOutcome {
-    dexId: DEXType
-    quote: QuoteResult | null
-    fee: number | null
-    pool: Address | null
-    priceImpact: number | undefined
-    error: Error | null
-}
-
-export interface V3PoolCandidate {
-    dexId: DEXType
-    factory: Address
-    quoter: Address
-    fee: number
-    tokenIn: Address
-    tokenOut: Address
-}
-
-interface BuildPoolCandidatesInput {
-    chainId: number
-    dexIds: readonly DEXType[]
-    tokenIn: Address
-    tokenOut: Address
-}
-
-export function buildPoolCandidates({
-    chainId,
-    dexIds,
-    tokenIn,
-    tokenOut,
-}: BuildPoolCandidatesInput): V3PoolCandidate[] {
-    const resolvedIn = getSwapAddress(tokenIn, chainId)
-    const resolvedOut = getSwapAddress(tokenOut, chainId)
-    if (resolvedIn.toLowerCase() === resolvedOut.toLowerCase()) return []
-
-    const candidates: V3PoolCandidate[] = []
-
-    for (const dexId of dexIds) {
-        const config = getDexConfig(chainId, dexId, ProtocolType.V3)
-        if (!config) continue
-
-        for (const fee of config.feeTiers) {
-            candidates.push({
-                dexId,
-                factory: config.factory,
-                quoter: config.quoter,
-                fee,
-                tokenIn: resolvedIn,
-                tokenOut: resolvedOut,
-            })
-        }
-    }
-
-    return candidates
-}
-
-export interface ResolvedPool {
-    candidate: V3PoolCandidate
-    pool: Address
-}
-
-export interface DiscoveredV3Pool {
-    dexId: DEXType
-    pool: Address
-    fee: number
-    liquidity: bigint
-}
-
-export function resolvePoolAddresses(
-    candidates: readonly V3PoolCandidate[],
-    results: readonly ReadResult[]
-): ResolvedPool[] {
-    const resolved: ResolvedPool[] = []
-
-    candidates.forEach((candidate, index) => {
-        const result = results[index]
-        if (result?.status !== 'success') return
-
-        const pool = result.result as Address | undefined
-        if (!pool || pool.toLowerCase() === zeroAddress) return
-
-        resolved.push({ candidate, pool })
-    })
-
-    return resolved
-}
-
-export function pickBestPools(
-    resolved: readonly ResolvedPool[],
-    liquidityResults: readonly ReadResult[]
-): Map<DEXType, DiscoveredV3Pool> {
-    const best = new Map<DEXType, DiscoveredV3Pool>()
-
-    resolved.forEach(({ candidate, pool }, index) => {
-        const result = liquidityResults[index]
-        if (result?.status !== 'success') return
-
-        const liquidity = result.result as bigint | undefined
-        if (typeof liquidity !== 'bigint' || liquidity <= 0n) return
-
-        const incumbent = best.get(candidate.dexId)
-        if (incumbent && incumbent.liquidity >= liquidity) return
-
-        best.set(candidate.dexId, { dexId: candidate.dexId, pool, fee: candidate.fee, liquidity })
-    })
-
-    return best
-}
-
-async function discoverV3Pools(
-    client: ReadClient,
-    params: Omit<V3QuoteParams, 'amountIn'>
-): Promise<Map<DEXType, DiscoveredV3Pool>> {
-    const { chainId, tokenIn, tokenOut, dexId } = params
-
-    const dexIds = dexId === undefined ? getSupportedDexs(chainId, ProtocolType.V3) : [dexId].flat()
-    const candidates = buildPoolCandidates({ chainId, dexIds, tokenIn, tokenOut })
-    if (candidates.length === 0) return new Map()
-
-    const poolResults = await batchRead(
-        client,
-        candidates.map((candidate) => ({
-            address: candidate.factory,
-            abi: V3_FACTORY_ABI as Abi,
-            functionName: 'getPool',
-            args: [candidate.tokenIn, candidate.tokenOut, candidate.fee],
-        }))
-    )
-    const resolved = resolvePoolAddresses(candidates, poolResults)
-    if (resolved.length === 0) return new Map()
-
-    const liquidityResults = await batchRead(
-        client,
-        resolved.map(({ pool }) => ({
-            address: pool,
-            abi: V3_POOL_ABI as Abi,
-            functionName: 'liquidity',
-            args: [],
-        }))
-    )
-
-    return pickBestPools(resolved, liquidityResults)
-}
-
-export async function quoteV3Pools(
-    client: ReadClient,
-    params: Omit<V3QuoteParams, 'dexId'>,
-    pools: ReadonlyMap<DEXType, DiscoveredV3Pool>
-): Promise<Map<DEXType, V3QuoteOutcome>> {
-    const { chainId, tokenIn, tokenOut, amountIn } = params
-
     const quotes = await quoteWithReference(
         client,
         amountIn,
-        [...pools.entries()],
-        ([dexId, pool], amount) =>
+        metas,
+        ({ candidate, fees }, amount) =>
             buildQuoteCall({
-                protocol: ProtocolType.V3,
+                protocol: 'v3',
                 chainId,
-                dexId,
-                tokenIn,
-                tokenOut,
-                fee: pool.fee,
+                dexId: candidate.dexId,
+                tokenIn: candidate.tokens[0]!,
+                tokenOut: candidate.tokens[candidate.tokens.length - 1]!,
                 amountIn: amount,
+                path: candidate.tokens,
+                fees,
             }),
-        (raw) => fromQuoterV2(raw as [bigint, bigint, number | bigint, bigint])
+        decodeV3Quote,
+        { withReference: withPriceImpact }
     )
 
-    const outcomes = new Map<DEXType, V3QuoteOutcome>()
-    for (const { target, quote, priceImpact, error } of quotes) {
-        const [dexId, pool] = target
-        outcomes.set(dexId, {
-            dexId,
-            quote,
-            fee: pool.fee,
-            pool: pool.pool,
-            priceImpact,
-            error: quote ? null : (error ?? new Error(`Quote failed for ${dexId}`)),
-        })
-    }
-    return outcomes
-}
+    const outcomes = quotes.map(({ target, quote, priceImpact, error }): V3QuoteOutcome => {
+        const { candidate, fees } = target
+        const filled = quote && quote.amountOut > 0n ? quote : null
+        const pool =
+            candidate.tokens.length === 2
+                ? (existing.get(
+                      poolKey(
+                          candidate.factory,
+                          candidate.tokens[0]!,
+                          candidate.tokens[1]!,
+                          fees[0]!
+                      )
+                  ) ?? null)
+                : null
 
-export interface V3QuoteResult {
-    direct: Map<DEXType, V3QuoteOutcome>
-    routes: V3RouteQuote[]
-}
+        return {
+            dexId: candidate.dexId,
+            path: candidate.tokens,
+            fees,
+            pool,
+            quote: filled,
+            priceImpact: filled ? priceImpact : undefined,
+            error: filled ? null : (error ?? new Error(`Quote failed for ${candidate.dexId}`)),
+        }
+    })
 
-async function getDirectQuotes(
-    client: ReadClient,
-    params: V3QuoteParams
-): Promise<Map<DEXType, V3QuoteOutcome>> {
-    const pools = await discoverV3Pools(client, params)
-    if (pools.size === 0) return new Map()
-
-    return quoteV3Pools(client, params, pools)
-}
-
-export async function getV3Quotes(
-    client: ReadClient,
-    params: V3QuoteParams
-): Promise<V3QuoteResult> {
-    const { connectors, includeDirect = true } = params
-
-    const [direct, routes] = await Promise.all([
-        includeDirect
-            ? getDirectQuotes(client, params)
-            : Promise.resolve(new Map<DEXType, V3QuoteOutcome>()),
-        connectors && connectors.length > 0
-            ? getV3Routes(client, { ...params, connectors })
-            : Promise.resolve<V3RouteQuote[]>([]),
-    ])
-
-    return { direct, routes }
+    return sortByAmountOut(outcomes)
 }

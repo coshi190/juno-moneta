@@ -3,7 +3,8 @@ import schema from 'ponder:schema'
 import { formatEther } from 'viem'
 import { readERC20Metadata } from './erc20-read.js'
 import { foldTokenCandle } from './candles.js'
-import { readTrackingTag, getWrappedNativeAddress, getStablecoins } from '@coshi190/juno-moneta-sdk'
+import { readTrackingTag } from '@coshi190/juno-moneta-sdk'
+import { getStablecoins, getWrappedNativeAddress } from './config.js'
 import { parseV3Swap } from './parse-swaps.js'
 import {
     sanitizeUsdPrice,

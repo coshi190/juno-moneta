@@ -3,12 +3,8 @@ import schema from 'ponder:schema'
 import { graphql, eq, and, gte, inArray } from 'ponder'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import {
-    computePnl,
-    computePoints,
-    computeCurve,
-    getWrappedNativeAddress,
-} from '@coshi190/juno-moneta-sdk'
+import { computePnl, computePoints, computeCurve } from '@coshi190/juno-moneta-sdk'
+import { getWrappedNativeAddress } from '../config.js'
 import { parseBondingCurveSwap, parseV2Swap, parseV3Swap, type ParsedSwap } from '../parse-swaps.js'
 import { computeWindowedTraderStats, type LeaderboardSwapEvent } from '../trader-stats.js'
 import {

@@ -1,9 +1,4 @@
-import {
-    ProtocolType,
-    getDexConfig,
-    ERC20_ABI,
-    NONFUNGIBLE_POSITION_MANAGER_ABI,
-} from '@coshi190/juno-moneta-sdk'
+import { getAbi, getDexes } from '@coshi190/juno-moneta-sdk'
 
 export async function readERC20Metadata(
     client: any,
@@ -14,19 +9,19 @@ export async function readERC20Metadata(
     try {
         const [name, symbol, decimals] = await Promise.all([
             client.readContract({
-                abi: ERC20_ABI,
+                abi: getAbi('erc20'),
                 functionName: 'name',
                 address: addr,
                 cache: 'immutable',
             }),
             client.readContract({
-                abi: ERC20_ABI,
+                abi: getAbi('erc20'),
                 functionName: 'symbol',
                 address: addr,
                 cache: 'immutable',
             }),
             client.readContract({
-                abi: ERC20_ABI,
+                abi: getAbi('erc20'),
                 functionName: 'decimals',
                 address: addr,
                 cache: 'immutable',
@@ -49,11 +44,11 @@ export async function readPosition(
     tickLower: number
     tickUpper: number
 } | null> {
-    const manager = getDexConfig(chainId, 'junoswap', ProtocolType.V3)?.positionManager
+    const manager = getDexes(chainId, 'v3').find((dex) => dex.dexId === 'junoswap')?.positionManager
     if (!manager) return null
     try {
         const pos = (await client.readContract({
-            abi: NONFUNGIBLE_POSITION_MANAGER_ABI,
+            abi: getAbi('positionManager'),
             functionName: 'positions',
             address: manager,
             args: [tokenId],
