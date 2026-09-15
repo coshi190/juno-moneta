@@ -1,7 +1,17 @@
 import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
 import { readPosition } from './erc20-read.js'
-import { ZERO_ADDRESS, addLiquidity, subLiquidity } from './v3-position-math.js'
+
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
+
+function addLiquidity(current: string, delta: bigint): string {
+    return (BigInt(current) + delta).toString()
+}
+
+function subLiquidity(current: string, delta: bigint): string {
+    const next = BigInt(current) - delta
+    return (next < 0n ? 0n : next).toString()
+}
 
 async function ensurePosition(
     context: any,
