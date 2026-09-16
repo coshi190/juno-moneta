@@ -82,14 +82,24 @@ export function fetchBondingCurveHistory(
     )
 }
 
+function v3SwapWhere(tokenAddr: string, chainId: number, poolAddress?: string) {
+    const where: Record<string, unknown> = { tokenAddr, chainId }
+    if (poolAddress) where.poolAddress = poolAddress.toLowerCase()
+    return where
+}
+
 export function fetchV3History(
     client: PonderClient,
-    { tokenAddr, chainId }: { tokenAddr: string; chainId: number }
+    {
+        tokenAddr,
+        chainId,
+        poolAddress,
+    }: { tokenAddr: string; chainId: number; poolAddress?: string }
 ): Promise<V3HistoryPoint[]> {
     return client.fetchAllPages<{ v3SwapEvents: Page<V3HistoryPoint> }, V3HistoryPoint>(
-        `query V3History($tokenAddr: String!, $chainId: Int!, $after: String) {
+        `query V3History($where: v3SwapEventFilter, $after: String) {
             v3SwapEvents(
-                where: { tokenAddr: $tokenAddr, chainId: $chainId }
+                where: $where
                 orderBy: "timestamp"
                 orderDirection: "asc"
                 limit: 1000
@@ -99,7 +109,7 @@ export function fetchV3History(
                 items { ${sel(V3_HISTORY_FIELDS)} }
             }
         }`,
-        { tokenAddr, chainId },
+        { where: v3SwapWhere(tokenAddr, chainId, poolAddress) },
         (r) => r.v3SwapEvents
     )
 }
@@ -161,18 +171,23 @@ export async function fetchBondingCurvePricesSince(
 
 export async function fetchV3PricesSince(
     client: PonderClient,
-    { tokenAddr, chainId, since }: { tokenAddr: string; chainId: number; since: number }
+    {
+        tokenAddr,
+        chainId,
+        since,
+        poolAddress,
+    }: { tokenAddr: string; chainId: number; since: number; poolAddress?: string }
 ): Promise<V3PricePoint[]> {
     const data = await client.request<{ v3SwapEvents: Items<V3PricePoint> }>(
-        `query V3PricesSince($tokenAddr: String!, $chainId: Int!, $since: Int!) {
+        `query V3PricesSince($where: v3SwapEventFilter) {
             v3SwapEvents(
-                where: { tokenAddr: $tokenAddr, chainId: $chainId, timestamp_gte: $since }
+                where: $where
                 orderBy: "timestamp"
                 orderDirection: "asc"
                 limit: 1000
             ) { items { ${sel(V3_PRICE_POINT_FIELDS)} } }
         }`,
-        { tokenAddr, chainId, since }
+        { where: { ...v3SwapWhere(tokenAddr, chainId, poolAddress), timestamp_gte: since } }
     )
     return data.v3SwapEvents.items
 }

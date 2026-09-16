@@ -63,8 +63,9 @@ async function getOrSeedKublerxPool(context: any, poolAddress: string, event: an
 }
 
 async function recordKublerxSwap(context: any, event: any) {
-    if (!readTrackingTag(event.transaction.input, event.transaction.from)) return
     const poolAddress = event.log.address.toLowerCase()
+    const graduated = await context.db.find(schema.graduatedPool, { pool: poolAddress })
+    if (!graduated && !readTrackingTag(event.transaction.input, event.transaction.from)) return
     const poolRecord = await getOrSeedKublerxPool(context, poolAddress, event)
     if (!poolRecord) return
     await recordV3SwapEvent(

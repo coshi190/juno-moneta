@@ -40,19 +40,40 @@ export function getStablecoins(chainId: number): ReadonlySet<string> | undefined
 }
 
 interface Deployment {
-    address: Address
+    address: Address | readonly Address[]
     startBlock: number
 }
 
-const BONDING_CURVE_DEPLOYMENTS: Record<number, Deployment> = {
-    [CHAIN_IDS.kubTestnet]: {
-        address: '0x77e5D3fC554e30aceFd5322ca65beE15ee6E39a9',
-        startBlock: 29065000,
+const CURVE_DEPLOYMENTS: Record<string, Record<number, Deployment>> = {
+    junoswap: {
+        [CHAIN_IDS.kubTestnet]: {
+            address: '0x77e5D3fC554e30aceFd5322ca65beE15ee6E39a9',
+            startBlock: 29065000,
+        },
+        [CHAIN_IDS.bitkub]: {
+            address: '0x65F6EC30A9E70822721585f6Bba15c40c2F8ab4e',
+            startBlock: 32995517,
+        },
     },
-    [CHAIN_IDS.bitkub]: {
-        address: '0x65F6EC30A9E70822721585f6Bba15c40c2F8ab4e',
-        startBlock: 32995517,
+
+    durianfun: {
+        [CHAIN_IDS.bitkub]: {
+            address: [
+                '0xeadEc9dA89F97Ae6215362EBA4B33F3F1d1775b2', // V4.2
+                '0xdf4f3dB298A9aDe853191F58b4b2a322D47EC005', // V4.5
+                '0x89b6b73BD18dbEA0e2218c25c1963fd5FBaB3c87', // V4.6.6
+                '0x0480017E51dC813a0fad8aA73EAb2f8476ac0e8F', // V4.6.7
+                '0xa1000BB39f36a630F1AB1b245B25Ca75a6744Aa5',
+                '0x96D0117DE988C20f4E4D4B27b46351D760b99D97',
+                '0xE3861e300043d8c20A927340cbA6379D0BECb793', // V5
+            ],
+            startBlock: 32202357,
+        },
     },
+}
+
+export function getCurveDeployment(chainId: number, launchpadId: string): Deployment | undefined {
+    return CURVE_DEPLOYMENTS[launchpadId]?.[chainId]
 }
 
 const AGG_ROUTER_DEPLOYMENTS: Record<number, Deployment> = {
@@ -60,10 +81,6 @@ const AGG_ROUTER_DEPLOYMENTS: Record<number, Deployment> = {
         address: '0x869A40921A332e0D79300F91361A3DC77F2a0ebc',
         startBlock: 32685221,
     },
-}
-
-export function getBondingCurveDeployment(chainId: number): Deployment | undefined {
-    return BONDING_CURVE_DEPLOYMENTS[chainId]
 }
 
 export function getAggRouterDeployment(chainId: number): Deployment | undefined {

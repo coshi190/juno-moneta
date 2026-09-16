@@ -19,6 +19,7 @@ interface BondingCurveSwapRow {
     amountIn: string
     amountOut: string
     timestamp: number
+    launchpadId: string
 }
 
 interface V3SwapRow {
@@ -54,7 +55,7 @@ export function parseBondingCurveSwap(e: BondingCurveSwapRow): ParsedSwap {
         amountIn: e.amountIn,
         amountOut: e.amountOut,
         timestamp: e.timestamp,
-        protocol: 'junoswap',
+        protocol: e.launchpadId,
     }
 }
 

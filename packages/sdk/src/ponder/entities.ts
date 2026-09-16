@@ -41,6 +41,7 @@ export interface Incentive {
 export interface LaunchToken {
     tokenAddr: string
     chainId: number
+    launchpadId: string
     creator: string
     name: string | null
     symbol: string | null
@@ -50,8 +51,11 @@ export interface LaunchToken {
     link2: string | null
     link3: string | null
     createdTime: number
+    market: string | null
     isGraduated: number | null
     graduatedAt: number | null
+    ammPool: string | null
+    graduationTarget: number | null
     createdAtBlock: number
 }
 
@@ -81,6 +85,7 @@ export interface ReferralBinding {
 export interface SwapEvent {
     id: string
     chainId: number
+    launchpadId: string
     tokenAddr: string
     sender: string
     isBuy: number
@@ -119,6 +124,7 @@ export interface TokenHolder {
 export interface TokenSnapshot {
     tokenAddr: string
     chainId: number
+    launchpadId: string
     lastPrice: string | null
     lastPriceUsd: string | null
     marketCapNative: string | null

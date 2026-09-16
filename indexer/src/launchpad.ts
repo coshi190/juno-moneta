@@ -2,23 +2,40 @@ import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
 import { formatEther, zeroAddress } from 'viem'
 import { readERC20Metadata } from './erc20-read.js'
-import { creatorFeeShareForSwap, VIRTUAL_AMOUNT } from './creator-fee.js'
-import { getBondingCurveDeployment, getChains } from './config.js'
+import { creatorFeeShareForSwap } from './creator-fee.js'
 import { sanitizeUsdPrice, MAX_TOKEN_USD_PRICE } from './price-history.js'
 import { recordUserSwap } from './user-pnl.js'
 import { foldTokenCandle } from './candles.js'
+import {
+    contractNameFor,
+    contractNames,
+    enabledLaunchpads,
+    getAdapter,
+} from './launchpads/index.js'
+import type { HandlerArgs, LaunchpadAdapter } from './launchpads/types.js'
+import type { CurveParams, Launchpad } from './launchpads/registry.js'
 
-const MAINNET_ENABLED = getBondingCurveDeployment(getChains().bitkub) !== undefined
+const CURVE_ADDRESSES: Record<number, ReadonlySet<string>> = (() => {
+    const byChain: Record<number, Set<string>> = {}
+    for (const { launchpad } of enabledLaunchpads()) {
+        const addresses = Array.isArray(launchpad.address) ? launchpad.address : [launchpad.address]
+        for (const address of addresses) {
+            ;(byChain[launchpad.chainId] ??= new Set()).add(address.toLowerCase())
+        }
+    }
+    return byChain
+})()
 
-type HandlerArgs = { event: any; context: any }
-
-const TOTAL_SUPPLY = 1_000_000_000n * 10n ** 18n
-
-function calculatePriceFromReserves(isBuy: boolean, reserveIn: bigint, reserveOut: bigint): number {
+function calculatePriceFromReserves(
+    isBuy: boolean,
+    reserveIn: bigint,
+    reserveOut: bigint,
+    curve: CurveParams
+): number {
     const nativeReserve = isBuy ? reserveIn : reserveOut
     const tokenReserve = isBuy ? reserveOut : reserveIn
     if (nativeReserve === 0n || tokenReserve === 0n) return 0
-    const effectiveReserve = parseFloat(formatEther(nativeReserve + VIRTUAL_AMOUNT))
+    const effectiveReserve = parseFloat(formatEther(nativeReserve + curve.virtualReserve))
     const tokenRes = parseFloat(formatEther(tokenReserve))
     if (tokenRes === 0) return 0
     return effectiveReserve / tokenRes
@@ -27,13 +44,14 @@ function calculatePriceFromReserves(isBuy: boolean, reserveIn: bigint, reserveOu
 function calculateMarketCapFromReserves(
     isBuy: boolean,
     reserveIn: bigint,
-    reserveOut: bigint
+    reserveOut: bigint,
+    curve: CurveParams
 ): string {
     if (reserveIn === 0n || reserveOut === 0n) return '0'
     const nativeReserve = isBuy ? reserveIn : reserveOut
     const tokenReserve = isBuy ? reserveOut : reserveIn
-    const effectiveReserve = nativeReserve + VIRTUAL_AMOUNT
-    const marketCap = (effectiveReserve * TOTAL_SUPPLY) / tokenReserve
+    const effectiveReserve = nativeReserve + curve.virtualReserve
+    const marketCap = (effectiveReserve * curve.totalSupply) / tokenReserve
     return formatEther(marketCap)
 }
 
@@ -46,7 +64,8 @@ function calculatePreSwapPrice(
     reserveIn: bigint,
     reserveOut: bigint,
     amountIn: bigint,
-    amountOut: bigint
+    amountOut: bigint,
+    curve: CurveParams
 ): number {
     let preNative: bigint
     let preToken: bigint
@@ -58,16 +77,17 @@ function calculatePreSwapPrice(
         preToken = reserveIn - amountIn
     }
     if (preNative < 0n || preToken <= 0n) return 0
-    const effectiveReserve = parseFloat(formatEther(preNative + VIRTUAL_AMOUNT))
+    const effectiveReserve = parseFloat(formatEther(preNative + curve.virtualReserve))
     const tokenRes = parseFloat(formatEther(preToken))
     if (tokenRes === 0) return 0
     return effectiveReserve / tokenRes
 }
 
-function defaultSnapshot(tokenAddr: string, chainId: number) {
+function defaultSnapshot(tokenAddr: string, chainId: number, launchpadId: string) {
     return {
         tokenAddr,
         chainId,
+        launchpadId,
         lastPrice: '0',
         lastPriceUsd: '0',
         marketCapNative: '0',
@@ -88,35 +108,67 @@ function defaultSnapshot(tokenAddr: string, chainId: number) {
     }
 }
 
-async function handleCreation({ event, context }: HandlerArgs, chainId: number) {
-    const { creator, tokenAddr, logo, description, link1, link2, link3, createdTime } = event.args
-    const tokenAddrLower = tokenAddr.toLowerCase()
+async function handleCreation(args: HandlerArgs, launchpad: Launchpad, adapter: LaunchpadAdapter) {
+    const { event, context } = args
+    const { chainId, launchpadId } = launchpad
+    const creation = await adapter.creation(args)
+    const tokenAddrLower = creation.tokenAddr.toLowerCase()
 
-    const meta = await readERC20Metadata(context.client, tokenAddrLower)
+    const meta =
+        creation.name === undefined || creation.symbol === undefined
+            ? await readERC20Metadata(context.client, tokenAddrLower)
+            : { name: creation.name, symbol: creation.symbol }
+
+    const market = creation.market?.toLowerCase() ?? null
 
     await context.db
         .insert(schema.launchToken)
         .values({
             tokenAddr: tokenAddrLower,
             chainId,
-            creator: creator.toLowerCase(),
+            launchpadId,
+            creator: creation.creator.toLowerCase(),
             name: meta.name,
             symbol: meta.symbol,
-            logo: logo ?? '',
-            description: description ?? '',
-            link1: link1 ?? '',
-            link2: link2 ?? '',
-            link3: link3 ?? '',
-            createdTime: Number(createdTime ?? 0),
+            logo: creation.logo,
+            market,
+            description: creation.description,
+            link1: creation.link1,
+            link2: creation.link2,
+            link3: creation.link3,
+            createdTime: creation.createdTime,
             isGraduated: 0,
             graduatedAt: null,
             createdAtBlock: Number(event.block.number),
         })
         .onConflictDoNothing()
+
+    if (market) {
+        await context.db
+            .insert(schema.launchMarket)
+            .values({ market, chainId, tokenAddr: tokenAddrLower })
+            .onConflictDoNothing()
+    }
 }
 
-async function handleSwap({ event, context }: HandlerArgs, chainId: number) {
-    const { sender, isBuy, tokenAddr, amountIn, amountOut, reserveIn, reserveOut } = event.args
+async function handleSwap(
+    args: HandlerArgs,
+    launchpad: Launchpad,
+    adapter: LaunchpadAdapter,
+    bindingIsBuy?: boolean
+) {
+    const { event, context } = args
+    const { chainId, launchpadId, curve } = launchpad
+    const {
+        tokenAddr,
+        sender,
+        isBuy,
+        amountIn,
+        amountOut,
+        reserveIn,
+        reserveOut,
+        creatorFeeNative,
+    } = await adapter.swap(args, bindingIsBuy)
     const tokenAddrLower = tokenAddr.toLowerCase()
     const senderLower = sender.toLowerCase()
     const id = `${chainId}-${event.block.number}-${event.log.logIndex}`
@@ -125,6 +177,7 @@ async function handleSwap({ event, context }: HandlerArgs, chainId: number) {
     await context.db.insert(schema.swapEvent).values({
         id,
         chainId,
+        launchpadId,
         tokenAddr: tokenAddrLower,
         sender: senderLower,
         isBuy: isBuy ? 1 : 0,
@@ -137,16 +190,17 @@ async function handleSwap({ event, context }: HandlerArgs, chainId: number) {
         transactionHash: event.transaction.hash,
     })
 
-    const price = calculatePriceFromReserves(isBuy, BigInt(reserveIn), BigInt(reserveOut))
-    const marketCap = calculateMarketCapFromReserves(isBuy, BigInt(reserveIn), BigInt(reserveOut))
+    const price = calculatePriceFromReserves(isBuy, reserveIn, reserveOut, curve)
+    const marketCap = calculateMarketCapFromReserves(isBuy, reserveIn, reserveOut, curve)
     const volume = calculateVolume(isBuy, amountIn, amountOut)
 
     const preSwapPrice = calculatePreSwapPrice(
         isBuy,
-        BigInt(reserveIn),
-        BigInt(reserveOut),
-        BigInt(amountIn),
-        BigInt(amountOut)
+        reserveIn,
+        reserveOut,
+        amountIn,
+        amountOut,
+        curve
     )
     await foldTokenCandle(
         context,
@@ -158,9 +212,9 @@ async function handleSwap({ event, context }: HandlerArgs, chainId: number) {
         Number(formatEther(volume)),
         preSwapPrice
     )
-    const creatorFeeShare = creatorFeeShareForSwap(amountIn)
-    const creatorFeeNativeDelta = isBuy ? creatorFeeShare : 0n
-    const creatorFeeTokenDelta = isBuy ? 0n : creatorFeeShare
+    const creatorFeeShare = creatorFeeShareForSwap(amountIn, curve)
+    const creatorFeeNativeDelta = creatorFeeNative ?? (isBuy ? creatorFeeShare : 0n)
+    const creatorFeeTokenDelta = creatorFeeNative !== undefined ? 0n : isBuy ? 0n : creatorFeeShare
 
     const nativePriceRecord = await context.db.find(schema.nativeUsdPrice, { chainId })
     const nativeUsd = nativePriceRecord ? parseFloat(nativePriceRecord.price) : 0
@@ -178,13 +232,13 @@ async function handleSwap({ event, context }: HandlerArgs, chainId: number) {
         18,
         nativeUsd,
         timestamp,
-        'junoswap'
+        launchpadId
     )
 
     const existingSnapshot = await context.db.find(schema.tokenSnapshot, {
         tokenAddr: tokenAddrLower,
     })
-    const snap = existingSnapshot ?? defaultSnapshot(tokenAddrLower, chainId)
+    const snap = existingSnapshot ?? defaultSnapshot(tokenAddrLower, chainId, launchpadId)
     const isNewSnapshot = !existingSnapshot
 
     const athMarketCap = Math.max(
@@ -235,6 +289,7 @@ async function handleSwap({ event, context }: HandlerArgs, chainId: number) {
             .values({
                 tokenAddr: tokenAddrLower,
                 chainId,
+                launchpadId,
                 lastPrice: price > 0 ? price.toString() : '0',
                 lastPriceUsd: priceUsd > 0 ? priceUsd.toString() : '0',
                 marketCapNative: marketCap,
@@ -296,16 +351,30 @@ async function handleSwap({ event, context }: HandlerArgs, chainId: number) {
     }
 }
 
-async function handleGraduation({ event, context }: HandlerArgs) {
-    const tokenAddr = event.args.tokenAddr.toLowerCase()
+async function handleGraduation(args: HandlerArgs, adapter: LaunchpadAdapter) {
+    const { context } = args
+    const { tokenAddr: raw, ammPool: rawPool, graduationTarget } = await adapter.graduation(args)
+    const tokenAddr = raw.toLowerCase()
 
     const existing = await context.db.find(schema.launchToken, { tokenAddr })
     if (!existing) return
 
+    const ammPool = rawPool?.toLowerCase()
+
     await context.db.update(schema.launchToken, { tokenAddr }).set({
         isGraduated: 1,
-        graduatedAt: Number(event.block.timestamp),
+        graduatedAt: Number(args.event.block.timestamp),
+        ammPool: ammPool ?? null,
+        graduationTarget: graduationTarget ?? null,
     })
+
+    // Lets the external-DEX swap handlers recognise a launch token's pool by address.
+    if (ammPool) {
+        await context.db
+            .insert(schema.graduatedPool)
+            .values({ pool: ammPool, chainId: existing.chainId, tokenAddr })
+            .onConflictDoNothing()
+    }
 }
 
 async function handleTransfer({ event, context }: HandlerArgs, chainId: number) {
@@ -313,10 +382,14 @@ async function handleTransfer({ event, context }: HandlerArgs, chainId: number) 
     const fromLower = from.toLowerCase()
     const toLower = to.toLowerCase()
     const tokenAddrLower = event.log.address.toLowerCase()
-    const bondingCurveLower = getBondingCurveDeployment(chainId)?.address.toLowerCase()
+    const curveAddresses = CURVE_ADDRESSES[chainId]
 
     if (fromLower === zeroAddress || toLower === zeroAddress) return
-    if (fromLower === bondingCurveLower || toLower === bondingCurveLower) return
+    if (curveAddresses?.has(fromLower) || curveAddresses?.has(toLower)) return
+
+    const launchToken = await context.db.find(schema.launchToken, { tokenAddr: tokenAddrLower })
+    if (launchToken?.market && (fromLower === launchToken.market || toLower === launchToken.market))
+        return
 
     await context.db
         .insert(schema.transferEvent)
@@ -377,23 +450,26 @@ async function applyHolderDelta(
     }
 }
 
-ponder.on('BondingCurveJunoswap:Creation', (args) => handleCreation(args, 25925))
-ponder.on('BondingCurveJunoswap:Swap', (args) => handleSwap(args, 25925))
-ponder.on('BondingCurveJunoswap:Graduation', (args) => handleGraduation(args))
-ponder.on('LaunchToken:Transfer', (args) => handleTransfer(args, 25925))
+type CurveEvent = 'CurveJunoswapKubTestnet:Creation'
 
-if (MAINNET_ENABLED) {
-    ponder.on('BondingCurveJunoswapBitkub:Creation' as 'BondingCurveJunoswap:Creation', (args) =>
-        handleCreation(args, 96)
+for (const { chainSlug, launchpad } of enabledLaunchpads()) {
+    const adapter = getAdapter(launchpad.launchpadId)
+    const names = contractNames(launchpad.launchpadId, chainSlug)
+    const { creation, swaps, graduation } = adapter.bindings
+    const bind = (contract: string, event: string) => `${contract}:${event}` as CurveEvent
+
+    ponder.on(bind(contractNameFor(names, creation.contract), creation.event), (args) =>
+        handleCreation(args as HandlerArgs, launchpad, adapter)
     )
-    ponder.on('BondingCurveJunoswapBitkub:Swap' as 'BondingCurveJunoswap:Swap', (args) =>
-        handleSwap(args, 96)
+    for (const swap of swaps) {
+        ponder.on(bind(contractNameFor(names, swap.contract), swap.event), (args) =>
+            handleSwap(args as HandlerArgs, launchpad, adapter, swap.isBuy)
+        )
+    }
+    ponder.on(bind(contractNameFor(names, graduation.contract), graduation.event), (args) =>
+        handleGraduation(args as HandlerArgs, adapter)
     )
-    ponder.on(
-        'BondingCurveJunoswapBitkub:Graduation' as 'BondingCurveJunoswap:Graduation',
-        (args) => handleGraduation(args)
-    )
-    ponder.on('LaunchTokenBitkub:Transfer' as 'LaunchToken:Transfer', (args) =>
-        handleTransfer(args, 96)
+    ponder.on(bind(names.token, 'Transfer'), (args) =>
+        handleTransfer(args as HandlerArgs, launchpad.chainId)
     )
 }

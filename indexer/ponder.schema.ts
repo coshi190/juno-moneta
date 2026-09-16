@@ -1,36 +1,66 @@
-import { onchainTable } from 'ponder'
+import { index, onchainTable } from 'ponder'
 
-export const launchToken = onchainTable('launch_token', (t) => ({
-    tokenAddr: t.text().primaryKey(),
-    chainId: t.integer().notNull(),
-    creator: t.text().notNull(),
-    name: t.text().default(''),
-    symbol: t.text().default(''),
-    logo: t.text().default(''),
-    description: t.text().default(''),
-    link1: t.text().default(''),
-    link2: t.text().default(''),
-    link3: t.text().default(''),
-    createdTime: t.integer().notNull(),
-    isGraduated: t.integer().default(0),
-    graduatedAt: t.integer(),
-    createdAtBlock: t.integer().notNull(),
-}))
+export const launchToken = onchainTable(
+    'launch_token',
+    (t) => ({
+        tokenAddr: t.text().primaryKey(),
+        chainId: t.integer().notNull(),
+        launchpadId: t.text().notNull().default('junoswap'),
+        creator: t.text().notNull(),
+        name: t.text().default(''),
+        symbol: t.text().default(''),
+        logo: t.text().default(''),
+        description: t.text().default(''),
+        link1: t.text().default(''),
+        link2: t.text().default(''),
+        link3: t.text().default(''),
+        createdTime: t.integer().notNull(),
+        market: t.text(),
+        isGraduated: t.integer().default(0),
+        graduatedAt: t.integer(),
+        ammPool: t.text(),
+        graduationTarget: t.integer(),
+        createdAtBlock: t.integer().notNull(),
+    }),
+    (table) => ({
+        byLaunchpad: index().on(table.chainId, table.launchpadId),
+    })
+)
 
-export const swapEvent = onchainTable('swap_event', (t) => ({
-    id: t.text().primaryKey(),
+export const launchMarket = onchainTable('launch_market', (t) => ({
+    market: t.text().primaryKey(),
     chainId: t.integer().notNull(),
     tokenAddr: t.text().notNull(),
-    sender: t.text().notNull(),
-    isBuy: t.integer().notNull(),
-    amountIn: t.text().notNull(),
-    amountOut: t.text().notNull(),
-    reserveIn: t.text().notNull(),
-    reserveOut: t.text().notNull(),
-    blockNumber: t.integer().notNull(),
-    timestamp: t.integer().notNull(),
-    transactionHash: t.text().notNull(),
 }))
+
+export const graduatedPool = onchainTable('graduated_pool', (t) => ({
+    pool: t.text().primaryKey(),
+    chainId: t.integer().notNull(),
+    tokenAddr: t.text().notNull(),
+}))
+
+export const swapEvent = onchainTable(
+    'swap_event',
+    (t) => ({
+        id: t.text().primaryKey(),
+        chainId: t.integer().notNull(),
+        launchpadId: t.text().notNull().default('junoswap'),
+        tokenAddr: t.text().notNull(),
+        sender: t.text().notNull(),
+        isBuy: t.integer().notNull(),
+        amountIn: t.text().notNull(),
+        amountOut: t.text().notNull(),
+        reserveIn: t.text().notNull(),
+        reserveOut: t.text().notNull(),
+        blockNumber: t.integer().notNull(),
+        timestamp: t.integer().notNull(),
+        transactionHash: t.text().notNull(),
+    }),
+    (table) => ({
+        byToken: index().on(table.chainId, table.tokenAddr, table.timestamp),
+        bySender: index().on(table.chainId, table.sender),
+    })
+)
 
 export const transferEvent = onchainTable('transfer_event', (t) => ({
     id: t.text().primaryKey(),
@@ -47,6 +77,7 @@ export const transferEvent = onchainTable('transfer_event', (t) => ({
 export const tokenSnapshot = onchainTable('token_snapshot', (t) => ({
     tokenAddr: t.text().primaryKey(),
     chainId: t.integer().notNull(),
+    launchpadId: t.text().notNull().default('junoswap'),
     lastPrice: t.text().default('0'),
     lastPriceUsd: t.text().default('0'),
     marketCapNative: t.text().default('0'),

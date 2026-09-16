@@ -1,6 +1,9 @@
 import { createConfig, factory } from 'ponder'
+import type { Abi } from 'viem'
 import { getAbi, getDexes } from '@coshi190/juno-moneta-sdk'
-import { getAggRouterDeployment, getBondingCurveDeployment, getChains } from './src/config.js'
+import { getAggRouterDeployment, getChains } from './src/config.js'
+import { CONTRACT_NAMES } from './src/launchpads/index.js'
+import { LAUNCHPADS } from './src/launchpads/registry.js'
 import { V3_STAKER_ABI } from './src/abis/v3-staker.js'
 import { V2_PAIR_ABI } from './src/abis/v2-pair.js'
 import externalPools from './external-pools.json'
@@ -55,12 +58,30 @@ const abiEvent = <TAbi extends readonly { type: string; name?: string }[], TName
 }
 
 const PAIR_CREATED_EVENT = abiEvent(getAbi('v2Factory'), 'PairCreated')
+const DURIANFUN_TOKEN_CREATED = abiEvent(
+    LAUNCHPADS.durianfun.bitkub.abi,
+    LAUNCHPADS.durianfun.bitkub.creationEvent.name
+)
 const V3_POOL_CREATED_EVENT = abiEvent(getAbi('v3Factory'), 'PoolCreated')
-const CURVE_CREATION_EVENT = abiEvent(getAbi('bondingCurve'), 'Creation')
-
-const BONDING_CURVE_TESTNET = getBondingCurveDeployment(CHAINS.kubTestnet)!
-const BONDING_CURVE_BITKUB = getBondingCurveDeployment(CHAINS.bitkub)
 const AGG_ROUTER_BITKUB = getAggRouterDeployment(CHAINS.bitkub)!
+
+interface Entry<TAbi extends Abi> {
+    address: `0x${string}` | readonly `0x${string}`[]
+    startBlock: number
+    abi: TAbi
+}
+
+function curveContract<TSlug extends keyof typeof CHAINS, TAbi extends Abi>(
+    chainSlug: TSlug,
+    entry: Entry<TAbi>
+) {
+    return {
+        abi: entry.abi,
+        chain: chainSlug,
+        address: entry.address,
+        startBlock: entry.startBlock,
+    }
+}
 
 const V3_TESTNET_START = 23900000
 const V3_BITKUB_START = 25000000
@@ -94,42 +115,64 @@ export default createConfig({
         },
     },
     contracts: {
-        BondingCurveJunoswap: {
-            abi: getAbi('bondingCurve'),
-            chain: 'kubTestnet',
-            address: BONDING_CURVE_TESTNET.address,
-            startBlock: BONDING_CURVE_TESTNET.startBlock,
-        },
-        LaunchToken: {
+        [CONTRACT_NAMES['junoswap:kubTestnet'].curve]: curveContract(
+            'kubTestnet',
+            LAUNCHPADS.junoswap.kubTestnet
+        ),
+        [CONTRACT_NAMES['junoswap:kubTestnet'].token]: {
             abi: getAbi('erc20'),
             chain: 'kubTestnet',
             address: factory({
-                address: BONDING_CURVE_TESTNET.address,
-                event: CURVE_CREATION_EVENT,
-                parameter: 'tokenAddr',
+                address: LAUNCHPADS.junoswap.kubTestnet.address,
+                event: abiEvent(
+                    LAUNCHPADS.junoswap.kubTestnet.abi,
+                    LAUNCHPADS.junoswap.kubTestnet.creationEvent.name
+                ),
+                parameter: LAUNCHPADS.junoswap.kubTestnet.creationEvent.tokenParam,
             }),
-            startBlock: BONDING_CURVE_TESTNET.startBlock,
+            startBlock: LAUNCHPADS.junoswap.kubTestnet.startBlock,
         },
-        ...(BONDING_CURVE_BITKUB
-            ? {
-                  BondingCurveJunoswapBitkub: {
-                      abi: getAbi('bondingCurve'),
-                      chain: 'bitkub',
-                      address: BONDING_CURVE_BITKUB.address,
-                      startBlock: BONDING_CURVE_BITKUB.startBlock,
-                  },
-                  LaunchTokenBitkub: {
-                      abi: getAbi('erc20'),
-                      chain: 'bitkub',
-                      address: factory({
-                          address: BONDING_CURVE_BITKUB.address,
-                          event: CURVE_CREATION_EVENT,
-                          parameter: 'tokenAddr',
-                      }),
-                      startBlock: BONDING_CURVE_BITKUB.startBlock,
-                  },
-              }
-            : {}),
+        [CONTRACT_NAMES['junoswap:bitkub'].curve]: curveContract(
+            'bitkub',
+            LAUNCHPADS.junoswap.bitkub
+        ),
+        [CONTRACT_NAMES['junoswap:bitkub'].token]: {
+            abi: getAbi('erc20'),
+            chain: 'bitkub',
+            address: factory({
+                address: LAUNCHPADS.junoswap.bitkub.address,
+                event: abiEvent(
+                    LAUNCHPADS.junoswap.bitkub.abi,
+                    LAUNCHPADS.junoswap.bitkub.creationEvent.name
+                ),
+                parameter: LAUNCHPADS.junoswap.bitkub.creationEvent.tokenParam,
+            }),
+            startBlock: LAUNCHPADS.junoswap.bitkub.startBlock,
+        },
+        [CONTRACT_NAMES['durianfun:bitkub'].curve]: curveContract(
+            'bitkub',
+            LAUNCHPADS.durianfun.bitkub
+        ),
+        [CONTRACT_NAMES['durianfun:bitkub'].market]: {
+            abi: LAUNCHPADS.durianfun.bitkub.marketAbi,
+            chain: 'bitkub',
+            address: factory({
+                address: LAUNCHPADS.durianfun.bitkub.address,
+                event: DURIANFUN_TOKEN_CREATED,
+                parameter: 'market',
+            }),
+            startBlock: LAUNCHPADS.durianfun.bitkub.startBlock,
+        },
+        [CONTRACT_NAMES['durianfun:bitkub'].token]: {
+            abi: getAbi('erc20'),
+            chain: 'bitkub',
+            address: factory({
+                address: LAUNCHPADS.durianfun.bitkub.address,
+                event: DURIANFUN_TOKEN_CREATED,
+                parameter: LAUNCHPADS.durianfun.bitkub.creationEvent.tokenParam,
+            }),
+            startBlock: LAUNCHPADS.durianfun.bitkub.startBlock,
+        },
         V3Factory: {
             abi: getAbi('v3Factory'),
             chain: 'kubTestnet',

@@ -13,6 +13,7 @@ export type LaunchTokenMeta = Row<LaunchToken, typeof LAUNCH_TOKEN_META_FIELDS>
 
 export interface LaunchTokenFilter {
     chainId?: number
+    launchpadId?: string
     creator?: string
     isGraduated?: 0 | 1
     tokenAddrs?: string[]
@@ -20,6 +21,7 @@ export interface LaunchTokenFilter {
 
 export interface TokenSnapshotFilter {
     chainId?: number
+    launchpadId?: string
     tokenAddrs?: string[]
 }
 
@@ -31,6 +33,7 @@ export interface QueryOrder<TEntity> {
 function launchTokenWhere(filter: LaunchTokenFilter) {
     const where: Record<string, unknown> = {}
     if (filter.chainId !== undefined) where.chainId = filter.chainId
+    if (filter.launchpadId) where.launchpadId = filter.launchpadId
     if (filter.creator) where.creator = filter.creator.toLowerCase()
     if (filter.isGraduated !== undefined) where.isGraduated = filter.isGraduated
     if (filter.tokenAddrs) where.tokenAddr_in = filter.tokenAddrs.map((a) => a.toLowerCase())
@@ -40,6 +43,7 @@ function launchTokenWhere(filter: LaunchTokenFilter) {
 function tokenSnapshotWhere(filter: TokenSnapshotFilter) {
     const where: Record<string, unknown> = {}
     if (filter.chainId !== undefined) where.chainId = filter.chainId
+    if (filter.launchpadId) where.launchpadId = filter.launchpadId
     if (filter.tokenAddrs) where.tokenAddr_in = filter.tokenAddrs.map((a) => a.toLowerCase())
     return where
 }

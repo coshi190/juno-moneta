@@ -247,10 +247,18 @@ export async function fetchTokenBondingCurveSwaps(
 
 export async function fetchTokenV3Swaps(
     client: PonderClient,
-    { tokenAddr, chainId, limit, offset, txFrom }: TokenSwapPageArgs & { txFrom?: string }
+    {
+        tokenAddr,
+        chainId,
+        limit,
+        offset,
+        txFrom,
+        poolAddress,
+    }: TokenSwapPageArgs & { txFrom?: string; poolAddress?: string }
 ): Promise<CountedItems<V3SwapDetail>> {
     const where: Record<string, unknown> = { tokenAddr, chainId }
     if (txFrom) where.txFrom = txFrom
+    if (poolAddress) where.poolAddress = poolAddress.toLowerCase()
 
     const data = await client.request<{ v3SwapEvents: CountedItems<V3SwapDetail> }>(
         `query TokenV3Swaps($where: v3SwapEventFilter, $limit: Int!, $offset: Int!) {

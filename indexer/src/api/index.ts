@@ -6,6 +6,7 @@ import { cors } from 'hono/cors'
 import { computePnl, computePoints, computeCurve } from '@coshi190/juno-moneta-sdk'
 import { getWrappedNativeAddress } from '../config.js'
 import { parseBondingCurveSwap, parseV2Swap, parseV3Swap, type ParsedSwap } from '../parse-swaps.js'
+import { curveParamsFor } from '../launchpads/registry.js'
 import { computeWindowedTraderStats, type LeaderboardSwapEvent } from '../trader-stats.js'
 import {
     makePriceAt,
@@ -344,6 +345,7 @@ app.get('/token-price-history', async (c) => {
                 price: computeCurve({
                     nativeReserve: r.isBuy === 1 ? BigInt(r.reserveIn) : BigInt(r.reserveOut),
                     tokenReserve: r.isBuy === 1 ? BigInt(r.reserveOut) : BigInt(r.reserveIn),
+                    curve: curveParamsFor(chainId, r.launchpadId),
                 }).price,
             })
         }

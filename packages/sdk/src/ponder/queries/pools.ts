@@ -24,6 +24,7 @@ const POOL_FIELDS = [
     'token1',
     'fee',
     'tickSpacing',
+    'protocol',
 ] as const satisfies readonly (keyof V3Pool)[]
 
 const TOKEN_FIELDS = [
@@ -75,18 +76,26 @@ export type V3PoolStateRow = Row<V3PoolState, typeof POOL_STATE_FIELDS>
 export type NativeUsdPricePoint = Row<NativeUsdPriceSnapshot, typeof SNAPSHOT_POINT_FIELDS>
 export type V3TokenPrice = Row<V3TokenSnapshot, typeof V3_TOKEN_PRICE_FIELDS>
 
-export function fetchV3Pools(
-    client: PonderClient,
-    {
-        chainId,
-        protocol = 'junoswap',
-        limit = 500,
-    }: { chainId: number; protocol?: string; limit?: number }
-): Promise<V3PoolRow[]> {
+export interface V3PoolFilter {
+    chainId: number
+    protocol?: string
+    addresses?: string[]
+    limit?: number
+}
+
+function v3PoolWhere(filter: V3PoolFilter) {
+    const where: Record<string, unknown> = { chainId: filter.chainId }
+    if (filter.protocol) where.protocol = filter.protocol
+    if (filter.addresses) where.address_in = filter.addresses.map((a) => a.toLowerCase())
+    return where
+}
+
+export function fetchV3Pools(client: PonderClient, filter: V3PoolFilter): Promise<V3PoolRow[]> {
+    if (filter.addresses && filter.addresses.length === 0) return Promise.resolve([])
     return client.fetchAllPages<{ v3Pools: Page<V3PoolRow> }, V3PoolRow>(
-        `query V3Pools($chainId: Int!, $protocol: String!, $limit: Int!, $after: String) {
+        `query V3Pools($where: v3PoolFilter, $limit: Int!, $after: String) {
             v3Pools(
-                where: { chainId: $chainId, protocol: $protocol }
+                where: $where
                 limit: $limit
                 after: $after
             ) {
@@ -94,7 +103,7 @@ export function fetchV3Pools(
                 items { ${sel(POOL_FIELDS)} }
             }
         }`,
-        { chainId, protocol, limit },
+        { where: v3PoolWhere(filter), limit: filter.limit ?? 500 },
         (r) => r.v3Pools
     )
 }

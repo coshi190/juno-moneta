@@ -1,5 +1,5 @@
 import { type Abi, type Address } from 'viem'
-import { BONDING_CURVE_JUNOSWAP_ABI } from '../abis/bc-juno.js'
+import { BONDING_CURVE_JUNOSWAP_V1_ABI } from '../abis/bc-juno-v1.js'
 import { getBondingCurveDeployment } from '../configs/deployments.js'
 import { SwapPlanError, type ContractCall } from './plan-swap.js'
 
@@ -23,7 +23,7 @@ export function planCurveCall(chainId: number, action: CurveAction): ContractCal
     const deployment = getBondingCurveDeployment(chainId)
     if (!deployment) throw new SwapPlanError(`No bonding curve deployed on chain ${chainId}`)
 
-    const base = { address: deployment.address, abi: BONDING_CURVE_JUNOSWAP_ABI as Abi }
+    const base = { address: deployment.address, abi: BONDING_CURVE_JUNOSWAP_V1_ABI as Abi }
 
     switch (action.kind) {
         case 'create': {

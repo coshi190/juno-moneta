@@ -1,4 +1,4 @@
-export const BONDING_CURVE_JUNOSWAP_ABI = [
+export const BONDING_CURVE_JUNOSWAP_V1_ABI = [
     {
         type: 'function',
         name: 'buy',

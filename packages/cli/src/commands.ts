@@ -79,6 +79,7 @@ const PONDER_FLAG = '[--ponderUrl <url>]'
 interface LaunchToken {
     tokenAddr: string
     chainId: number
+    launchpadId: string
     creator: string
     name: string | null
     symbol: string | null
@@ -88,8 +89,11 @@ interface LaunchToken {
     link2: string | null
     link3: string | null
     createdTime: number
+    market: string | null
     isGraduated: number | null
     graduatedAt: number | null
+    ammPool: string | null
+    graduationTarget: number | null
     createdAtBlock: number
 }
 
@@ -134,8 +138,12 @@ const LAUNCH_TOKEN_DETAIL_FIELDS = [
     'link2',
     'link3',
     'createdTime',
+    'launchpadId',
+    'market',
     'isGraduated',
     'graduatedAt',
+    'ammPool',
+    'graduationTarget',
 ] as const satisfies readonly (keyof LaunchToken)[]
 
 const LAUNCH_TOKEN_META_FIELDS = [

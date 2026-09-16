@@ -1,14 +1,12 @@
-const PUMP_FEE_BPS = 100n
-const CREATOR_FEE_SHARE_BPS = 5000n
-export const VIRTUAL_AMOUNT = 3400n * 10n ** 18n
+import type { CurveParams } from './launchpads/registry.js'
 
-function pumpFeeFromNetAmountIn(netAmountIn: bigint): bigint {
-    if (netAmountIn <= 0n) return 0n
-    return (netAmountIn * PUMP_FEE_BPS) / (10000n - PUMP_FEE_BPS)
+function feeFromNetAmountIn(netAmountIn: bigint, feeBps: bigint): bigint {
+    if (netAmountIn <= 0n || feeBps <= 0n) return 0n
+    return (netAmountIn * feeBps) / (10000n - feeBps)
 }
 
-export function creatorFeeShareForSwap(netAmountIn: bigint): bigint {
-    const fee = pumpFeeFromNetAmountIn(netAmountIn)
+export function creatorFeeShareForSwap(netAmountIn: bigint, curve: CurveParams): bigint {
+    const fee = feeFromNetAmountIn(netAmountIn, BigInt(curve.feeBps))
     if (fee === 0n) return 0n
-    return (fee * CREATOR_FEE_SHARE_BPS) / 10000n
+    return (fee * BigInt(curve.creatorShareBps)) / 10000n
 }
