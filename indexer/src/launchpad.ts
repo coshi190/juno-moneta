@@ -1,9 +1,10 @@
 import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
-import { formatEther, zeroAddress } from 'viem'
+import { formatEther, parseEther, zeroAddress } from 'viem'
 import { readERC20Metadata } from './erc20-read.js'
 import { creatorFeeShareForSwap } from './creator-fee.js'
 import { sanitizeUsdPrice, MAX_TOKEN_USD_PRICE } from './price-history.js'
+import { computePriceFromReserves, computeMarketCapFromReserves } from './curve-math.js'
 import { recordUserSwap } from './user-pnl.js'
 import { foldTokenCandle } from './candles.js'
 import {
@@ -13,7 +14,7 @@ import {
     getAdapter,
 } from './launchpads/index.js'
 import type { HandlerArgs, LaunchpadAdapter } from './launchpads/types.js'
-import type { CurveParams, Launchpad } from './launchpads/registry.js'
+import type { Launchpad } from './launchpads/registry.js'
 
 const CURVE_ADDRESSES: Record<number, ReadonlySet<string>> = (() => {
     const byChain: Record<number, Set<string>> = {}
@@ -25,63 +26,6 @@ const CURVE_ADDRESSES: Record<number, ReadonlySet<string>> = (() => {
     }
     return byChain
 })()
-
-function calculatePriceFromReserves(
-    isBuy: boolean,
-    reserveIn: bigint,
-    reserveOut: bigint,
-    curve: CurveParams
-): number {
-    const nativeReserve = isBuy ? reserveIn : reserveOut
-    const tokenReserve = isBuy ? reserveOut : reserveIn
-    if (nativeReserve === 0n || tokenReserve === 0n) return 0
-    const effectiveReserve = parseFloat(formatEther(nativeReserve + curve.virtualReserve))
-    const tokenRes = parseFloat(formatEther(tokenReserve))
-    if (tokenRes === 0) return 0
-    return effectiveReserve / tokenRes
-}
-
-function calculateMarketCapFromReserves(
-    isBuy: boolean,
-    reserveIn: bigint,
-    reserveOut: bigint,
-    curve: CurveParams
-): string {
-    if (reserveIn === 0n || reserveOut === 0n) return '0'
-    const nativeReserve = isBuy ? reserveIn : reserveOut
-    const tokenReserve = isBuy ? reserveOut : reserveIn
-    const effectiveReserve = nativeReserve + curve.virtualReserve
-    const marketCap = (effectiveReserve * curve.totalSupply) / tokenReserve
-    return formatEther(marketCap)
-}
-
-function calculateVolume(isBuy: boolean, amountIn: bigint, amountOut: bigint): bigint {
-    return isBuy ? amountIn : amountOut
-}
-
-function calculatePreSwapPrice(
-    isBuy: boolean,
-    reserveIn: bigint,
-    reserveOut: bigint,
-    amountIn: bigint,
-    amountOut: bigint,
-    curve: CurveParams
-): number {
-    let preNative: bigint
-    let preToken: bigint
-    if (isBuy) {
-        preNative = reserveIn - amountIn
-        preToken = reserveOut + amountOut
-    } else {
-        preNative = reserveOut + amountOut
-        preToken = reserveIn - amountIn
-    }
-    if (preNative < 0n || preToken <= 0n) return 0
-    const effectiveReserve = parseFloat(formatEther(preNative + curve.virtualReserve))
-    const tokenRes = parseFloat(formatEther(preToken))
-    if (tokenRes === 0) return 0
-    return effectiveReserve / tokenRes
-}
 
 function defaultSnapshot(tokenAddr: string, chainId: number, launchpadId: string) {
     return {
@@ -137,6 +81,7 @@ async function handleCreation(args: HandlerArgs, launchpad: Launchpad, adapter: 
             link2: creation.link2,
             link3: creation.link3,
             createdTime: creation.createdTime,
+            graduationTarget: creation.graduationTarget ?? null,
             isGraduated: 0,
             graduatedAt: null,
             createdAtBlock: Number(event.block.number),
@@ -158,7 +103,7 @@ async function handleSwap(
     bindingIsBuy?: boolean
 ) {
     const { event, context } = args
-    const { chainId, launchpadId, curve } = launchpad
+    const { chainId, launchpadId } = launchpad
     const {
         tokenAddr,
         sender,
@@ -168,11 +113,22 @@ async function handleSwap(
         reserveIn,
         reserveOut,
         creatorFeeNative,
+        virtualReserve,
     } = await adapter.swap(args, bindingIsBuy)
+    const curve =
+        virtualReserve === undefined ? launchpad.curve : { ...launchpad.curve, virtualReserve }
     const tokenAddrLower = tokenAddr.toLowerCase()
     const senderLower = sender.toLowerCase()
     const id = `${chainId}-${event.block.number}-${event.log.logIndex}`
     const timestamp = Number(event.block.timestamp)
+
+    const orient = (inV: bigint, outV: bigint) =>
+        isBuy ? ([inV, outV] as const) : ([outV, inV] as const)
+    const [nativeReserve, tokenReserve] = orient(reserveIn, reserveOut)
+    const [preNative, preToken] = orient(reserveIn - amountIn, reserveOut + amountOut)
+
+    const price = computePriceFromReserves(nativeReserve, tokenReserve, curve)
+    const preSwapPrice = computePriceFromReserves(preNative, preToken, curve)
 
     await context.db.insert(schema.swapEvent).values({
         id,
@@ -185,23 +141,16 @@ async function handleSwap(
         amountOut: amountOut.toString(),
         reserveIn: reserveIn.toString(),
         reserveOut: reserveOut.toString(),
+        priceNative: price.toString(),
+        preSwapPriceNative: preSwapPrice.toString(),
         blockNumber: Number(event.block.number),
         timestamp,
         transactionHash: event.transaction.hash,
     })
 
-    const price = calculatePriceFromReserves(isBuy, reserveIn, reserveOut, curve)
-    const marketCap = calculateMarketCapFromReserves(isBuy, reserveIn, reserveOut, curve)
-    const volume = calculateVolume(isBuy, amountIn, amountOut)
+    const marketCap = computeMarketCapFromReserves(nativeReserve, tokenReserve, curve)
+    const [volume] = orient(amountIn, amountOut)
 
-    const preSwapPrice = calculatePreSwapPrice(
-        isBuy,
-        reserveIn,
-        reserveOut,
-        amountIn,
-        amountOut,
-        curve
-    )
     await foldTokenCandle(
         context,
         chainId,
@@ -241,10 +190,9 @@ async function handleSwap(
     const snap = existingSnapshot ?? defaultSnapshot(tokenAddrLower, chainId, launchpadId)
     const isNewSnapshot = !existingSnapshot
 
-    const athMarketCap = Math.max(
-        parseFloat(marketCap),
-        parseFloat(snap.athMarketCapNative ?? '0')
-    ).toString()
+    const marketCapNative = formatEther(marketCap)
+    const prevAthNative = snap.athMarketCapNative ?? '0'
+    const athMarketCap = marketCap > parseEther(prevAthNative) ? marketCapNative : prevAthNative
 
     const holderId = `${chainId}-${tokenAddrLower}-${senderLower}`
     const existingHolder = await context.db.find(schema.tokenHolder, { id: holderId })
@@ -290,9 +238,9 @@ async function handleSwap(
                 tokenAddr: tokenAddrLower,
                 chainId,
                 launchpadId,
-                lastPrice: price > 0 ? price.toString() : '0',
-                lastPriceUsd: priceUsd > 0 ? priceUsd.toString() : '0',
-                marketCapNative: marketCap,
+                lastPrice: price.toString(),
+                lastPriceUsd: priceUsd.toString(),
+                marketCapNative,
                 athMarketCapNative: athMarketCap,
                 totalBuys: isBuy ? 1 : 0,
                 totalSells: isBuy ? 0 : 1,
@@ -313,7 +261,7 @@ async function handleSwap(
         await context.db.update(schema.tokenSnapshot, { tokenAddr: tokenAddrLower }).set({
             lastPrice: price > 0 ? price.toString() : (snap.lastPrice ?? '0'),
             lastPriceUsd: priceUsd > 0 ? priceUsd.toString() : (snap.lastPriceUsd ?? '0'),
-            marketCapNative: marketCap,
+            marketCapNative,
             athMarketCapNative: athMarketCap,
             totalBuys: (snap.totalBuys ?? 0) + (isBuy ? 1 : 0),
             totalSells: (snap.totalSells ?? 0) + (isBuy ? 0 : 1),
@@ -353,7 +301,7 @@ async function handleSwap(
 
 async function handleGraduation(args: HandlerArgs, adapter: LaunchpadAdapter) {
     const { context } = args
-    const { tokenAddr: raw, ammPool: rawPool, graduationTarget } = await adapter.graduation(args)
+    const { tokenAddr: raw, ammPool: rawPool } = await adapter.graduation(args)
     const tokenAddr = raw.toLowerCase()
 
     const existing = await context.db.find(schema.launchToken, { tokenAddr })
@@ -365,10 +313,8 @@ async function handleGraduation(args: HandlerArgs, adapter: LaunchpadAdapter) {
         isGraduated: 1,
         graduatedAt: Number(args.event.block.timestamp),
         ammPool: ammPool ?? null,
-        graduationTarget: graduationTarget ?? null,
     })
 
-    // Lets the external-DEX swap handlers recognise a launch token's pool by address.
     if (ammPool) {
         await context.db
             .insert(schema.graduatedPool)

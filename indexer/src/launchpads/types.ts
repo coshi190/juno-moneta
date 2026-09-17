@@ -12,6 +12,7 @@ export interface NormalizedCreation {
     link2: string
     link3: string
     createdTime: number
+    graduationTarget?: number
     market?: string
     name?: string
     symbol?: string
@@ -26,12 +27,12 @@ export interface NormalizedSwap {
     reserveIn: bigint
     reserveOut: bigint
     creatorFeeNative?: bigint
+    virtualReserve?: bigint
 }
 
 export interface NormalizedGraduation {
     tokenAddr: string
     ammPool?: string
-    graduationTarget?: number
 }
 
 export type ContractRole = 'curve' | 'market'

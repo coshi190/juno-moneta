@@ -8,28 +8,24 @@ export interface CurveParams {
     totalSupply: bigint
     graduationAmount: bigint
     feeBps: number
-    creatorShareBps: number
 }
 
 const JUNOSWAP_V1_CURVE: CurveParams = {
     virtualReserve: 3400n * 10n ** 18n,
     totalSupply: 1000000000n * 10n ** 18n,
-    graduationAmount: 0n,
+    graduationAmount: 4000n * 10n ** 18n,
     feeBps: 100,
-    creatorShareBps: 5000,
 }
 
-function getAmountOut(
-    inputAmount: bigint,
+function swapOutput(
+    amountIn: bigint,
     inputReserve: bigint,
     outputReserve: bigint,
     feeBps: bigint
 ): bigint {
-    if (inputReserve <= 0n || outputReserve <= 0n) return 0n
-    const inputAmountWithFee = inputAmount * (10000n - feeBps)
-    const numerator = outputReserve * inputAmountWithFee
-    const denominator = inputReserve * 10000n + inputAmountWithFee
-    return numerator / denominator
+    if (amountIn <= 0n || inputReserve <= 0n || outputReserve <= 0n) return 0n
+    const amountInAfterFee = amountIn - (amountIn * feeBps) / 10000n
+    return (outputReserve * amountInAfterFee) / (inputReserve + amountInAfterFee)
 }
 
 function buyOutput(
@@ -39,9 +35,8 @@ function buyOutput(
     virtualReserve: bigint,
     feeBps: bigint
 ): bigint {
-    if (nativeAmountIn <= 0n || nativeReserve < 0n || tokenReserve <= 0n) return 0n
-    const amountInAfterFee = nativeAmountIn - (nativeAmountIn * feeBps) / 10000n
-    return getAmountOut(amountInAfterFee, virtualReserve + nativeReserve, tokenReserve, feeBps)
+    if (nativeReserve < 0n) return 0n
+    return swapOutput(nativeAmountIn, virtualReserve + nativeReserve, tokenReserve, feeBps)
 }
 
 function sellOutput(
@@ -51,9 +46,8 @@ function sellOutput(
     virtualReserve: bigint,
     feeBps: bigint
 ): bigint {
-    if (tokenAmountIn <= 0n || tokenReserve <= 0n || nativeReserve <= 0n) return 0n
-    const amountInAfterFee = tokenAmountIn - (tokenAmountIn * feeBps) / 10000n
-    return getAmountOut(amountInAfterFee, tokenReserve, virtualReserve + nativeReserve, feeBps)
+    if (nativeReserve <= 0n) return 0n
+    return swapOutput(tokenAmountIn, tokenReserve, virtualReserve + nativeReserve, feeBps)
 }
 
 function graduationTarget(
@@ -129,19 +123,6 @@ function graduationSqrtPriceX96(
     return sqrtPriceX96 > MAX_UINT160 ? MAX_UINT160 : sqrtPriceX96
 }
 
-function spotPrice(nativeReserve: bigint, tokenReserve: bigint, virtualAmount: bigint): number {
-    if (tokenReserve <= 0n) return 0
-    const tokenRes = parseFloat(formatEther(tokenReserve))
-    if (tokenRes === 0) return 0
-    return parseFloat(formatEther(nativeReserve + virtualAmount)) / tokenRes
-}
-
-export interface CurveSwap {
-    isBuy: boolean
-    amountIn: bigint
-    amountOut: bigint
-}
-
 export interface CurveInputs {
     nativeReserve: bigint
     tokenReserve: bigint
@@ -153,7 +134,6 @@ export interface CurveInputs {
     sellAmountIn?: bigint
     token?: `0x${string}`
     wrappedNative?: `0x${string}`
-    swap?: CurveSwap
 }
 
 export interface CurveGraduation {
@@ -165,10 +145,6 @@ export interface CurveGraduation {
 }
 
 export interface CurveResult {
-    price: number
-    marketCap: number
-    preSwapPrice: number
-    preSwapMarketCap: number
     buyOutput: bigint
     sellOutput: bigint
     graduation: CurveGraduation
@@ -184,34 +160,16 @@ export function computeCurve(input: CurveInputs): CurveResult {
         sellAmountIn = 0n,
         token,
         wrappedNative,
-        swap,
     } = input
 
     const graduationAmount = input.graduationAmount ?? curve.graduationAmount
     const virtualReserve = input.virtualAmount ?? curve.virtualReserve
     const feeBps = BigInt(curve.feeBps)
     const { totalSupply } = curve
-    const supply = parseFloat(formatEther(totalSupply))
-
-    const price = spotPrice(nativeReserve, tokenReserve, virtualReserve)
-
-    let preSwapPrice = price
-    if (swap) {
-        const preNative = swap.isBuy
-            ? nativeReserve - swap.amountIn
-            : nativeReserve + swap.amountOut
-        const preToken = swap.isBuy ? tokenReserve + swap.amountOut : tokenReserve - swap.amountIn
-        preSwapPrice =
-            preNative < 0n || preToken <= 0n ? 0 : spotPrice(preNative, preToken, virtualReserve)
-    }
 
     const exactReserve = exactGraduationReserve(virtualReserve, graduationAmount, curve.feeBps)
 
     return {
-        price,
-        marketCap: price * supply,
-        preSwapPrice,
-        preSwapMarketCap: preSwapPrice * supply,
         buyOutput: buyOutput(buyAmountIn, nativeReserve, tokenReserve, virtualReserve, feeBps),
         sellOutput: sellOutput(sellAmountIn, nativeReserve, tokenReserve, virtualReserve, feeBps),
         graduation: {

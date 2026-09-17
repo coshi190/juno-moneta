@@ -115,11 +115,3 @@ const LAUNCHPADS_BY_CHAIN: Record<number, Launchpad[]> = (() => {
 export function getLaunchpads(chainId: number): Launchpad[] {
     return LAUNCHPADS_BY_CHAIN[chainId] ?? []
 }
-
-export function findLaunchpad(chainId: number, launchpadId: string): Launchpad | undefined {
-    return getLaunchpads(chainId).find((lp) => lp.launchpadId === launchpadId)
-}
-
-export function curveParamsFor(chainId: number, launchpadId: string): CurveParams {
-    return findLaunchpad(chainId, launchpadId)?.curve ?? JUNOSWAP_V1_CURVE
-}

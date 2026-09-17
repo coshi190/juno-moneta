@@ -31,6 +31,9 @@ export const launchMarket = onchainTable('launch_market', (t) => ({
     market: t.text().primaryKey(),
     chainId: t.integer().notNull(),
     tokenAddr: t.text().notNull(),
+    virtualReserve: t.text(),
+    lastKubReserve: t.text(),
+    lastPriceAfter: t.text(),
 }))
 
 export const graduatedPool = onchainTable('graduated_pool', (t) => ({
@@ -52,6 +55,8 @@ export const swapEvent = onchainTable(
         amountOut: t.text().notNull(),
         reserveIn: t.text().notNull(),
         reserveOut: t.text().notNull(),
+        priceNative: t.text().notNull().default('0'),
+        preSwapPriceNative: t.text().notNull().default('0'),
         blockNumber: t.integer().notNull(),
         timestamp: t.integer().notNull(),
         transactionHash: t.text().notNull(),

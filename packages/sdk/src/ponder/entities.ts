@@ -93,6 +93,8 @@ export interface SwapEvent {
     amountOut: string
     reserveIn: string
     reserveOut: string
+    priceNative: string
+    preSwapPriceNative: string
     blockNumber: number
     timestamp: number
     transactionHash: string

@@ -11,9 +11,31 @@ const WAD = 10n ** 18n
 const CREATOR_FEE_PIPS = 67n
 const PIPS_DENOMINATOR = 100_000n
 
-function derivedTokenReserve(kubReserve: bigint, priceAfter: bigint): bigint {
+function derivedTokenReserve(
+    kubReserve: bigint,
+    priceAfter: bigint,
+    virtualReserve: bigint
+): bigint {
     if (priceAfter <= 0n) return TOTAL_SUPPLY
-    return ((kubReserve + DURIANFUN_VIRTUAL_RESERVE) * WAD) / priceAfter
+    return ((kubReserve + virtualReserve) * WAD) / priceAfter
+}
+
+const MIN_PRICE_MOVE_PPM = 1_000_000n
+
+function solveVirtualReserve(
+    prevKub: bigint,
+    prevPrice: bigint,
+    kub: bigint,
+    price: bigint,
+    tokenDelta: bigint
+): bigint | null {
+    const denominator = prevPrice - price
+    const move = denominator < 0n ? -denominator : denominator
+    if (move * MIN_PRICE_MOVE_PPM < prevPrice) return null
+
+    const numerator = (tokenDelta * prevPrice * price) / WAD + prevKub * price - kub * prevPrice
+    const virtualReserve = numerator / denominator
+    return virtualReserve > 0n ? virtualReserve : null
 }
 
 export const durianfunAdapter: LaunchpadAdapter = {
@@ -29,7 +51,7 @@ export const durianfunAdapter: LaunchpadAdapter = {
     },
 
     async creation({ event }) {
-        const { token, market, creator, name, symbol, timestamp } = event.args
+        const { token, market, creator, name, symbol, timestamp, graduationTarget } = event.args
 
         let logo = ''
         try {
@@ -54,6 +76,7 @@ export const durianfunAdapter: LaunchpadAdapter = {
             link2: '',
             link3: '',
             createdTime: Number(timestamp ?? 0),
+            graduationTarget: graduationTarget === undefined ? undefined : Number(graduationTarget),
         }
     },
 
@@ -66,11 +89,34 @@ export const durianfunAdapter: LaunchpadAdapter = {
 
         const { kubReserve, priceAfter, feeKub } = event.args
         const reserveNative = BigInt(kubReserve)
-        const reserveToken = derivedTokenReserve(reserveNative, BigInt(priceAfter))
+        const price = BigInt(priceAfter)
 
         const buy = isBuy === true
         const amountIn = BigInt(buy ? event.args.kubIn : event.args.tokenIn)
         const amountOut = BigInt(buy ? event.args.tokensOut : event.args.kubOut)
+
+        let solved = registered.virtualReserve ? BigInt(registered.virtualReserve) : null
+
+        if (solved === null) {
+            solved =
+                registered.lastKubReserve && registered.lastPriceAfter
+                    ? solveVirtualReserve(
+                          BigInt(registered.lastKubReserve),
+                          BigInt(registered.lastPriceAfter),
+                          reserveNative,
+                          price,
+                          buy ? -amountOut : amountIn
+                      )
+                    : null
+            await context.db.update(schema.launchMarket, { market }).set({
+                virtualReserve: solved?.toString() ?? null,
+                lastKubReserve: reserveNative.toString(),
+                lastPriceAfter: price.toString(),
+            })
+        }
+
+        const virtualReserve = solved ?? DURIANFUN_VIRTUAL_RESERVE
+        const reserveToken = derivedTokenReserve(reserveNative, price, virtualReserve)
         const grossNative = buy ? amountIn : amountOut + BigInt(feeKub)
 
         const swap: NormalizedSwap = {
@@ -82,6 +128,7 @@ export const durianfunAdapter: LaunchpadAdapter = {
             reserveIn: buy ? reserveNative : reserveToken,
             reserveOut: buy ? reserveToken : reserveNative,
             creatorFeeNative: (grossNative * CREATOR_FEE_PIPS) / PIPS_DENOMINATOR,
+            virtualReserve,
         }
         return swap
     },
@@ -90,7 +137,6 @@ export const durianfunAdapter: LaunchpadAdapter = {
         return {
             tokenAddr: event.args.token,
             ammPool: event.args.ammPool,
-            graduationTarget: Number(event.args.graduationTarget ?? 0),
         }
     },
 }

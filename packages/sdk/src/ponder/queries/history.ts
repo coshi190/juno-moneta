@@ -9,6 +9,8 @@ const BC_HISTORY_FIELDS = [
     'amountOut',
     'reserveIn',
     'reserveOut',
+    'priceNative',
+    'preSwapPriceNative',
     'sender',
 ] as const satisfies readonly (keyof SwapEvent)[]
 
@@ -27,6 +29,7 @@ const BC_PRICE_POINT_FIELDS = [
     'isBuy',
     'reserveIn',
     'reserveOut',
+    'priceNative',
 ] as const satisfies readonly (keyof SwapEvent)[]
 
 const V3_PRICE_POINT_FIELDS = [
