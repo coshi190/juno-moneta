@@ -1,6 +1,17 @@
-import { dim, formatScalar, isScalar, pad, width } from './format.js'
+import { styleText } from 'node:util'
 
-type Row = Record<string, unknown>
+const COLOR = styleText('dim', 'x') !== 'x'
+
+const ANSI = /\u001b\[[0-9;]*m/g
+
+const INTEGERS = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
+const DECIMALS = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 })
+const SIGNIFICANT = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 6 })
+
+const TIME_KEY = /(?:^|[a-z])(?:Time|At)$|(?:^|\.)timestamp$/
+const GROUP_FROM = 1e6
+
+const NULL_TEXT = '—'
 
 const GAP = '  '
 const INDENT = '  '
@@ -9,13 +20,36 @@ const KEY_COLUMN = 'key'
 const RULE_WIDTH = 24
 const FALLBACK_WIDTH = 120
 
-function terminalWidth(): number {
+type Row = Record<string, unknown>
+
+function dim(text: string): string {
+    return COLOR ? styleText('dim', text, { validateStream: false }) : text
+}
+
+function width(text: string): number {
+    return text.replace(ANSI, '').length
+}
+
+function pad(text: string, size: number, right: boolean): string {
+    const fill = ' '.repeat(Math.max(0, size - width(text)))
+    return right ? fill + text : text + fill
+}
+
+export function terminalWidth(): number {
     if (process.stdout.isTTY !== true) return Number.POSITIVE_INFINITY
     return process.stdout.columns ?? FALLBACK_WIDTH
 }
 
 function normalize(value: unknown): unknown {
-    return value instanceof Set ? [...value] : value
+    if (value instanceof Set) return [...value]
+    if (value instanceof Map) return Object.fromEntries(value)
+    return value
+}
+
+function isScalar(value: unknown): boolean {
+    if (value === null || value === undefined) return true
+    const type = typeof value
+    return type === 'string' || type === 'number' || type === 'boolean' || type === 'bigint'
 }
 
 function isRecord(value: unknown): value is Row {
@@ -24,6 +58,27 @@ function isRecord(value: unknown): value is Row {
 
 function isScalarArray(value: unknown): value is unknown[] {
     return Array.isArray(value) && value.every(isScalar)
+}
+
+function formatNumber(value: number, key: string | undefined): string {
+    if (!Number.isFinite(value)) return String(value)
+    if (key !== undefined && TIME_KEY.test(key) && value >= 1e9 && value <= 4e9) {
+        return new Date(value * 1000).toISOString()
+    }
+    if (Number.isInteger(value)) {
+        return Math.abs(value) < GROUP_FROM ? String(value) : INTEGERS.format(value)
+    }
+    const abs = Math.abs(value)
+    if (abs >= 1) return DECIMALS.format(value)
+    if (abs >= 1e-9) return SIGNIFICANT.format(value)
+    return value.toExponential(4)
+}
+
+function formatScalar(value: unknown, key?: string): string {
+    if (value === null || value === undefined) return dim(NULL_TEXT)
+    if (typeof value === 'number') return formatNumber(value, key)
+    if (typeof value === 'bigint') return value.toString()
+    return String(value)
 }
 
 function indentAll(lines: string[], prefix: string): string[] {
@@ -53,23 +108,26 @@ function renderPairs(entries: (readonly [string, unknown])[]): string[] {
     const labelWidth = labels.length > 0 ? Math.max(...labels) : 0
     const lines: string[] = []
 
-    const inline = entries.every(([key, value]) => {
-        if (!isScalarArray(value) || value.length === 0) return true
-        const joined = value.map((item) => formatScalar(item, key)).join(', ')
-        return labelWidth + GAP.length + width(joined) <= terminalWidth()
-    })
+    const lists = entries.map(([key, value]) =>
+        isScalarArray(value) ? value.map((item) => formatScalar(item, key)) : undefined
+    )
+    const limit = terminalWidth()
+    const inline = lists.every(
+        (cells) =>
+            cells === undefined ||
+            cells.length === 0 ||
+            labelWidth + GAP.length + width(cells.join(', ')) <= limit
+    )
 
-    for (const [key, value] of entries) {
+    for (const [index, [key, value]] of entries.entries()) {
         const label = dim(pad(key, labelWidth, false)) + GAP
+        const cells = lists[index]
         if (isScalar(value)) {
             lines.push((label + formatScalar(value, key)).trimEnd())
-        } else if (isScalarArray(value)) {
-            if (value.length === 0) {
+        } else if (cells !== undefined) {
+            if (cells.length === 0) {
                 lines.push(label + dim(EMPTY))
-                continue
-            }
-            const cells = value.map((item) => formatScalar(item, key))
-            if (inline) {
+            } else if (inline) {
                 lines.push(label + cells.join(', '))
             } else {
                 lines.push(dim(key))
@@ -158,4 +216,14 @@ function renderLines(value: unknown): string[] {
 
 export function render(value: unknown): string {
     return renderLines(value).join('\n')
+}
+
+function replacer(_key: string, value: unknown): unknown {
+    if (typeof value === 'bigint') return value.toString()
+    return normalize(value)
+}
+
+export function formatJson(value: unknown): string {
+    if (value === undefined) return 'null'
+    return JSON.stringify(value, replacer, 2)
 }

@@ -1,13 +1,25 @@
-import { getChains, type ChainSlug } from './config.js'
+const CHAINS = {
+    kubTestnet: 25925,
+    bitkub: 96,
+    jbc: 8899,
+    bsc: 56,
+    base: 8453,
+    worldchain: 480,
+} as const
+
+type ChainSlug = keyof typeof CHAINS
 
 export class UsageError extends Error {}
-
-const CHAINS = getChains()
 
 export const CHAIN_SLUGS = Object.keys(CHAINS) as ChainSlug[]
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/
+
+function required(value: string | undefined, flag: string): string {
+    if (value === undefined) throw new UsageError(`missing required flag --${flag}`)
+    return value.trim()
+}
 
 function normalizeAddress(item: string): string {
     if (!ADDRESS.test(item)) {
@@ -16,17 +28,19 @@ function normalizeAddress(item: string): string {
     return item.toLowerCase()
 }
 
-export function parseAddress(value: string | undefined, flag: string): string {
-    if (value === undefined) throw new UsageError(`missing required flag --${flag}`)
-    return normalizeAddress(value.trim())
-}
-
-export function parseAddressList(value: string | undefined, flag: string): string[] {
-    if (value === undefined) throw new UsageError(`missing required flag --${flag}`)
-    const items = value
+function splitList(value: string): string[] {
+    return value
         .split(',')
         .map((item) => item.trim())
         .filter((item) => item.length > 0)
+}
+
+export function parseAddress(value: string | undefined, flag: string): string {
+    return normalizeAddress(required(value, flag))
+}
+
+export function parseAddressList(value: string | undefined, flag: string): string[] {
+    const items = splitList(required(value, flag))
     if (items.length === 0) throw new UsageError(`--${flag} requires at least one address`)
     return items.map(normalizeAddress)
 }
@@ -37,19 +51,11 @@ export function optionalAddress(value: string | undefined): string | undefined {
 
 export function optionalAddressList(value: string | undefined): string[] | undefined {
     if (value === undefined) return undefined
-    return value
-        .split(',')
-        .map((item) => item.trim())
-        .filter((item) => item.length > 0)
-        .map(normalizeAddress)
+    return splitList(value).map(normalizeAddress)
 }
 
 export function parseTokenIds(value: string | undefined): bigint[] {
-    if (value === undefined) throw new UsageError('missing required flag --tokenIds')
-    const items = value
-        .split(',')
-        .map((item) => item.trim())
-        .filter((item) => item.length > 0)
+    const items = splitList(required(value, 'tokenIds'))
     if (items.length === 0) throw new UsageError('--tokenIds requires at least one token id')
     return items.map((item) => {
         if (!/^\d+$/.test(item)) {
@@ -81,38 +87,98 @@ function resolveChainId(value: string): number {
 }
 
 export function parseChainId(value: string | undefined): number {
-    if (value === undefined) throw new UsageError('missing required flag --chainId')
-    return resolveChainId(value)
+    return resolveChainId(required(value, 'chainId'))
 }
 
 export function optionalChainId(value: string | undefined): number | undefined {
-    return value === undefined ? undefined : resolveChainId(value)
+    return value === undefined ? undefined : resolveChainId(value.trim())
 }
 
-function optionalPositiveInt(value: string | undefined, flag: string): number | undefined {
+function optionalUint(value: string | undefined, flag: string, min: 0 | 1): number | undefined {
     if (value === undefined) return undefined
-    if (!/^\d+$/.test(value) || Number(value) === 0) {
-        throw new UsageError(`invalid --${flag} "${value}" (expected a positive integer)`)
+    const text = value.trim()
+    if (!/^\d+$/.test(text) || Number(text) < min) {
+        const expected = min === 1 ? 'positive' : 'non-negative'
+        throw new UsageError(`invalid --${flag} "${value}" (expected a ${expected} integer)`)
     }
-    return Number(value)
+    return Number(text)
 }
 
 export function optionalLimit(value: string | undefined): number | undefined {
-    return optionalPositiveInt(value, 'limit')
+    return optionalUint(value, 'limit', 1)
 }
 
-export function optionalProtocol(value: string | undefined): string | undefined {
-    if (value === undefined) return undefined
-    const protocol = value.trim()
-    if (protocol.length === 0) throw new UsageError('--protocol requires a name')
-    return protocol
+export function optionalNonNegativeInt(
+    value: string | undefined,
+    flag: string
+): number | undefined {
+    return optionalUint(value, flag, 0)
 }
 
-export function optionalGraduated(value: string | undefined): 0 | 1 | undefined {
+export function optionalName(value: string | undefined, flag: string): string | undefined {
     if (value === undefined) return undefined
-    if (value === '0') return 0
-    if (value === '1') return 1
-    throw new UsageError(`invalid --isGraduated "${value}" (expected 0 or 1)`)
+    const name = value.trim()
+    if (name.length === 0) throw new UsageError(`--${flag} requires a name`)
+    return name
+}
+
+const RELATIVE = /^(\d+)([mhd])$/
+
+export function parseTime(value: string | undefined, flag: string): number {
+    const text = required(value, flag)
+
+    const relative = RELATIVE.exec(text)
+    if (relative) {
+        const unit = relative[2]
+        const seconds = Number(relative[1]) * (unit === 'm' ? 60 : unit === 'h' ? 3600 : 86400)
+        return Math.floor(Date.now() / 1000) - seconds
+    }
+
+    if (!/^\d+$/.test(text)) {
+        throw new UsageError(
+            `invalid --${flag} "${value}" (expected unix seconds or a span like 30m, 24h, 7d)`
+        )
+    }
+    return Number(text)
+}
+
+export function parseEnum<T extends string>(
+    value: string | undefined,
+    flag: string,
+    allowed: readonly T[]
+): T {
+    const choice = required(value, flag) as T
+    if (!allowed.includes(choice)) {
+        throw new UsageError(
+            `invalid --${flag} "${value}" (expected one of: ${allowed.join(', ')})`
+        )
+    }
+    return choice
+}
+
+export function parseInteger(value: string | undefined, flag: string): number {
+    const text = required(value, flag)
+    if (!/^-?\d+$/.test(text)) {
+        throw new UsageError(`invalid --${flag} "${value}" (expected a whole number)`)
+    }
+    return Number(text)
+}
+
+export function optionalNumber(value: string | undefined, flag: string): number | undefined {
+    if (value === undefined) return undefined
+    const text = value.trim()
+    if (!/^-?\d+(\.\d+)?$/.test(text)) {
+        throw new UsageError(`invalid --${flag} "${value}" (expected a number)`)
+    }
+    return Number(text)
+}
+
+export function optionalFlag(value: string | undefined, flag: string): 0 | 1 | undefined {
+    if (value === undefined) return undefined
+    const text = value.trim()
+    if (text === '0') return 0
+    if (text === '1') return 1
+    throw new UsageError(`invalid --${flag} "${value}" (expected 0 or 1)`)
 }
 
 export function parseFields<TEntity>(
@@ -125,10 +191,7 @@ export function parseFields<TEntity>(
     const preset = presets[value]
     if (preset !== undefined) return preset
 
-    const names = value
-        .split(',')
-        .map((item) => item.trim())
-        .filter((item) => item.length > 0)
+    const names = splitList(value)
     if (names.length === 0) {
         throw new UsageError(
             `--fields requires field names or one of: ${Object.keys(presets).join(', ')}`
@@ -181,13 +244,4 @@ export function parseRpcUrl(value: string | undefined, chainId: number): string 
         )
     }
     return url
-}
-
-export function parseDecimalAmount(value: string | undefined, flag: string): string {
-    if (value === undefined) throw new UsageError(`missing required flag --${flag}`)
-    const amount = value.trim()
-    if (!/^\d+(\.\d+)?$/.test(amount)) {
-        throw new UsageError(`invalid --${flag} "${value}" (expected a decimal amount like 1.5)`)
-    }
-    return amount
 }
