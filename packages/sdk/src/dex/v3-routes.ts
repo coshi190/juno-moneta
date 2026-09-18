@@ -55,7 +55,8 @@ export function enumerateHopPaths(
             }
         }
     }
-    return paths
+
+    return paths.filter((p) => new Set(p.map((t) => t.toLowerCase())).size === p.length)
 }
 
 function crossProduct(perLeg: number[][]): number[][] {
@@ -88,7 +89,13 @@ function buildRouteCandidates(
         dexId === undefined ? getDexes(chainId, 'v3').map((dex) => dex.dexId) : [dexId].flat()
     if (dexIds.length === 0) return []
 
-    const rawPaths = enumerateHopPaths(tokenIn, tokenOut, connectors, maxHops)
+    const resolve = (a: Address) => native.getSwapAddress(a, chainId)
+    const rawPaths = enumerateHopPaths(
+        resolve(tokenIn),
+        resolve(tokenOut),
+        connectors.map(resolve),
+        maxHops
+    )
     if (rawPaths.length === 0) return []
 
     const candidates: V3RouteCandidate[] = []
@@ -97,12 +104,7 @@ function buildRouteCandidates(
         if (!cfg?.factory || !cfg?.quoter) continue
         const feeTiers = cfg.feeTiers
 
-        for (const rawPath of rawPaths) {
-            const tokens = rawPath.map((a) => native.getSwapAddress(a, chainId))
-            const collapsed = tokens.some(
-                (t, i) => i > 0 && t.toLowerCase() === tokens[i - 1]!.toLowerCase()
-            )
-            if (collapsed) continue
+        for (const tokens of rawPaths) {
             candidates.push({ dexId: id, factory: cfg.factory, feeTiers, tokens })
         }
     }

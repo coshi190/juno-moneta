@@ -45,20 +45,20 @@ function buildV2RouteCandidates(
         dexId === undefined ? getDexes(chainId, 'v2').map((dex) => dex.dexId) : [dexId].flat()
     if (dexIds.length === 0) return []
 
-    const rawPaths = enumerateHopPaths(tokenIn, tokenOut, connectors, maxHops)
-    if (rawPaths.length === 0) return []
-
     const candidates: V2RouteCandidate[] = []
     for (const id of dexIds) {
         const cfg = findDex(chainId, id, 'v2')
         if (!cfg?.factory) continue
 
-        for (const rawPath of rawPaths) {
-            const tokens = rawPath.map((a) => native.getSwapAddress(a, chainId, cfg.wnative))
-            const collapsed = tokens.some(
-                (t, i) => i > 0 && t.toLowerCase() === tokens[i - 1]!.toLowerCase()
-            )
-            if (collapsed) continue
+        const resolve = (a: Address) => native.getSwapAddress(a, chainId, cfg.wnative)
+        const rawPaths = enumerateHopPaths(
+            resolve(tokenIn),
+            resolve(tokenOut),
+            connectors.map(resolve),
+            maxHops
+        )
+
+        for (const tokens of rawPaths) {
             candidates.push({ dexId: id, factory: cfg.factory, tokens })
         }
     }
