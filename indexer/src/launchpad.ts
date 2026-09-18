@@ -2,7 +2,6 @@ import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
 import { formatEther, parseEther, zeroAddress } from 'viem'
 import { readERC20Metadata } from './erc20-read.js'
-import { creatorFeeShareForSwap } from './creator-fee.js'
 import { sanitizeUsdPrice, MAX_TOKEN_USD_PRICE } from './price-history.js'
 import { computePriceFromReserves, computeMarketCapFromReserves } from './curve-math.js'
 import { recordUserSwap } from './user-pnl.js'
@@ -161,9 +160,7 @@ async function handleSwap(
         Number(formatEther(volume)),
         preSwapPrice
     )
-    const creatorFeeShare = creatorFeeShareForSwap(amountIn, curve)
-    const creatorFeeNativeDelta = creatorFeeNative ?? (isBuy ? creatorFeeShare : 0n)
-    const creatorFeeTokenDelta = creatorFeeNative !== undefined ? 0n : isBuy ? 0n : creatorFeeShare
+    const creatorFeeNativeDelta = creatorFeeNative ?? 0n
 
     const nativePriceRecord = await context.db.find(schema.nativeUsdPrice, { chainId })
     const nativeUsd = nativePriceRecord ? parseFloat(nativePriceRecord.price) : 0
@@ -248,7 +245,7 @@ async function handleSwap(
                 holderCount,
                 creatorFeeNative: creatorFeeNativeDelta.toString(),
                 creatorFeeClaimedNative: '0',
-                creatorFeeToken: creatorFeeTokenDelta.toString(),
+                creatorFeeToken: '0',
                 creatorFeeClaimedToken: '0',
                 lastSwapAt: timestamp,
                 price1dAgo,
@@ -269,9 +266,6 @@ async function handleSwap(
             holderCount,
             creatorFeeNative: (
                 BigInt(snap.creatorFeeNative ?? '0') + creatorFeeNativeDelta
-            ).toString(),
-            creatorFeeToken: (
-                BigInt(snap.creatorFeeToken ?? '0') + creatorFeeTokenDelta
             ).toString(),
             lastSwapAt: timestamp,
             price1dAgo,
@@ -396,26 +390,27 @@ async function applyHolderDelta(
     }
 }
 
-type CurveEvent = 'CurveJunoswapKubTestnet:Creation'
+type DynamicEvent = Parameters<typeof ponder.on>[0]
 
 for (const { chainSlug, launchpad } of enabledLaunchpads()) {
     const adapter = getAdapter(launchpad.launchpadId)
     const names = contractNames(launchpad.launchpadId, chainSlug)
     const { creation, swaps, graduation } = adapter.bindings
-    const bind = (contract: string, event: string) => `${contract}:${event}` as CurveEvent
+    const bind = (contract: string, event: string) =>
+        `${contract}:${event}` as DynamicEvent
 
     ponder.on(bind(contractNameFor(names, creation.contract), creation.event), (args) =>
-        handleCreation(args as HandlerArgs, launchpad, adapter)
+        handleCreation(args, launchpad, adapter)
     )
     for (const swap of swaps) {
         ponder.on(bind(contractNameFor(names, swap.contract), swap.event), (args) =>
-            handleSwap(args as HandlerArgs, launchpad, adapter, swap.isBuy)
+            handleSwap(args, launchpad, adapter, swap.isBuy)
         )
     }
     ponder.on(bind(contractNameFor(names, graduation.contract), graduation.event), (args) =>
-        handleGraduation(args as HandlerArgs, adapter)
+        handleGraduation(args, adapter)
     )
     ponder.on(bind(names.token, 'Transfer'), (args) =>
-        handleTransfer(args as HandlerArgs, launchpad.chainId)
+        handleTransfer(args, launchpad.chainId)
     )
 }

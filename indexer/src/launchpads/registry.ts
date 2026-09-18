@@ -6,9 +6,6 @@ import { DURIANFUN_FACTORY_ABI, DURIANFUN_MARKET_ABI } from '../abis/durianfun.j
 export interface CurveParams {
     virtualReserve: bigint
     totalSupply: bigint
-    graduationAmount: bigint
-    feeBps: number
-    creatorShareBps: number
 }
 
 export interface CreationEvent {
@@ -40,9 +37,6 @@ function deployed(launchpadId: string, chainId: number) {
 const JUNOSWAP_V1_CURVE: CurveParams = {
     virtualReserve: 3400n * 10n ** 18n,
     totalSupply: 1_000_000_000n * 10n ** 18n,
-    graduationAmount: 4000n * 10n ** 18n,
-    feeBps: 100,
-    creatorShareBps: 5000,
 }
 
 const JUNOSWAP_V1_CREATION = {
@@ -55,9 +49,6 @@ export const DURIANFUN_VIRTUAL_RESERVE = 1_523_821_243_257_000_000_000n
 const DURIANFUN_CURVE: CurveParams = {
     virtualReserve: DURIANFUN_VIRTUAL_RESERVE,
     totalSupply: 1_000_000_000n * 10n ** 18n,
-    graduationAmount: 4400n * 10n ** 18n,
-    feeBps: 117,
-    creatorShareBps: 0,
 }
 
 const DURIANFUN_CREATION = {
