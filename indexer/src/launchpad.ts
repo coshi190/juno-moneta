@@ -396,8 +396,7 @@ for (const { chainSlug, launchpad } of enabledLaunchpads()) {
     const adapter = getAdapter(launchpad.launchpadId)
     const names = contractNames(launchpad.launchpadId, chainSlug)
     const { creation, swaps, graduation } = adapter.bindings
-    const bind = (contract: string, event: string) =>
-        `${contract}:${event}` as DynamicEvent
+    const bind = (contract: string, event: string) => `${contract}:${event}` as DynamicEvent
 
     ponder.on(bind(contractNameFor(names, creation.contract), creation.event), (args) =>
         handleCreation(args, launchpad, adapter)
@@ -410,7 +409,5 @@ for (const { chainSlug, launchpad } of enabledLaunchpads()) {
     ponder.on(bind(contractNameFor(names, graduation.contract), graduation.event), (args) =>
         handleGraduation(args, adapter)
     )
-    ponder.on(bind(names.token, 'Transfer'), (args) =>
-        handleTransfer(args, launchpad.chainId)
-    )
+    ponder.on(bind(names.token, 'Transfer'), (args) => handleTransfer(args, launchpad.chainId))
 }
