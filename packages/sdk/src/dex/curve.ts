@@ -99,6 +99,7 @@ function readyToGraduate(
     isGraduated: boolean
 ): boolean {
     if (isGraduated || graduationAmount === 0n) return false
+    if (tokenReserve <= 0n) return false
     return tokenReserve * graduationAmount <= totalSupply * nativeReserve
 }
 
@@ -123,10 +124,13 @@ function graduationSqrtPriceX96(
     return sqrtPriceX96 > MAX_UINT160 ? MAX_UINT160 : sqrtPriceX96
 }
 
+export type GraduationMode = 'implicit' | 'flat'
+
 export interface CurveInputs {
     nativeReserve: bigint
     tokenReserve: bigint
     curve?: CurveParams
+    graduationMode?: GraduationMode
     virtualAmount?: bigint
     graduationAmount?: bigint
     isGraduated?: boolean
@@ -158,6 +162,7 @@ export function computeCurve(input: CurveInputs): CurveResult {
         isGraduated = false,
         buyAmountIn = 0n,
         sellAmountIn = 0n,
+        graduationMode = 'implicit',
         token,
         wrappedNative,
     } = input
@@ -167,22 +172,29 @@ export function computeCurve(input: CurveInputs): CurveResult {
     const feeBps = BigInt(curve.feeBps)
     const { totalSupply } = curve
 
-    const exactReserve = exactGraduationReserve(virtualReserve, graduationAmount, curve.feeBps)
+    const isFlat = graduationMode === 'flat'
+    const exactReserve = isFlat
+        ? graduationAmount
+        : exactGraduationReserve(virtualReserve, graduationAmount, curve.feeBps)
 
     return {
         buyOutput: buyOutput(buyAmountIn, nativeReserve, tokenReserve, virtualReserve, feeBps),
         sellOutput: sellOutput(sellAmountIn, nativeReserve, tokenReserve, virtualReserve, feeBps),
         graduation: {
-            target: graduationTarget(tokenReserve, graduationAmount, totalSupply),
+            target: isFlat
+                ? graduationAmount
+                : graduationTarget(tokenReserve, graduationAmount, totalSupply),
             exactReserve,
             progress: stableProgress(nativeReserve, exactReserve),
-            isReady: readyToGraduate(
-                nativeReserve,
-                tokenReserve,
-                graduationAmount,
-                totalSupply,
-                isGraduated
-            ),
+            isReady: isFlat
+                ? !isGraduated && graduationAmount > 0n && nativeReserve >= graduationAmount
+                : readyToGraduate(
+                      nativeReserve,
+                      tokenReserve,
+                      graduationAmount,
+                      totalSupply,
+                      isGraduated
+                  ),
             sqrtPriceX96: graduationSqrtPriceX96(token, wrappedNative, nativeReserve, tokenReserve),
         },
     }

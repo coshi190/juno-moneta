@@ -1,6 +1,7 @@
 import { type Abi, type Address } from 'viem'
 import { BONDING_CURVE_JUNOSWAP_V1_ABI } from '../abis/bc-juno-v1.js'
-import { getBondingCurveDeployment } from '../configs/deployments.js'
+import { BONDING_CURVE_JUNOSWAP_V1_1_ABI } from '../abis/bc-juno-v1-1.js'
+import { DEFAULT_LAUNCHPAD_ID, getBondingCurveDeployment } from '../configs/deployments.js'
 import { SwapPlanError, type ContractCall } from './plan-swap.js'
 
 export interface CurveTokenMetadata {
@@ -19,11 +20,22 @@ export type CurveAction =
     | { kind: 'sell'; token: Address; amountIn: bigint; minOut: bigint }
     | { kind: 'graduate'; token: Address }
 
-export function planCurveCall(chainId: number, action: CurveAction): ContractCall {
-    const deployment = getBondingCurveDeployment(chainId)
-    if (!deployment) throw new SwapPlanError(`No bonding curve deployed on chain ${chainId}`)
+export function planCurveCall(
+    chainId: number,
+    action: CurveAction,
+    launchpadId: string = DEFAULT_LAUNCHPAD_ID
+): ContractCall {
+    const deployment = getBondingCurveDeployment(chainId, launchpadId)
+    if (!deployment) {
+        throw new SwapPlanError(`No "${launchpadId}" bonding curve deployed on chain ${chainId}`)
+    }
 
-    const base = { address: deployment.address, abi: BONDING_CURVE_JUNOSWAP_V1_ABI as Abi }
+    const abi = (
+        launchpadId === 'junoswap-v1_1'
+            ? BONDING_CURVE_JUNOSWAP_V1_1_ABI
+            : BONDING_CURVE_JUNOSWAP_V1_ABI
+    ) as Abi
+    const base = { address: deployment.address, abi }
 
     switch (action.kind) {
         case 'create': {

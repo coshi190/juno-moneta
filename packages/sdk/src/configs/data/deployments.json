@@ -1,12 +1,20 @@
 {
     "bondingCurve": {
         "kubTestnet": {
-            "address": "0x77e5D3fC554e30aceFd5322ca65beE15ee6E39a9",
-            "startBlock": 29065000
+            "junoswap": {
+                "address": "0x77e5D3fC554e30aceFd5322ca65beE15ee6E39a9",
+                "startBlock": 29065000
+            },
+            "junoswap-v1_1": {
+                "address": "0x22Cf23cd7799C3A24D53191C8514Dd7E42fEF790",
+                "startBlock": 33661943
+            }
         },
         "bitkub": {
-            "address": "0x65F6EC30A9E70822721585f6Bba15c40c2F8ab4e",
-            "startBlock": 32995517
+            "junoswap": {
+                "address": "0x65F6EC30A9E70822721585f6Bba15c40c2F8ab4e",
+                "startBlock": 32995517
+            }
         }
     },
     "aggRouter": {

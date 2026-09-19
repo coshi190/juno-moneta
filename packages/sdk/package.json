@@ -1,6 +1,6 @@
 {
     "name": "@coshi190/juno-moneta-sdk",
-    "version": "0.51.1",
+    "version": "0.52.0",
     "description": "Chain-facing primitives",
     "license": "MIT",
     "repository": {

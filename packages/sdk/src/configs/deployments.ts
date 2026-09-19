@@ -10,9 +10,20 @@ export interface Deployment {
 const asDeployment = ({ address, startBlock }: { address: string; startBlock: number }) =>
     ({ address: address as Address, startBlock }) satisfies Deployment
 
-const BONDING_CURVE_DEPLOYMENTS: Record<number, Deployment> = byChainId(
-    deployments.bondingCurve,
-    asDeployment
+export const DEFAULT_LAUNCHPAD_ID = 'junoswap'
+
+const BONDING_CURVE_DEPLOYMENTS: Record<number, Record<string, Deployment>> = byChainId(
+    deployments.bondingCurve as Record<
+        string,
+        Record<string, { address: string; startBlock: number }>
+    >,
+    (byLaunchpad) =>
+        Object.fromEntries(
+            Object.entries(byLaunchpad).map(([launchpadId, entry]) => [
+                launchpadId,
+                asDeployment(entry),
+            ])
+        )
 )
 
 const AGG_ROUTER_DEPLOYMENTS: Record<number, Deployment> = byChainId(
@@ -25,8 +36,12 @@ const deployed = (table: Record<number, Deployment>, chainId: number) => {
     return entry && entry.address !== zeroAddress ? entry : undefined
 }
 
-export function getBondingCurveDeployment(chainId: number): Deployment | undefined {
-    return deployed(BONDING_CURVE_DEPLOYMENTS, chainId)
+export function getBondingCurveDeployment(
+    chainId: number,
+    launchpadId: string = DEFAULT_LAUNCHPAD_ID
+): Deployment | undefined {
+    const entry = BONDING_CURVE_DEPLOYMENTS[chainId]?.[launchpadId]
+    return entry && entry.address !== zeroAddress ? entry : undefined
 }
 
 export function getAggRouterDeployment(chainId: number): Deployment | undefined {

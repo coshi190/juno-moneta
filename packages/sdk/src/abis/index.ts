@@ -1,5 +1,6 @@
 import { AGG_ROUTER_JUNOSWAP_ABI } from './agg-router-junoswap.js'
 import { BONDING_CURVE_JUNOSWAP_V1_ABI } from './bc-juno-v1.js'
+import { BONDING_CURVE_JUNOSWAP_V1_1_ABI } from './bc-juno-v1-1.js'
 import { ERC20_ABI } from './erc20.js'
 import { KAP20_ABI } from './kap20.js'
 import { NONFUNGIBLE_POSITION_MANAGER_ABI } from './nonfungible-position-manager.js'
@@ -12,6 +13,7 @@ import { WETH9_ABI } from './weth9.js'
 const ABIS = {
     aggRouter: AGG_ROUTER_JUNOSWAP_ABI,
     bondingCurveV1: BONDING_CURVE_JUNOSWAP_V1_ABI,
+    bondingCurveV1_1: BONDING_CURVE_JUNOSWAP_V1_1_ABI,
     erc20: ERC20_ABI,
     kap20: KAP20_ABI,
     positionManager: NONFUNGIBLE_POSITION_MANAGER_ABI,
