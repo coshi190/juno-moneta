@@ -56,6 +56,13 @@ const CURVE_DEPLOYMENTS: Record<string, Record<number, Deployment>> = {
         },
     },
 
+    'junoswap-v1_1': {
+        [CHAIN_IDS.kubTestnet]: {
+            address: '0x22Cf23cd7799C3A24D53191C8514Dd7E42fEF790',
+            startBlock: 33661943,
+        },
+    },
+
     durianfun: {
         [CHAIN_IDS.bitkub]: {
             address: [

@@ -1,11 +1,12 @@
 import { getChains } from '../config.js'
 import { getLaunchpads } from './registry.js'
-import { junoswapV1Adapter } from './juno-v1.js'
+import { junoswapV1Adapter, junoswapV1_1Adapter } from './juno-v1.js'
 import { durianfunAdapter } from './durianfun.js'
 import type { ContractRole, LaunchpadAdapter } from './types.js'
 
 const ADAPTERS: Record<string, LaunchpadAdapter> = {
     [junoswapV1Adapter.launchpadId]: junoswapV1Adapter,
+    [junoswapV1_1Adapter.launchpadId]: junoswapV1_1Adapter,
     [durianfunAdapter.launchpadId]: durianfunAdapter,
 }
 
@@ -23,6 +24,10 @@ export const CONTRACT_NAMES = {
     'junoswap:bitkub': {
         curve: 'CurveJunoswapBitkub',
         token: 'LaunchTokenJunoswapBitkub',
+    },
+    'junoswap-v1_1:kubTestnet': {
+        curve: 'CurveJunoswapV11KubTestnet',
+        token: 'LaunchTokenJunoswapV11KubTestnet',
     },
     'durianfun:bitkub': {
         curve: 'CurveDurianfunBitkub',

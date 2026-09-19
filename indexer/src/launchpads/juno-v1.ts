@@ -41,3 +41,8 @@ export const junoswapV1Adapter: LaunchpadAdapter = {
         return { tokenAddr: event.args.tokenAddr }
     },
 }
+
+export const junoswapV1_1Adapter: LaunchpadAdapter = {
+    ...junoswapV1Adapter,
+    launchpadId: 'junoswap-v1_1',
+}

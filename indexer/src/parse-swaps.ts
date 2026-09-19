@@ -1,5 +1,5 @@
 export function isJunoswapProtocol(protocol: string): boolean {
-    return protocol === 'junoswap'
+    return protocol === 'junoswap' || protocol === 'junoswap-v1_1'
 }
 
 export interface ParsedSwap {

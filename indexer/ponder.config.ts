@@ -149,6 +149,23 @@ export default createConfig({
             }),
             startBlock: LAUNCHPADS.junoswap.bitkub.startBlock,
         },
+        [CONTRACT_NAMES['junoswap-v1_1:kubTestnet'].curve]: curveContract(
+            'kubTestnet',
+            LAUNCHPADS['junoswap-v1_1'].kubTestnet
+        ),
+        [CONTRACT_NAMES['junoswap-v1_1:kubTestnet'].token]: {
+            abi: getAbi('erc20'),
+            chain: 'kubTestnet',
+            address: factory({
+                address: LAUNCHPADS['junoswap-v1_1'].kubTestnet.address,
+                event: abiEvent(
+                    LAUNCHPADS['junoswap-v1_1'].kubTestnet.abi,
+                    LAUNCHPADS['junoswap-v1_1'].kubTestnet.creationEvent.name
+                ),
+                parameter: LAUNCHPADS['junoswap-v1_1'].kubTestnet.creationEvent.tokenParam,
+            }),
+            startBlock: LAUNCHPADS['junoswap-v1_1'].kubTestnet.startBlock,
+        },
         [CONTRACT_NAMES['durianfun:bitkub'].curve]: curveContract(
             'bitkub',
             LAUNCHPADS.durianfun.bitkub

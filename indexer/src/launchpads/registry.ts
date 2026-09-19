@@ -71,6 +71,14 @@ export const LAUNCHPADS = {
             curve: JUNOSWAP_V1_CURVE,
         },
     },
+    'junoswap-v1_1': {
+        kubTestnet: {
+            ...deployed('junoswap-v1_1', CHAINS.kubTestnet),
+            abi: getAbi('bondingCurveV1'),
+            creationEvent: JUNOSWAP_V1_CREATION,
+            curve: JUNOSWAP_V1_CURVE,
+        },
+    },
     durianfun: {
         bitkub: {
             ...deployed('durianfun', CHAINS.bitkub),

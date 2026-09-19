@@ -24,6 +24,7 @@ contract JunoBondingCurveV1_1 {
     uint256 public createFee;
     uint256 public pumpFee;
     uint256 public constant INITIALTOKEN = 1000000000 ether;
+    uint256 public constant initialNative = 0;
     uint256 public immutable virtualAmount;
     uint256 public immutable graduationAmount;
     uint256 public immutable curveReserve;
@@ -41,7 +42,6 @@ contract JunoBondingCurveV1_1 {
         address indexed tokenAddr,
         uint256 amountIn,
         uint256 amountOut,
-        uint256 feeAmount,
         uint256 reserveIn,
         uint256 reserveOut
     );
@@ -57,8 +57,11 @@ contract JunoBondingCurveV1_1 {
     );
     event Graduation(
         address indexed sender,
-        address tokenAddr,
-        uint256 tokenId,
+        address tokenAddr
+    );
+    event LiquidityLocked(
+        address indexed tokenAddr,
+        uint256 indexed tokenId,
         uint128 liquidity,
         uint256 amount0,
         uint256 amount1
@@ -193,7 +196,8 @@ contract JunoBondingCurveV1_1 {
         {
             (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1) =
                 v3posManager.mint{value: nativeToSend}(params);
-            emit Graduation(msg.sender, _tokenAddr, tokenId, liquidity, amount0, amount1);
+            emit Graduation(msg.sender, _tokenAddr);
+            emit LiquidityLocked(_tokenAddr, tokenId, liquidity, amount0, amount1);
         }
         v3posManager.refundETH();
 
@@ -266,7 +270,6 @@ contract JunoBondingCurveV1_1 {
             _tokenAddr,
             amountInAfterFee,
             amountOut,
-            feeAmount,
             pumpReserve[_tokenAddr].native,
             pumpReserve[_tokenAddr].token
         );
@@ -306,7 +309,6 @@ contract JunoBondingCurveV1_1 {
             _tokenAddr,
             _tokenSold - feeAmount,
             amountOut,
-            feeAmount,
             pumpReserve[_tokenAddr].token,
             pumpReserve[_tokenAddr].native
         );
