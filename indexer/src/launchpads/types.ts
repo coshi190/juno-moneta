@@ -26,7 +26,6 @@ export interface NormalizedSwap {
     amountOut: bigint
     reserveIn: bigint
     reserveOut: bigint
-    grossAmountIn?: bigint
     creatorFeeNative?: bigint
     virtualReserve?: bigint
 }

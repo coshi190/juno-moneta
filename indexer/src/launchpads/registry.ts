@@ -6,6 +6,7 @@ import { DURIANFUN_FACTORY_ABI, DURIANFUN_MARKET_ABI } from '../abis/durianfun.j
 export interface CurveParams {
     virtualReserve: bigint
     totalSupply: bigint
+    pumpFeeBps: bigint
 }
 
 export interface CreationEvent {
@@ -18,6 +19,8 @@ export interface Launchpad {
     chainId: number
     address: Address | readonly Address[]
     startBlock: number
+    feeCollector?: Address
+    lpLocker?: Address
     abi: Abi
     marketAbi?: Abi
     creationEvent: CreationEvent
@@ -37,6 +40,7 @@ function deployed(launchpadId: string, chainId: number) {
 const JUNOSWAP_V1_CURVE: CurveParams = {
     virtualReserve: 3400n * 10n ** 18n,
     totalSupply: 1_000_000_000n * 10n ** 18n,
+    pumpFeeBps: 100n,
 }
 
 const JUNOSWAP_V1_CREATION = {
@@ -49,6 +53,7 @@ export const DURIANFUN_VIRTUAL_RESERVE = 1_523_821_243_257_000_000_000n
 const DURIANFUN_CURVE: CurveParams = {
     virtualReserve: DURIANFUN_VIRTUAL_RESERVE,
     totalSupply: 1_000_000_000n * 10n ** 18n,
+    pumpFeeBps: 0n,
 }
 
 const DURIANFUN_CREATION = {
@@ -101,6 +106,8 @@ const LAUNCHPADS_BY_CHAIN: Record<number, Launchpad[]> = (() => {
                 chainId,
                 address: entry.address as Address | readonly Address[],
                 startBlock: entry.startBlock,
+                feeCollector: 'feeCollector' in entry ? (entry.feeCollector as Address) : undefined,
+                lpLocker: 'lpLocker' in entry ? (entry.lpLocker as Address) : undefined,
                 abi: entry.abi as Abi,
                 marketAbi: 'marketAbi' in entry ? (entry.marketAbi as Abi) : undefined,
                 creationEvent: entry.creationEvent,

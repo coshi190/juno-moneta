@@ -1,7 +1,6 @@
 import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
 import { formatEther, parseEther, zeroAddress } from 'viem'
-import { JUNO_CURVE_VIEWS_ABI } from './abis/juno-curve.js'
 import { readERC20Metadata } from './erc20-read.js'
 import { sanitizeUsdPrice, MAX_TOKEN_USD_PRICE } from './price-history.js'
 import { computePriceFromReserves, computeMarketCapFromReserves } from './curve-math.js'
@@ -16,43 +15,17 @@ import {
 import type { HandlerArgs, LaunchpadAdapter } from './launchpads/types.js'
 import type { Launchpad } from './launchpads/registry.js'
 
-const CURVE_ADDRESSES: Record<number, ReadonlySet<string>> = (() => {
+const INFRA_ADDRESSES: Record<number, ReadonlySet<string>> = (() => {
     const byChain: Record<number, Set<string>> = {}
     for (const { launchpad } of enabledLaunchpads()) {
         const addresses = Array.isArray(launchpad.address) ? launchpad.address : [launchpad.address]
-        for (const address of addresses) {
-            ;(byChain[launchpad.chainId] ??= new Set()).add(address.toLowerCase())
+        const set = (byChain[launchpad.chainId] ??= new Set())
+        for (const address of [...addresses, launchpad.feeCollector, launchpad.lpLocker]) {
+            if (address) set.add(address.toLowerCase())
         }
     }
     return byChain
 })()
-
-const INFRA_ADDRESSES = new Map<number, ReadonlySet<string>>()
-
-async function infraAddresses(context: any, chainId: number): Promise<ReadonlySet<string>> {
-    const cached = INFRA_ADDRESSES.get(chainId)
-    if (cached) return cached
-
-    const curves = CURVE_ADDRESSES[chainId] ?? new Set<string>()
-    const addresses = new Set(curves)
-    for (const curve of curves) {
-        for (const functionName of ['feeCollector', 'lpLocker'] as const) {
-            try {
-                const address = (await context.client.readContract({
-                    abi: JUNO_CURVE_VIEWS_ABI,
-                    functionName,
-                    address: curve as `0x${string}`,
-                })) as string
-                addresses.add(address.toLowerCase())
-            } catch {
-                // V1 has no lpLocker and durianfun's curves expose neither.
-            }
-        }
-    }
-
-    INFRA_ADDRESSES.set(chainId, addresses)
-    return addresses
-}
 
 function defaultSnapshot(tokenAddr: string, chainId: number, launchpadId: string) {
     return {
@@ -139,12 +112,14 @@ async function handleSwap(
         amountOut,
         reserveIn,
         reserveOut,
-        grossAmountIn,
         creatorFeeNative,
         virtualReserve,
     } = await adapter.swap(args, bindingIsBuy)
     const curve =
         virtualReserve === undefined ? launchpad.curve : { ...launchpad.curve, virtualReserve }
+
+    const grossAmountIn =
+        curve.pumpFeeBps > 0n ? (amountIn * 10000n) / (10000n - curve.pumpFeeBps) : amountIn
     const tokenAddrLower = tokenAddr.toLowerCase()
     const senderLower = sender.toLowerCase()
     const id = `${chainId}-${event.block.number}-${event.log.logIndex}`
@@ -166,7 +141,7 @@ async function handleSwap(
         sender: senderLower,
         isBuy: isBuy ? 1 : 0,
         amountIn: amountIn.toString(),
-        grossAmountIn: (grossAmountIn ?? amountIn).toString(),
+        grossAmountIn: grossAmountIn.toString(),
         amountOut: amountOut.toString(),
         reserveIn: reserveIn.toString(),
         reserveOut: reserveOut.toString(),
@@ -204,7 +179,7 @@ async function handleSwap(
         senderLower,
         isBuy,
         amountIn.toString(),
-        (grossAmountIn ?? amountIn).toString(),
+        grossAmountIn.toString(),
         amountOut.toString(),
         18,
         nativeUsd,
@@ -322,10 +297,10 @@ async function handleTransfer({ event, context }: HandlerArgs, chainId: number) 
     const tokenAddrLower = event.log.address.toLowerCase()
 
     const launchToken = await context.db.find(schema.launchToken, { tokenAddr: tokenAddrLower })
-    const infra = await infraAddresses(context, chainId)
+    const infra = INFRA_ADDRESSES[chainId]
 
     const isHolder = (address: string) =>
-        address !== zeroAddress && !infra.has(address) && address !== launchToken?.market
+        address !== zeroAddress && !infra?.has(address) && address !== launchToken?.market
     const fromIsHolder = isHolder(fromLower)
     const toIsHolder = isHolder(toLower)
     if (!fromIsHolder && !toIsHolder) return

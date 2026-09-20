@@ -42,6 +42,8 @@ export function getStablecoins(chainId: number): ReadonlySet<string> | undefined
 interface Deployment {
     address: Address | readonly Address[]
     startBlock: number
+    feeCollector?: Address
+    lpLocker?: Address
 }
 
 const CURVE_DEPLOYMENTS: Record<string, Record<number, Deployment>> = {
@@ -60,6 +62,8 @@ const CURVE_DEPLOYMENTS: Record<string, Record<number, Deployment>> = {
         [CHAIN_IDS.kubTestnet]: {
             address: '0x22Cf23cd7799C3A24D53191C8514Dd7E42fEF790',
             startBlock: 33661943,
+            feeCollector: '0x3E482C8Bac01ebE70207DC68652aA9f706e67E7C',
+            lpLocker: '0x08a064BbfDa30a6620ab774532382D4874ef90F4',
         },
     },
 
