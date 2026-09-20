@@ -1,8 +1,13 @@
 import { CHAIN_SLUGS } from './args.js'
 import { COMMANDS, type Command } from './commands.js'
-import { terminalWidth } from './output.js'
 
 const WRAP_WIDTH = 96
+const FALLBACK_WIDTH = 120
+
+function terminalWidth(): number {
+    if (process.stdout.isTTY !== true) return Number.POSITIVE_INFINITY
+    return process.stdout.columns ?? FALLBACK_WIDTH
+}
 
 function flagGroups(flags: string): string[] {
     const groups: string[] = []

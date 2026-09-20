@@ -181,11 +181,11 @@ export function optionalFlag(value: string | undefined, flag: string): 0 | 1 | u
     throw new UsageError(`invalid --${flag} "${value}" (expected 0 or 1)`)
 }
 
-export function parseFields<TEntity>(
+export function parseFields<K extends string>(
     value: string | undefined,
-    presets: Record<string, readonly (keyof TEntity)[]>,
-    fallback: readonly (keyof TEntity)[]
-): readonly (keyof TEntity)[] {
+    presets: Record<string, readonly K[]>,
+    fallback: readonly K[]
+): readonly K[] {
     if (value === undefined) return fallback
 
     const preset = presets[value]
@@ -202,19 +202,19 @@ export function parseFields<TEntity>(
         if (!IDENTIFIER.test(name)) {
             throw new UsageError(`invalid field "${name}" (expected a plain field name)`)
         }
-        return name as keyof TEntity
+        return name as K
     })
 }
 
-interface QueryOrder<TEntity> {
-    orderBy: keyof TEntity
+interface QueryOrder<K> {
+    orderBy: K
     orderDirection?: 'asc' | 'desc'
 }
 
-export function optionalOrder<TEntity>(
+export function optionalOrder<K extends string>(
     orderBy: string | undefined,
     orderDirection: string | undefined
-): QueryOrder<TEntity> | undefined {
+): QueryOrder<K> | undefined {
     if (orderBy === undefined) {
         if (orderDirection !== undefined) {
             throw new UsageError('--orderDirection requires --orderBy')
@@ -227,7 +227,7 @@ export function optionalOrder<TEntity>(
     if (orderDirection !== undefined && orderDirection !== 'asc' && orderDirection !== 'desc') {
         throw new UsageError(`invalid --orderDirection "${orderDirection}" (expected asc or desc)`)
     }
-    return { orderBy: orderBy as keyof TEntity, orderDirection }
+    return { orderBy: orderBy as K, orderDirection }
 }
 
 const DEFAULT_RPC_URLS: Record<number, string> = {

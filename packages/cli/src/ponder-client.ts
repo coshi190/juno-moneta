@@ -7,7 +7,7 @@ interface PonderPageInfo {
     endCursor: string | null
 }
 
-interface PonderClient {
+export interface PonderClient {
     request<T>(query: string, variables?: Record<string, unknown>): Promise<T>
     fetchAllPages<TResponse, TItem>(
         query: string,
