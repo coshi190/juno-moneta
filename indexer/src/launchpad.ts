@@ -1,6 +1,7 @@
 import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
 import { formatEther, parseEther, zeroAddress } from 'viem'
+import { JUNO_CURVE_VIEWS_ABI } from './abis/juno-curve.js'
 import { readERC20Metadata } from './erc20-read.js'
 import { sanitizeUsdPrice, MAX_TOKEN_USD_PRICE } from './price-history.js'
 import { computePriceFromReserves, computeMarketCapFromReserves } from './curve-math.js'
@@ -25,6 +26,33 @@ const CURVE_ADDRESSES: Record<number, ReadonlySet<string>> = (() => {
     }
     return byChain
 })()
+
+const INFRA_ADDRESSES = new Map<number, ReadonlySet<string>>()
+
+async function infraAddresses(context: any, chainId: number): Promise<ReadonlySet<string>> {
+    const cached = INFRA_ADDRESSES.get(chainId)
+    if (cached) return cached
+
+    const curves = CURVE_ADDRESSES[chainId] ?? new Set<string>()
+    const addresses = new Set(curves)
+    for (const curve of curves) {
+        for (const functionName of ['feeCollector', 'lpLocker'] as const) {
+            try {
+                const address = (await context.client.readContract({
+                    abi: JUNO_CURVE_VIEWS_ABI,
+                    functionName,
+                    address: curve as `0x${string}`,
+                })) as string
+                addresses.add(address.toLowerCase())
+            } catch {
+                // V1 has no lpLocker and durianfun's curves expose neither.
+            }
+        }
+    }
+
+    INFRA_ADDRESSES.set(chainId, addresses)
+    return addresses
+}
 
 function defaultSnapshot(tokenAddr: string, chainId: number, launchpadId: string) {
     return {
@@ -111,6 +139,7 @@ async function handleSwap(
         amountOut,
         reserveIn,
         reserveOut,
+        grossAmountIn,
         creatorFeeNative,
         virtualReserve,
     } = await adapter.swap(args, bindingIsBuy)
@@ -137,6 +166,7 @@ async function handleSwap(
         sender: senderLower,
         isBuy: isBuy ? 1 : 0,
         amountIn: amountIn.toString(),
+        grossAmountIn: (grossAmountIn ?? amountIn).toString(),
         amountOut: amountOut.toString(),
         reserveIn: reserveIn.toString(),
         reserveOut: reserveOut.toString(),
@@ -174,6 +204,7 @@ async function handleSwap(
         senderLower,
         isBuy,
         amountIn.toString(),
+        (grossAmountIn ?? amountIn).toString(),
         amountOut.toString(),
         18,
         nativeUsd,
@@ -190,14 +221,6 @@ async function handleSwap(
     const marketCapNative = formatEther(marketCap)
     const prevAthNative = snap.athMarketCapNative ?? '0'
     const athMarketCap = marketCap > parseEther(prevAthNative) ? marketCapNative : prevAthNative
-
-    const holderId = `${chainId}-${tokenAddrLower}-${senderLower}`
-    const existingHolder = await context.db.find(schema.tokenHolder, { id: holderId })
-    const oldBalance = existingHolder ? BigInt(existingHolder.balance) : 0n
-    const isNewHolder = !existingHolder
-
-    const balanceChange = isBuy ? amountOut : -amountIn
-    const newBalance = oldBalance + balanceChange
 
     let price1dAgo: string | null = snap.price1dAgo ?? null
     let price1dAgoTimestamp: number | null = snap.price1dAgoTimestamp ?? null
@@ -222,12 +245,6 @@ async function handleSwap(
         }
     }
 
-    let holderCount = snap.holderCount ?? 0
-    const oldPositive = oldBalance > 0n
-    const newPositive = newBalance > 0n
-    if (!oldPositive && newPositive) holderCount += 1
-    if (oldPositive && !newPositive) holderCount = Math.max(0, holderCount - 1)
-
     if (isNewSnapshot) {
         await context.db
             .insert(schema.tokenSnapshot)
@@ -242,7 +259,6 @@ async function handleSwap(
                 totalBuys: isBuy ? 1 : 0,
                 totalSells: isBuy ? 0 : 1,
                 totalVolumeNative: volume.toString(),
-                holderCount,
                 creatorFeeNative: creatorFeeNativeDelta.toString(),
                 creatorFeeClaimedNative: '0',
                 creatorFeeToken: '0',
@@ -263,7 +279,6 @@ async function handleSwap(
             totalBuys: (snap.totalBuys ?? 0) + (isBuy ? 1 : 0),
             totalSells: (snap.totalSells ?? 0) + (isBuy ? 0 : 1),
             totalVolumeNative: (BigInt(snap.totalVolumeNative ?? '0') + volume).toString(),
-            holderCount,
             creatorFeeNative: (
                 BigInt(snap.creatorFeeNative ?? '0') + creatorFeeNativeDelta
             ).toString(),
@@ -272,23 +287,6 @@ async function handleSwap(
             price1dAgoTimestamp,
             priceChange1dPct,
             updatedAt: timestamp,
-        })
-    }
-
-    if (isNewHolder) {
-        await context.db
-            .insert(schema.tokenHolder)
-            .values({
-                id: holderId,
-                chainId,
-                tokenAddr: tokenAddrLower,
-                address: senderLower,
-                balance: newBalance.toString(),
-            })
-            .onConflictDoNothing()
-    } else {
-        await context.db.update(schema.tokenHolder, { id: holderId }).set({
-            balance: newBalance.toString(),
         })
     }
 }
@@ -322,39 +320,46 @@ async function handleTransfer({ event, context }: HandlerArgs, chainId: number) 
     const fromLower = from.toLowerCase()
     const toLower = to.toLowerCase()
     const tokenAddrLower = event.log.address.toLowerCase()
-    const curveAddresses = CURVE_ADDRESSES[chainId]
-
-    if (fromLower === zeroAddress || toLower === zeroAddress) return
-    if (curveAddresses?.has(fromLower) || curveAddresses?.has(toLower)) return
 
     const launchToken = await context.db.find(schema.launchToken, { tokenAddr: tokenAddrLower })
-    if (launchToken?.market && (fromLower === launchToken.market || toLower === launchToken.market))
-        return
+    const infra = await infraAddresses(context, chainId)
 
-    await context.db
-        .insert(schema.transferEvent)
-        .values({
-            id: `${chainId}-${event.block.number}-${event.log.logIndex}`,
-            chainId,
-            tokenAddr: tokenAddrLower,
-            from: fromLower,
-            to: toLower,
-            amount: amount.toString(),
-            blockNumber: Number(event.block.number),
-            timestamp: Number(event.block.timestamp),
-            transactionHash: event.transaction.hash,
-        })
-        .onConflictDoNothing()
+    const isHolder = (address: string) =>
+        address !== zeroAddress && !infra.has(address) && address !== launchToken?.market
+    const fromIsHolder = isHolder(fromLower)
+    const toIsHolder = isHolder(toLower)
+    if (!fromIsHolder && !toIsHolder) return
+
+    if (fromIsHolder && toIsHolder) {
+        await context.db
+            .insert(schema.transferEvent)
+            .values({
+                id: `${chainId}-${event.block.number}-${event.log.logIndex}`,
+                chainId,
+                tokenAddr: tokenAddrLower,
+                from: fromLower,
+                to: toLower,
+                amount: amount.toString(),
+                blockNumber: Number(event.block.number),
+                timestamp: Number(event.block.timestamp),
+                transactionHash: event.transaction.hash,
+            })
+            .onConflictDoNothing()
+    }
 
     const amt = BigInt(amount)
-    const fromNew = await applyHolderDelta(context, chainId, tokenAddrLower, fromLower, -amt)
-    const toNew = await applyHolderDelta(context, chainId, tokenAddrLower, toLower, amt)
+    const fromNew = fromIsHolder
+        ? await applyHolderDelta(context, chainId, tokenAddrLower, fromLower, -amt)
+        : null
+    const toNew = toIsHolder
+        ? await applyHolderDelta(context, chainId, tokenAddrLower, toLower, amt)
+        : null
 
     const snap = await context.db.find(schema.tokenSnapshot, { tokenAddr: tokenAddrLower })
     if (snap) {
         let holderCount = snap.holderCount ?? 0
-        if (fromNew.crossedToZero) holderCount = Math.max(0, holderCount - 1)
-        if (toNew.crossedToPositive) holderCount += 1
+        if (fromNew?.crossedToZero) holderCount = Math.max(0, holderCount - 1)
+        if (toNew?.crossedToPositive) holderCount += 1
         if (holderCount !== (snap.holderCount ?? 0)) {
             await context.db
                 .update(schema.tokenSnapshot, { tokenAddr: tokenAddrLower })
@@ -373,7 +378,12 @@ async function applyHolderDelta(
     const id = `${chainId}-${tokenAddr}-${address}`
     const existing = await context.db.find(schema.tokenHolder, { id })
     const oldBalance = existing ? BigInt(existing.balance) : 0n
-    const newBalance = oldBalance + delta
+    let newBalance = oldBalance + delta
+
+    if (newBalance < 0n) {
+        console.warn(`negative balance for ${address} on ${tokenAddr}: ${newBalance}, clamping`)
+        newBalance = 0n
+    }
 
     if (existing) {
         await context.db.update(schema.tokenHolder, { id }).set({ balance: newBalance.toString() })

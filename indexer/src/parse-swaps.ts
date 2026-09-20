@@ -7,6 +7,7 @@ export interface ParsedSwap {
     sender: string
     isBuy: boolean
     amountIn: string
+    grossAmountIn: string
     amountOut: string
     timestamp: number
     protocol: string
@@ -17,6 +18,7 @@ interface BondingCurveSwapRow {
     sender: string
     isBuy: number
     amountIn: string
+    grossAmountIn?: string | null
     amountOut: string
     timestamp: number
     launchpadId: string
@@ -53,6 +55,7 @@ export function parseBondingCurveSwap(e: BondingCurveSwapRow): ParsedSwap {
         sender: e.sender,
         isBuy: e.isBuy === 1,
         amountIn: e.amountIn,
+        grossAmountIn: e.grossAmountIn ?? e.amountIn,
         amountOut: e.amountOut,
         timestamp: e.timestamp,
         protocol: e.launchpadId,
@@ -69,11 +72,13 @@ export function parseV3Swap(e: V3SwapRow, wrappedNative: string): ParsedSwap | n
     const nativeAmt = BigInt(nativeIsToken0 ? e.amount0 : e.amount1)
     const tokenAmt = BigInt(nativeIsToken0 ? e.amount1 : e.amount0)
     const isBuy = tokenAmt < 0n
+    const amountIn = (isBuy ? abs(nativeAmt) : abs(tokenAmt)).toString()
     return {
         tokenAddr: e.tokenAddr.toLowerCase(),
         sender: e.txFrom,
         isBuy,
-        amountIn: (isBuy ? abs(nativeAmt) : abs(tokenAmt)).toString(),
+        amountIn,
+        grossAmountIn: amountIn,
         amountOut: (isBuy ? abs(tokenAmt) : abs(nativeAmt)).toString(),
         timestamp: e.timestamp,
         protocol: e.protocol || 'junoswap',
@@ -101,11 +106,13 @@ export function parseV2Swap(e: V2SwapRow, wrappedNative: string): ParsedSwap | n
         return null
     }
     const isBuy = nativeIn > 0n
+    const amountIn = (isBuy ? nativeIn : tokenIn).toString()
     return {
         tokenAddr,
         sender: e.txFrom,
         isBuy,
-        amountIn: (isBuy ? nativeIn : tokenIn).toString(),
+        amountIn,
+        grossAmountIn: amountIn,
         amountOut: (isBuy ? tokenOut : nativeOut).toString(),
         timestamp: e.timestamp,
         protocol: e.protocol || 'unknown',

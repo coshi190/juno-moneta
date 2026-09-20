@@ -6,6 +6,7 @@ export interface LeaderboardSwapEvent {
     tokenAddr: string
     isBuy: boolean
     amountIn: string
+    grossAmountIn?: string
     amountOut: string
     timestamp: number
     sender: string
@@ -55,7 +56,7 @@ export function computeWindowedTraderStats(
         }
 
         const { totals } = computePnl({
-            events: addrEvents,
+            events: addrEvents.map((e) => ({ ...e, amountIn: e.grossAmountIn ?? e.amountIn })),
             nativeUsdAt: priceAt,
             decimalsByToken,
             priceUsdByToken: currentPriceByToken,

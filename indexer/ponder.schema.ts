@@ -52,6 +52,7 @@ export const swapEvent = onchainTable(
         sender: t.text().notNull(),
         isBuy: t.integer().notNull(),
         amountIn: t.text().notNull(),
+        grossAmountIn: t.text(),
         amountOut: t.text().notNull(),
         reserveIn: t.text().notNull(),
         reserveOut: t.text().notNull(),

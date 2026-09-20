@@ -1,4 +1,17 @@
+import { JUNO_CURVE_VIEWS_ABI } from '../abis/juno-curve.js'
 import type { LaunchpadAdapter } from './types.js'
+
+const BPS_DENOMINATOR = 10000n
+
+async function grossAmountIn(context: any, curve: string, amountIn: bigint): Promise<bigint> {
+    const pumpFee = (await context.client.readContract({
+        abi: JUNO_CURVE_VIEWS_ABI,
+        functionName: 'pumpFee',
+        address: curve as `0x${string}`,
+    })) as bigint
+    if (pumpFee <= 0n || pumpFee >= BPS_DENOMINATOR) return amountIn
+    return (amountIn * BPS_DENOMINATOR) / (BPS_DENOMINATOR - pumpFee)
+}
 
 export const junoswapV1Adapter: LaunchpadAdapter = {
     launchpadId: 'junoswap',
@@ -24,16 +37,18 @@ export const junoswapV1Adapter: LaunchpadAdapter = {
         }
     },
 
-    async swap({ event }) {
+    async swap({ event, context }) {
         const { sender, isBuy, tokenAddr, amountIn, amountOut, reserveIn, reserveOut } = event.args
+        const inAmount = BigInt(amountIn)
         return {
             tokenAddr,
             sender,
             isBuy: Boolean(isBuy),
-            amountIn: BigInt(amountIn),
+            amountIn: inAmount,
             amountOut: BigInt(amountOut),
             reserveIn: BigInt(reserveIn),
             reserveOut: BigInt(reserveOut),
+            grossAmountIn: await grossAmountIn(context, event.log.address, inAmount),
         }
     },
 

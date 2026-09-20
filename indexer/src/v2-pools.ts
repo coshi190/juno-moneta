@@ -146,6 +146,7 @@ async function recordV2SwapEvent(context: any, chainId: number, event: any, dex:
             parsed.sender,
             parsed.isBuy,
             parsed.amountIn,
+            parsed.grossAmountIn,
             parsed.amountOut,
             tokenRec?.decimals ?? 18,
             nativeUsd,

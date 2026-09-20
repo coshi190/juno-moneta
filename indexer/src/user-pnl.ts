@@ -11,6 +11,7 @@ export async function recordUserSwap(
     user: string,
     isBuy: boolean,
     amountInWei: string,
+    grossAmountInWei: string,
     amountOutWei: string,
     decimals: number,
     nativeUsd: number,
@@ -39,7 +40,7 @@ export async function recordUserSwap(
               ])
             : undefined,
         events: [
-            { tokenAddr: t, isBuy, amountIn: amountInWei, amountOut: amountOutWei, timestamp },
+            { tokenAddr: t, isBuy, amountIn: grossAmountInWei, amountOut: amountOutWei, timestamp },
         ],
         nativeUsdAt: () => safeNativeUsd,
         decimalsByToken: new Map([[t, decimals]]),

@@ -376,6 +376,7 @@ export async function recordV3SwapEvent(
             parsed.sender,
             parsed.isBuy,
             parsed.amountIn,
+            parsed.grossAmountIn,
             parsed.amountOut,
             tokenRec?.decimals ?? 18,
             nativeUsd,
