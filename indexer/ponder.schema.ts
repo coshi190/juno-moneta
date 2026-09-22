@@ -344,3 +344,20 @@ export const userStat = onchainTable('user_stat', (t) => ({
     sellCount: t.integer().notNull().default(0),
     updatedAt: t.integer().notNull(),
 }))
+
+export const feeBucket = onchainTable('fee_bucket', (t) => ({
+    id: t.text().primaryKey(),
+    chainId: t.integer().notNull(),
+    account: t.text().notNull(),
+    asset: t.text().notNull(),
+    tokenAddr: t.text().notNull(),
+    amount: t.text().notNull(),
+}))
+
+export const feeAccount = onchainTable('fee_account', (t) => ({
+    id: t.text().primaryKey(),
+    chainId: t.integer().notNull(),
+    account: t.text().notNull(),
+    asset: t.text().notNull(),
+    tokens: t.text().notNull(),
+}))

@@ -6,6 +6,7 @@ import { CONTRACT_NAMES } from './src/launchpads/index.js'
 import { LAUNCHPADS } from './src/launchpads/registry.js'
 import { V3_STAKER_ABI } from './src/abis/v3-staker.js'
 import { V2_PAIR_ABI } from './src/abis/v2-pair.js'
+import { FEE_COLLECTOR_ABI } from './src/abis/fee-collector.js'
 import externalPools from './external-pools.json'
 
 const CHAINS = getChains()
@@ -164,6 +165,12 @@ export default createConfig({
                 ),
                 parameter: LAUNCHPADS['junoswap-v1_1'].kubTestnet.creationEvent.tokenParam,
             }),
+            startBlock: LAUNCHPADS['junoswap-v1_1'].kubTestnet.startBlock,
+        },
+        [CONTRACT_NAMES['junoswap-v1_1:kubTestnet'].feeCollector]: {
+            abi: FEE_COLLECTOR_ABI,
+            chain: 'kubTestnet',
+            address: LAUNCHPADS['junoswap-v1_1'].kubTestnet.feeCollector,
             startBlock: LAUNCHPADS['junoswap-v1_1'].kubTestnet.startBlock,
         },
         [CONTRACT_NAMES['durianfun:bitkub'].curve]: curveContract(

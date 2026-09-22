@@ -28,6 +28,7 @@ export const CONTRACT_NAMES = {
     'junoswap-v1_1:kubTestnet': {
         curve: 'CurveJunoswapV11KubTestnet',
         token: 'LaunchTokenJunoswapV11KubTestnet',
+        feeCollector: 'FeeCollectorJunoswapV11KubTestnet',
     },
     'durianfun:bitkub': {
         curve: 'CurveDurianfunBitkub',
