@@ -24,9 +24,7 @@ async function handleFeeShared({ event, context }: HandlerArgs, chainId: number)
         await context.db.update(schema.tokenSnapshot, { tokenAddr }).set(
             isNative
                 ? {
-                      creatorFeeNative: (
-                          BigInt(snap.creatorFeeNative ?? '0') + amount
-                      ).toString(),
+                      creatorFeeNative: (BigInt(snap.creatorFeeNative ?? '0') + amount).toString(),
                   }
                 : { creatorFeeToken: (BigInt(snap.creatorFeeToken ?? '0') + amount).toString() }
         )
