@@ -20,5 +20,8 @@
     },
     "overrides": {
         "graphql": "16.8.2"
+    },
+    "patchedDependencies": {
+        "ponder@0.16.10": "patches/ponder@0.16.10.patch"
     }
 }

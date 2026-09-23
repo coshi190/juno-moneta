@@ -1,0 +1,128 @@
+diff --git a/dist/esm/utils/generators.js b/dist/esm/utils/generators.js
+index 33b29e880ff76d1ec2d2a66197dd2f26934eff37..fe505779cb87c4a2351656108deccc4b692f873b 100644
+--- a/dist/esm/utils/generators.js
++++ b/dist/esm/utils/generators.js
+@@ -7,23 +7,38 @@ import { startClock } from "./timer.js";
+  * @returns A single async generator that yields results from all input generators.
+  */
+ export async function* mergeAsyncGenerators(generators) {
+-    const promises = generators.map((gen) => gen.next());
+-    while (promises.length > 0) {
+-        const wrappedPromises = promises.map((promise, index) => promise.then((result) => ({ index, result })));
+-        const { result, index } = await Promise.race(wrappedPromises);
+-        if (result.done) {
+-            generators.splice(index, 1);
+-            promises.splice(index, 1);
++    // Each pending `next()` gets exactly one reaction. Racing every pending promise on each
++    // iteration piles reactions onto a generator that never yields (e.g. a stalled chain),
++    // and those reactions retain every value yielded by the other generators.
++    const settled = [];
++    let pwr = promiseWithResolvers();
++    const pull = (generator) => {
++        generator.next().then((result) => {
++            settled.push({ generator, result });
++            pwr.resolve();
++        }, (error) => {
++            settled.push({ generator, error });
++            pwr.resolve();
++        });
++    };
++    let active = generators.length;
++    for (const generator of generators)
++        pull(generator);
++    while (active > 0) {
++        if (settled.length === 0) {
++            await pwr.promise;
++            pwr = promiseWithResolvers();
++            continue;
+         }
+-        else {
+-            const generator = generators[index];
+-            const promise = generator.next();
+-            promises.splice(index, 1);
+-            generators.splice(index, 1);
+-            generators.push(generator);
+-            promises.push(promise);
+-            yield result.value;
++        const item = settled.shift();
++        if ("error" in item)
++            throw item.error;
++        if (item.result.done) {
++            active--;
++            continue;
+         }
++        pull(item.generator);
++        yield item.result.value;
+     }
+ }
+ /**
+diff --git a/src/utils/generators.ts b/src/utils/generators.ts
+index 9bb1d0ba22505a347078fa9ecca2110f7c93395d..05a131d9df9193b91d8cb165347e8d480fbbd0e7 100644
+--- a/src/utils/generators.ts
++++ b/src/utils/generators.ts
+@@ -10,30 +10,48 @@ import { startClock } from "./timer.js";
+ export async function* mergeAsyncGenerators<T>(
+   generators: AsyncGenerator<T>[],
+ ): AsyncGenerator<T> {
+-  const promises = generators.map((gen) => gen.next());
++  // Each pending `next()` gets exactly one reaction. Racing every pending promise on each
++  // iteration piles reactions onto a generator that never yields (e.g. a stalled chain),
++  // and those reactions retain every value yielded by the other generators.
++  const settled: (
++    | { generator: AsyncGenerator<T>; result: IteratorResult<T> }
++    | { generator: AsyncGenerator<T>; error: unknown }
++  )[] = [];
++  let pwr = promiseWithResolvers<void>();
+ 
+-  while (promises.length > 0) {
+-    const wrappedPromises = promises.map((promise, index) =>
+-      promise.then((result) => ({ index, result })),
++  const pull = (generator: AsyncGenerator<T>) => {
++    generator.next().then(
++      (result) => {
++        settled.push({ generator, result });
++        pwr.resolve();
++      },
++      (error) => {
++        settled.push({ generator, error });
++        pwr.resolve();
++      },
+     );
++  };
+ 
+-    const { result, index } = await Promise.race(wrappedPromises);
+-
+-    if (result.done) {
+-      generators.splice(index, 1);
+-      promises.splice(index, 1);
+-    } else {
+-      const generator = generators[index]!;
+-      const promise = generator.next();
++  let active = generators.length;
++  for (const generator of generators) pull(generator);
+ 
+-      promises.splice(index, 1);
+-      generators.splice(index, 1);
++  while (active > 0) {
++    if (settled.length === 0) {
++      await pwr.promise;
++      pwr = promiseWithResolvers<void>();
++      continue;
++    }
+ 
+-      generators.push(generator);
+-      promises.push(promise);
++    const item = settled.shift()!;
++    if ("error" in item) throw item.error;
+ 
+-      yield result.value;
++    if (item.result.done) {
++      active--;
++      continue;
+     }
++
++    pull(item.generator);
++    yield item.result.value;
+   }
+ }
+ 

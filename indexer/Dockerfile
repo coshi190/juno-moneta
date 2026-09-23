@@ -9,6 +9,7 @@ COPY packages/sdk ./packages/sdk
 RUN cd packages/sdk && bun run build
 
 COPY indexer/package.json indexer/bun.lock ./indexer/
+COPY indexer/patches ./indexer/patches
 RUN cd indexer && bun install --frozen-lockfile
 COPY indexer ./indexer
 
