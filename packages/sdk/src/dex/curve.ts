@@ -107,14 +107,18 @@ function graduationSqrtPriceX96(
     tokenAddr: `0x${string}` | undefined,
     wrappedNative: `0x${string}` | undefined,
     nativeReserve: bigint,
-    tokenReserve: bigint
+    tokenReserve: bigint,
+    virtualReserve: bigint
 ): bigint {
     if (!tokenAddr || !wrappedNative || nativeReserve <= 0n || tokenReserve <= 0n) return 0n
 
+    const tokenLiquidity = (tokenReserve * nativeReserve) / (virtualReserve + nativeReserve)
+    if (tokenLiquidity <= 0n) return 0n
+
     const tokenIsToken0 = tokenAddr.toLowerCase() < wrappedNative.toLowerCase()
 
-    const amount0 = tokenIsToken0 ? tokenReserve : nativeReserve
-    const amount1 = tokenIsToken0 ? nativeReserve : tokenReserve
+    const amount0 = tokenIsToken0 ? tokenLiquidity : nativeReserve
+    const amount1 = tokenIsToken0 ? nativeReserve : tokenLiquidity
 
     const Q192 = 2n ** 192n
     const priceX192 = (amount1 * Q192) / amount0
@@ -195,7 +199,13 @@ export function computeCurve(input: CurveInputs): CurveResult {
                       totalSupply,
                       isGraduated
                   ),
-            sqrtPriceX96: graduationSqrtPriceX96(token, wrappedNative, nativeReserve, tokenReserve),
+            sqrtPriceX96: graduationSqrtPriceX96(
+                token,
+                wrappedNative,
+                nativeReserve,
+                tokenReserve,
+                virtualReserve
+            ),
         },
     }
 }
