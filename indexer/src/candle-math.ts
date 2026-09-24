@@ -5,15 +5,9 @@ interface Candle {
     high: number
     low: number
     close: number
-    volume: number
 }
 
-export function foldCandle(
-    existing: Candle | null,
-    price: number,
-    volume: number,
-    openIfNew?: number
-): Candle {
+export function foldCandle(existing: Candle | null, price: number, openIfNew?: number): Candle {
     if (!existing) {
         const open = openIfNew !== undefined && openIfNew > 0 ? openIfNew : price
         return {
@@ -21,7 +15,6 @@ export function foldCandle(
             high: Math.max(open, price),
             low: Math.min(open, price),
             close: price,
-            volume,
         }
     }
     return {
@@ -29,6 +22,5 @@ export function foldCandle(
         high: Math.max(existing.high, price),
         low: Math.min(existing.low, price),
         close: price,
-        volume: existing.volume + volume,
     }
 }

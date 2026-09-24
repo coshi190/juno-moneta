@@ -111,7 +111,6 @@ export interface TokenCandle {
     high: number
     low: number
     close: number
-    volumeNative: number
     updatedAt: number
 }
 
@@ -213,8 +212,6 @@ export interface V3PoolDayVolume {
     chainId: number
     poolAddress: string
     dayTimestamp: number
-    volumeToken0: string
-    volumeToken1: string
     volumeUsd: number
     swapCount: number
     updatedAt: number

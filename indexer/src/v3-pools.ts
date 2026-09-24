@@ -96,8 +96,6 @@ async function upsertPoolDayVolume(
 ) {
     const dayTimestamp = getDayTimestamp(timestamp)
     const dayId = `${chainId}-${poolAddress}-${dayTimestamp}`
-    const in0 = amount0 > 0n ? amount0 : 0n
-    const in1 = amount1 > 0n ? amount1 : 0n
     const absAmount0 = amount0 < 0n ? -amount0 : amount0
     const absAmount1 = amount1 < 0n ? -amount1 : amount1
     const volumeUsd = await swapVolumeUsd(context, chainId, poolRecord, absAmount0, absAmount1)
@@ -112,8 +110,6 @@ async function upsertPoolDayVolume(
                 chainId,
                 poolAddress,
                 dayTimestamp,
-                volumeToken0: in0.toString(),
-                volumeToken1: in1.toString(),
                 volumeUsd,
                 swapCount: 1,
                 updatedAt: timestamp,
@@ -121,8 +117,6 @@ async function upsertPoolDayVolume(
             .onConflictDoNothing()
     } else {
         await context.db.update(schema.v3PoolDayVolume, { id: dayId }).set({
-            volumeToken0: (BigInt(existing.volumeToken0) + in0).toString(),
-            volumeToken1: (BigInt(existing.volumeToken1) + in1).toString(),
             volumeUsd: existing.volumeUsd + volumeUsd,
             swapCount: existing.swapCount + 1,
             updatedAt: timestamp,
@@ -433,17 +427,7 @@ export async function recordV3SwapEvent(
             tokenRec?.decimals ?? 18,
             18
         )
-        const nativeAmount = tokenIsToken0 ? amount1 : amount0
-        const volumeNative = Number(formatEther(nativeAmount < 0n ? -nativeAmount : nativeAmount))
-        await foldTokenCandle(
-            context,
-            chainId,
-            parsed.tokenAddr,
-            'v3',
-            timestamp,
-            priceNative,
-            volumeNative
-        )
+        await foldTokenCandle(context, chainId, parsed.tokenAddr, 'v3', timestamp, priceNative)
     }
 }
 

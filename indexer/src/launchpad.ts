@@ -155,16 +155,7 @@ async function handleSwap(
     const marketCap = computeMarketCapFromReserves(nativeReserve, tokenReserve, curve)
     const [volume] = orient(amountIn, amountOut)
 
-    await foldTokenCandle(
-        context,
-        chainId,
-        tokenAddrLower,
-        'bc',
-        timestamp,
-        price,
-        Number(formatEther(volume)),
-        preSwapPrice
-    )
+    await foldTokenCandle(context, chainId, tokenAddrLower, 'bc', timestamp, price, preSwapPrice)
     const creatorFeeNativeDelta = creatorFeeNative ?? 0n
 
     const nativePriceRecord = await context.db.find(schema.nativeUsdPrice, { chainId })

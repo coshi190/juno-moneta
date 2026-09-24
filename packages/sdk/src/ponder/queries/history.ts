@@ -49,7 +49,6 @@ const CANDLE_FIELDS = [
     'high',
     'low',
     'close',
-    'volumeNative',
 ] as const satisfies readonly (keyof TokenCandle)[]
 
 export type TokenCandleRow = Row<TokenCandle, typeof CANDLE_FIELDS>

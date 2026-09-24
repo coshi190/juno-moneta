@@ -8,7 +8,6 @@ export async function foldTokenCandle(
     source: 'v3' | 'bc',
     timestamp: number,
     price: number,
-    volumeNative: number,
     openIfNew?: number
 ) {
     if (!(price > 0)) return
@@ -24,11 +23,9 @@ export async function foldTokenCandle(
                       high: existing.high,
                       low: existing.low,
                       close: existing.close,
-                      volume: existing.volumeNative,
                   }
                 : null,
             price,
-            volumeNative,
             openIfNew
         )
 
@@ -46,7 +43,6 @@ export async function foldTokenCandle(
                     high: folded.high,
                     low: folded.low,
                     close: folded.close,
-                    volumeNative: folded.volume,
                     updatedAt: timestamp,
                 })
                 .onConflictDoNothing()
@@ -56,7 +52,6 @@ export async function foldTokenCandle(
                 high: folded.high,
                 low: folded.low,
                 close: folded.close,
-                volumeNative: folded.volume,
                 updatedAt: timestamp,
             })
         }

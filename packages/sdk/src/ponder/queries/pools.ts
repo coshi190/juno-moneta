@@ -39,8 +39,6 @@ const TOKEN_FIELDS = [
 const DAY_VOLUME_FIELDS = [
     'poolAddress',
     'dayTimestamp',
-    'volumeToken0',
-    'volumeToken1',
     'volumeUsd',
     'swapCount',
 ] as const satisfies readonly (keyof V3PoolDayVolume)[]

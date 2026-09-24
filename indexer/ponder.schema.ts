@@ -230,8 +230,6 @@ export const v3PoolDayVolume = onchainTable('v3_pool_day_volume', (t) => ({
     chainId: t.integer().notNull(),
     poolAddress: t.text().notNull(),
     dayTimestamp: t.integer().notNull(),
-    volumeToken0: t.text().notNull(),
-    volumeToken1: t.text().notNull(),
     volumeUsd: t.doublePrecision().notNull().default(0),
     swapCount: t.integer().notNull(),
     updatedAt: t.integer().notNull(),
@@ -260,7 +258,6 @@ export const tokenCandle = onchainTable('token_candle', (t) => ({
     high: t.doublePrecision().notNull(),
     low: t.doublePrecision().notNull(),
     close: t.doublePrecision().notNull(),
-    volumeNative: t.doublePrecision().notNull().default(0),
     updatedAt: t.integer().notNull(),
 }))
 
