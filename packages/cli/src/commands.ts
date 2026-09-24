@@ -1,5 +1,4 @@
 import * as sdk from '@coshi190/juno-moneta-sdk'
-import { createPublicClient, http, type Abi, type Address } from 'viem'
 import { createPonderClient, type PonderClient } from './ponder-client.js'
 import {
     optionalAddress,
@@ -9,7 +8,6 @@ import {
     optionalLimit,
     optionalName,
     optionalNonNegativeInt,
-    optionalNumber,
     optionalOrder,
     parseAddress,
     parseAddressList,
@@ -18,31 +16,9 @@ import {
     parseFields,
     parseInteger,
     parsePonderUrl,
-    parseRpcUrl,
     parseTime,
     parseTokenIds,
 } from './args.js'
-
-interface ContractCall {
-    address: Address
-    abi: Abi
-    functionName: string
-    args: readonly unknown[]
-    value?: bigint
-}
-
-interface ReadClient {
-    multicall(args: { contracts: readonly ContractCall[]; allowFailure: true }): Promise<unknown>
-    readContract(args: ContractCall): Promise<unknown>
-}
-
-interface SimulateClient extends ReadClient {
-    simulateContract(args: ContractCall & { account?: Address }): Promise<{ result: unknown }>
-}
-
-function createReadClient(rpcUrl: string): SimulateClient {
-    return createPublicClient({ transport: http(rpcUrl) }) as unknown as SimulateClient
-}
 
 export const OPTIONS = {
     chainId: { type: 'string' },
@@ -54,7 +30,6 @@ export const OPTIONS = {
     referrer: { type: 'string' },
     tokenAddr: { type: 'string' },
     tokenAddrs: { type: 'string' },
-    rpcUrl: { type: 'string' },
     creator: { type: 'string' },
     address: { type: 'string' },
     isGraduated: { type: 'string' },
@@ -74,9 +49,6 @@ export const OPTIONS = {
     source: { type: 'string' },
     duration: { type: 'string' },
     addresses: { type: 'string' },
-    dexId: { type: 'string' },
-    fullRangeTolerance: { type: 'string' },
-    simulate: { type: 'boolean', default: false },
     json: { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h', default: false },
 } as const
@@ -92,7 +64,6 @@ export interface Command {
 }
 
 const PONDER_FLAG = '[--ponderUrl <url=$JUNO_MONETA_PONDER_URL>]'
-const RPC_FLAG = '[--rpcUrl <url=$JUNO_MONETA_RPC_URL>]'
 const CANDLE_SOURCES = ['bc', 'v3'] as const
 const DEFAULT_ACTIVITY_LIMIT = 50
 
@@ -108,9 +79,7 @@ const FLAG = {
     chainId: '--chainId <id|slug>',
     chainId$opt: '[--chainId <id|slug>]',
     creator: '[--creator <addr>]',
-    dexId: '[--dexId <name>]',
     duration: '--duration <60|300|900|3600|14400|86400>',
-    fullRangeTolerance: '[--fullRangeTolerance <n>]',
     isBuy: '[--isBuy 0|1]',
     isGraduated: '[--isGraduated 0|1]',
     launchpadId: '[--launchpadId <id>]',
@@ -119,7 +88,6 @@ const FLAG = {
     limit$500: '[--limit <n=500>]',
     offset: '[--offset <n=0>]',
     owner: '--owner <addr>',
-    owner$opt: '[--owner <addr>]',
     poolAddress: '--poolAddress <addr>',
     poolAddress$opt: '[--poolAddress <addr>]',
     protocol: '[--protocol <name>]',
@@ -133,7 +101,6 @@ const FLAG = {
     tokenAddr$opt: '[--tokenAddr <addr>]',
     tokenAddrs: '[--tokenAddrs <a,a>]',
     tokenIds: '--tokenIds <id,id>',
-    tokenIds$opt: '[--tokenIds <id,id>]',
     txFrom: '[--txFrom <addr>]',
     users: '--users <addr,addr>',
 } as const satisfies Record<string, string>
@@ -149,9 +116,7 @@ const PARSE = {
     chainId: (a) => parseChainId(a.chainId),
     chainId$opt: (a) => optionalChainId(a.chainId),
     creator: (a) => optionalAddress(a.creator),
-    dexId: (a) => optionalName(a.dexId, 'dexId'),
     duration: (a) => parseInteger(a.duration, 'duration'),
-    fullRangeTolerance: (a) => optionalNumber(a.fullRangeTolerance, 'fullRangeTolerance'),
     isBuy: (a) => optionalFlag(a.isBuy, 'isBuy'),
     isGraduated: (a) => optionalFlag(a.isGraduated, 'isGraduated'),
     launchpadId: (a) => optionalName(a.launchpadId, 'launchpadId'),
@@ -160,7 +125,6 @@ const PARSE = {
     limit$500: (a) => optionalLimit(a.limit),
     offset: (a) => optionalNonNegativeInt(a.offset, 'offset') ?? 0,
     owner: (a) => parseAddress(a.owner, 'owner'),
-    owner$opt: (a) => optionalAddress(a.owner),
     poolAddress: (a) => parseAddress(a.poolAddress, 'poolAddress'),
     poolAddress$opt: (a) => optionalAddress(a.poolAddress),
     protocol: (a) => optionalName(a.protocol, 'protocol'),
@@ -174,7 +138,6 @@ const PARSE = {
     tokenAddr$opt: (a) => optionalAddress(a.tokenAddr),
     tokenAddrs: (a) => optionalAddressList(a.tokenAddrs),
     tokenIds: (a) => parseTokenIds(a.tokenIds),
-    tokenIds$opt: (a) => (a.tokenIds === undefined ? undefined : parseTokenIds(a.tokenIds)),
     txFrom: (a) => optionalAddress(a.txFrom),
     users: (a) => parseAddressList(a.users, 'users'),
 } satisfies Record<ArgKey, Parse>
@@ -271,14 +234,6 @@ const LAUNCH_TOKEN_FILTER = [
 ] as const
 const TOKEN_SNAPSHOT_FILTER = ['chainId$opt', 'launchpadId', 'tokenAddrs'] as const
 const TOKEN_HOLDER_FILTER = ['chainId$opt', 'tokenAddr$opt', 'address'] as const
-const POSITION_KEYS = [
-    'chainId',
-    'owner$opt',
-    'tokenIds$opt',
-    'dexId',
-    'limit',
-    'fullRangeTolerance',
-] as const
 
 export const COMMANDS: Record<string, Command> = {
     fetchUserStats: q(
@@ -485,16 +440,4 @@ export const COMMANDS: Record<string, Command> = {
         ['chainId', 'limit'],
         'Latest USD price per V3 token on a chain, from the indexer'
     ),
-    fetchPositions: {
-        flags: `${flagsFor(POSITION_KEYS, '[--simulate]')} ${RPC_FLAG}`,
-        describe:
-            'V3 positions resolved against live pool state, with amounts, fees owed, and range, --simulate for exact uncollected fees',
-        run: (args) => {
-            const client = createReadClient(parseRpcUrl(args.rpcUrl, parseChainId(args.chainId)))
-            return sdk.fetchPositions(ponder(args), client, {
-                ...paramsFor(POSITION_KEYS, args),
-                simulate: args.simulate ? client : undefined,
-            })
-        },
-    },
 }

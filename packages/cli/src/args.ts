@@ -164,15 +164,6 @@ export function parseInteger(value: string | undefined, flag: string): number {
     return Number(text)
 }
 
-export function optionalNumber(value: string | undefined, flag: string): number | undefined {
-    if (value === undefined) return undefined
-    const text = value.trim()
-    if (!/^-?\d+(\.\d+)?$/.test(text)) {
-        throw new UsageError(`invalid --${flag} "${value}" (expected a number)`)
-    }
-    return Number(text)
-}
-
 export function optionalFlag(value: string | undefined, flag: string): 0 | 1 | undefined {
     if (value === undefined) return undefined
     const text = value.trim()
@@ -228,20 +219,4 @@ export function optionalOrder<K extends string>(
         throw new UsageError(`invalid --orderDirection "${orderDirection}" (expected asc or desc)`)
     }
     return { orderBy: orderBy as K, orderDirection }
-}
-
-const DEFAULT_RPC_URLS: Record<number, string> = {
-    [CHAINS.kubTestnet]: 'https://rpc-testnet.bitkubchain.io',
-    [CHAINS.bitkub]: 'https://rpc.bitkubchain.io',
-    [CHAINS.jbc]: 'https://rpc-l1.jibchain.net',
-}
-
-export function parseRpcUrl(value: string | undefined, chainId: number): string {
-    const url = value ?? process.env.JUNO_MONETA_RPC_URL ?? DEFAULT_RPC_URLS[chainId]
-    if (!url) {
-        throw new UsageError(
-            `no rpc endpoint for chain ${chainId} (pass --rpcUrl or set JUNO_MONETA_RPC_URL)`
-        )
-    }
-    return url
 }

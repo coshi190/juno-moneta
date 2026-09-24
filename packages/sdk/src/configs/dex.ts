@@ -35,20 +35,6 @@ interface RawDexRegistry {
     }
 }
 
-const DEFAULT_TICK_SPACING = 60
-
-const TICK_SPACING_BY_FEE: Record<number, number> = {
-    100: 1,
-    500: 10,
-    2500: 50,
-    3000: 60,
-    10000: 200,
-}
-
-export function getTickSpacing(fee: number): number {
-    return TICK_SPACING_BY_FEE[fee] ?? DEFAULT_TICK_SPACING
-}
-
 const DEXES_BY_CHAIN: Record<number, Dex[]> = (() => {
     const byChain: Record<number, Dex[]> = {}
     for (const [dexId, dex] of Object.entries(dexRegistry as RawDexRegistry)) {

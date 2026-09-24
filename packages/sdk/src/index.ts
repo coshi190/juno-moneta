@@ -32,11 +32,7 @@ export {
     fetchV3TokenSnapshots,
     fetchPoolMetrics,
 } from './ponder/queries/pools.js'
-export {
-    fetchUserPositions,
-    fetchPositionsByTokenIds,
-    fetchPositions,
-} from './ponder/queries/positions.js'
+export { fetchUserPositions, fetchPositionsByTokenIds } from './ponder/queries/positions.js'
 export { fetchIncentives, fetchDepositsByOwner } from './ponder/queries/incentives.js'
 export {
     fetchBondingCurveHistory,

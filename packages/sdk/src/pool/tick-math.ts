@@ -66,8 +66,6 @@ export interface TickRange {
     tickUpper: number
 }
 
-const FULL_RANGE_TOLERANCE = 256
-
 export function snapTickRange(
     tickLower: number,
     tickUpper: number,
@@ -77,15 +75,6 @@ export function snapTickRange(
     let snappedUpper = nearestUsableTick(tickUpper, tickSpacing)
     if (snappedUpper <= snappedLower) snappedUpper = snappedLower + tickSpacing
     return { tickLower: snappedLower, tickUpper: snappedUpper }
-}
-
-export function isFullRange(tickLower: number, tickUpper: number, tolerance?: number): boolean {
-    const slack = tolerance ?? FULL_RANGE_TOLERANCE
-    return tickLower <= MIN_TICK + slack && tickUpper >= MAX_TICK - slack
-}
-
-export function isInRange(currentTick: number, tickLower: number, tickUpper: number): boolean {
-    return currentTick >= tickLower && currentTick < tickUpper
 }
 
 export function sortTokens<T extends { address: string }>(tokenA: T, tokenB: T): [T, T] {
