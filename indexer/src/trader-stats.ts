@@ -19,6 +19,7 @@ interface AddressTraderStats {
     volumeNative: number
     junoVolumeNative: number
     externalVolumeNative: number
+    volumeUsd: number
     points: number
     tradeCount: number
     buyCount: number
@@ -43,6 +44,7 @@ export function computeWindowedTraderStats(
     for (const [address, addrEvents] of eventsByAddress) {
         let junoVolumeNative = 0
         let externalVolumeNative = 0
+        let volumeUsd = 0
         let buyCount = 0
         let sellCount = 0
         for (const event of addrEvents) {
@@ -51,6 +53,7 @@ export function computeWindowedTraderStats(
             )
             if (isJunoswapProtocol(event.protocol ?? 'junoswap')) junoVolumeNative += nativeAmount
             else externalVolumeNative += nativeAmount
+            volumeUsd += nativeAmount * priceAt(event.timestamp)
             if (event.isBuy) buyCount++
             else sellCount++
         }
@@ -68,6 +71,7 @@ export function computeWindowedTraderStats(
             volumeNative: junoVolumeNative + externalVolumeNative,
             junoVolumeNative,
             externalVolumeNative,
+            volumeUsd,
             points: computePoints({ junoVolumeNative, externalVolumeNative }),
             tradeCount: addrEvents.length,
             buyCount,

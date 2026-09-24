@@ -41,6 +41,7 @@ const DAY_VOLUME_FIELDS = [
     'dayTimestamp',
     'volumeToken0',
     'volumeToken1',
+    'volumeUsd',
     'swapCount',
 ] as const satisfies readonly (keyof V3PoolDayVolume)[]
 
@@ -360,14 +361,7 @@ export async function fetchPoolMetrics(
         ...(wrappedNative === undefined ? {} : { wrappedNative }),
         ...(usdStable === undefined ? {} : { usdStable }),
     })
-    const volumes = computePoolVolumesUsd({
-        rows: dayVolumes,
-        pools: meta,
-        priceMap,
-        nowSeconds,
-        ...(wrappedNative === undefined ? {} : { wrappedNative }),
-        ...(usdStable === undefined ? {} : { usdStable }),
-    })
+    const volumes = computePoolVolumesUsd({ rows: dayVolumes, nowSeconds })
 
     return pools.map((pool, index) => {
         const key = pool.address.toLowerCase()

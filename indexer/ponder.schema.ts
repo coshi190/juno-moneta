@@ -232,6 +232,7 @@ export const v3PoolDayVolume = onchainTable('v3_pool_day_volume', (t) => ({
     dayTimestamp: t.integer().notNull(),
     volumeToken0: t.text().notNull(),
     volumeToken1: t.text().notNull(),
+    volumeUsd: t.doublePrecision().notNull().default(0),
     swapCount: t.integer().notNull(),
     updatedAt: t.integer().notNull(),
 }))
@@ -339,6 +340,7 @@ export const userStat = onchainTable('user_stat', (t) => ({
     volumeNative: t.doublePrecision().notNull().default(0),
     junoVolumeNative: t.doublePrecision().notNull().default(0),
     externalVolumeNative: t.doublePrecision().notNull().default(0),
+    volumeUsd: t.doublePrecision().notNull().default(0),
     tradeCount: t.integer().notNull().default(0),
     buyCount: t.integer().notNull().default(0),
     sellCount: t.integer().notNull().default(0),

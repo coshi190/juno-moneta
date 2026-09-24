@@ -54,16 +54,15 @@ export function fetchReferralBindings(
 export interface ReferralRewardsArgs {
     chainId: number
     referrer: string
-    nativeUsdPrice: number | null
 }
 
 export async function fetchReferralRewards(
     client: PonderClient,
-    { chainId, referrer, nativeUsdPrice }: ReferralRewardsArgs
+    { chainId, referrer }: ReferralRewardsArgs
 ): Promise<ReferralRewardsResult> {
     const bindings = await fetchReferralBindings(client, { referrer: referrer.toLowerCase() })
     const referees = bindings.map((r) => r.referee.toLowerCase())
     if (referees.length === 0) return computeReferralRewards([], [])
-    const stats = await fetchUserStats(client, { chainId, users: referees, nativeUsdPrice })
+    const stats = await fetchUserStats(client, { chainId, users: referees })
     return computeReferralRewards(referees, stats)
 }

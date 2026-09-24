@@ -194,24 +194,9 @@ export function computePoolTvlUsd(params: {
 
 export function computePoolVolumesUsd(params: {
     rows: V3PoolDayVolumeRow[]
-    pools: PoolUsdMeta[]
-    wrappedNative?: string
-    usdStable?: string
-    priceMap: Map<string, number>
     nowSeconds: number
 }): Record<string, PoolVolume> {
-    const { rows, pools, wrappedNative, usdStable, priceMap, nowSeconds } = params
-
-    const nativeUsdPrice = deriveNativeUsdPrice(pools, wrappedNative, usdStable)
-
-    const poolMap = new Map(pools.map((p) => [p.address.toLowerCase(), p]))
-
-    const byPool = new Map<string, V3PoolDayVolumeRow[]>()
-    for (const item of rows) {
-        const list = byPool.get(item.poolAddress) ?? []
-        list.push(item)
-        byPool.set(item.poolAddress, list)
-    }
+    const { rows, nowSeconds } = params
 
     const todayStart = Math.floor(nowSeconds / SECONDS_PER_DAY) * SECONDS_PER_DAY
     const yesterdayStart = todayStart - SECONDS_PER_DAY
@@ -219,48 +204,10 @@ export function computePoolVolumesUsd(params: {
 
     const result: Record<string, PoolVolume> = {}
 
-    for (const [poolAddr, days] of byPool) {
-        const pool = poolMap.get(poolAddr)
-        if (!pool) continue
-
-        let vol1d0 = 0n
-        let vol1d1 = 0n
-        let vol30d0 = 0n
-        let vol30d1 = 0n
-
-        for (const day of days) {
-            const vol0 = BigInt(day.volumeToken0)
-            const vol1 = BigInt(day.volumeToken1)
-
-            if (day.dayTimestamp >= yesterdayStart) {
-                vol1d0 += vol0
-                vol1d1 += vol1
-            }
-            if (day.dayTimestamp >= thirtyDaysAgo) {
-                vol30d0 += vol0
-                vol30d1 += vol1
-            }
-        }
-
-        const volume1d = priceAmountsUsd(
-            pool,
-            vol1d0,
-            vol1d1,
-            nativeUsdPrice,
-            priceMap,
-            wrappedNative
-        )
-        const volume30d = priceAmountsUsd(
-            pool,
-            vol30d0,
-            vol30d1,
-            nativeUsdPrice,
-            priceMap,
-            wrappedNative
-        )
-        if (volume1d === undefined || volume30d === undefined) continue
-
-        result[poolAddr] = { volume1d: volume1d ?? 0, volume30d: volume30d ?? 0 }
+    for (const day of rows) {
+        const entry = (result[day.poolAddress] ??= { volume1d: 0, volume30d: 0 })
+        if (day.dayTimestamp >= yesterdayStart) entry.volume1d += day.volumeUsd
+        if (day.dayTimestamp >= thirtyDaysAgo) entry.volume30d += day.volumeUsd
     }
 
     return result

@@ -8,6 +8,7 @@ const USER_STAT_FIELDS = [
     'volumeNative',
     'junoVolumeNative',
     'externalVolumeNative',
+    'volumeUsd',
     'tradeCount',
     'buyCount',
     'sellCount',
@@ -17,16 +18,11 @@ type UserStatFields = Row<UserStat, typeof USER_STAT_FIELDS>
 
 export type UserStatRow = UserStatFields & {
     points: number
-    volumeUsd: number
 }
 
 export async function fetchUserStats(
     client: PonderClient,
-    {
-        chainId,
-        users,
-        nativeUsdPrice,
-    }: { chainId: number; users: string[]; nativeUsdPrice: number | null }
+    { chainId, users }: { chainId: number; users: string[] }
 ): Promise<UserStatRow[]> {
     const rows = await client.fetchAllPages<{ userStats: Page<UserStatFields> }, UserStatFields>(
         `query UserStats($where: userStatFilter, $after: String) {
@@ -44,10 +40,5 @@ export async function fetchUserStats(
         { where: { chainId, user_in: users } },
         (r) => r.userStats
     )
-    const price = nativeUsdPrice ?? 0
-    return rows.map((row) => ({
-        ...row,
-        points: computePoints(row),
-        volumeUsd: row.volumeNative * price,
-    }))
+    return rows.map((row) => ({ ...row, points: computePoints(row) }))
 }

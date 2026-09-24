@@ -75,6 +75,7 @@ export async function recordUserSwap(
     const isJuno = isJunoswapProtocol(protocol)
     const junoVolumeNative = isJuno ? volumeNative : 0
     const externalVolumeNative = isJuno ? 0 : volumeNative
+    const volumeUsd = volumeNative * safeNativeUsd
     const statId = `${chainId}-${u}`
     const stat = await context.db.find(schema.userStat, { id: statId })
     if (stat) {
@@ -82,6 +83,7 @@ export async function recordUserSwap(
             volumeNative: stat.volumeNative + volumeNative,
             junoVolumeNative: stat.junoVolumeNative + junoVolumeNative,
             externalVolumeNative: stat.externalVolumeNative + externalVolumeNative,
+            volumeUsd: stat.volumeUsd + volumeUsd,
             tradeCount: stat.tradeCount + 1,
             buyCount: stat.buyCount + (isBuy ? 1 : 0),
             sellCount: stat.sellCount + (isBuy ? 0 : 1),
@@ -97,6 +99,7 @@ export async function recordUserSwap(
                 volumeNative,
                 junoVolumeNative,
                 externalVolumeNative,
+                volumeUsd,
                 tradeCount: 1,
                 buyCount: isBuy ? 1 : 0,
                 sellCount: isBuy ? 0 : 1,

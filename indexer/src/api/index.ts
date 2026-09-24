@@ -289,6 +289,7 @@ app.get('/leaderboard', async (c) => {
             volumeNative: s.volumeNative,
             junoVolumeNative: s.junoVolumeNative,
             externalVolumeNative: s.externalVolumeNative,
+            volumeUsd: s.volumeUsd,
             points: computePoints(s),
             tradeCount: s.tradeCount,
             buyCount: s.buyCount,

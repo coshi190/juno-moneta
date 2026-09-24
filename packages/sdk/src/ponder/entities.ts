@@ -165,6 +165,7 @@ export interface UserStat {
     volumeNative: number
     junoVolumeNative: number
     externalVolumeNative: number
+    volumeUsd: number
     tradeCount: number
     buyCount: number
     sellCount: number
@@ -214,6 +215,7 @@ export interface V3PoolDayVolume {
     dayTimestamp: number
     volumeToken0: string
     volumeToken1: string
+    volumeUsd: number
     swapCount: number
     updatedAt: number
 }

@@ -281,18 +281,11 @@ const POSITION_KEYS = [
 ] as const
 
 export const COMMANDS: Record<string, Command> = {
-    fetchUserStats: {
-        flags: flagsFor(['chainId', 'users']),
-        describe:
-            'Aggregate trade volume, counts, points, and USD volume per user from the indexer',
-        run: async (args) => {
-            const chainId = parseChainId(args.chainId)
-            const users = parseAddressList(args.users, 'users')
-            const client = ponder(args)
-            const nativeUsdPrice = await sdk.fetchNativeUsdPrice(client, { chainId })
-            return sdk.fetchUserStats(client, { chainId, users, nativeUsdPrice })
-        },
-    },
+    fetchUserStats: q(
+        sdk.fetchUserStats,
+        ['chainId', 'users'],
+        'Aggregate trade volume, counts, points, and USD volume per user from the indexer'
+    ),
     fetchIndexerStatus: q(
         sdk.fetchIndexerStatus,
         [],
@@ -308,17 +301,11 @@ export const COMMANDS: Record<string, Command> = {
         ['referrer'],
         'Referees bound to a referrer, oldest binding first'
     ),
-    fetchReferralRewards: {
-        flags: flagsFor(['chainId', 'referrer']),
-        describe: 'Referral points and referred trader breakdown for a referrer',
-        run: async (args) => {
-            const chainId = parseChainId(args.chainId)
-            const referrer = parseAddress(args.referrer, 'referrer')
-            const client = ponder(args)
-            const nativeUsdPrice = await sdk.fetchNativeUsdPrice(client, { chainId })
-            return sdk.fetchReferralRewards(client, { chainId, referrer, nativeUsdPrice })
-        },
-    },
+    fetchReferralRewards: q(
+        sdk.fetchReferralRewards,
+        ['chainId', 'referrer'],
+        'Referral points and referred trader breakdown for a referrer'
+    ),
     fetchIncentives: q(
         sdk.fetchIncentives,
         ['chainId', 'limit'],

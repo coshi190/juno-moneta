@@ -47,16 +47,60 @@ function getDayTimestamp(timestamp: number): number {
     return Math.floor(timestamp / SECONDS_PER_DAY) * SECONDS_PER_DAY
 }
 
+async function swapVolumeUsd(
+    context: any,
+    chainId: number,
+    poolRecord: { token0: string; token1: string },
+    absAmount0: bigint,
+    absAmount1: bigint
+): Promise<number> {
+    const { token0, token1 } = poolRecord
+    const wn = getWrappedNativeAddress(chainId)
+    if (token0 === wn || token1 === wn) {
+        const nativePriceRecord = await context.db.find(schema.nativeUsdPrice, { chainId })
+        const nativeUsd = nativePriceRecord ? parseFloat(nativePriceRecord.price) : 0
+        return Number(formatEther(token0 === wn ? absAmount0 : absAmount1)) * nativeUsd
+    }
+    const stables = getStablecoins(chainId)
+    const stableIsToken0 = stables?.has(token0) ?? false
+    if (stableIsToken0 || stables?.has(token1)) {
+        const stableAddr = stableIsToken0 ? token0 : token1
+        const stableToken = await context.db.find(schema.v3Token, {
+            id: `${chainId}-${stableAddr}`,
+        })
+        const decimals = stableToken?.decimals ?? 18
+        return Number(stableIsToken0 ? absAmount0 : absAmount1) / 10 ** decimals
+    }
+    for (const [addr, amount] of [
+        [token0, absAmount0],
+        [token1, absAmount1],
+    ] as const) {
+        const snap = await context.db.find(schema.v3TokenSnapshot, { id: `${chainId}-${addr}` })
+        const priceUsd = snap ? parseFloat(snap.lastPriceUsd ?? '0') : 0
+        if (priceUsd > 0) {
+            const token = await context.db.find(schema.v3Token, { id: `${chainId}-${addr}` })
+            return (Number(amount) / 10 ** (token?.decimals ?? 18)) * priceUsd
+        }
+    }
+    return 0
+}
+
 async function upsertPoolDayVolume(
     context: any,
     chainId: number,
     poolAddress: string,
+    poolRecord: { token0: string; token1: string },
     timestamp: number,
-    absAmount0: bigint,
-    absAmount1: bigint
+    amount0: bigint,
+    amount1: bigint
 ) {
     const dayTimestamp = getDayTimestamp(timestamp)
     const dayId = `${chainId}-${poolAddress}-${dayTimestamp}`
+    const in0 = amount0 > 0n ? amount0 : 0n
+    const in1 = amount1 > 0n ? amount1 : 0n
+    const absAmount0 = amount0 < 0n ? -amount0 : amount0
+    const absAmount1 = amount1 < 0n ? -amount1 : amount1
+    const volumeUsd = await swapVolumeUsd(context, chainId, poolRecord, absAmount0, absAmount1)
 
     const existing = await context.db.find(schema.v3PoolDayVolume, { id: dayId })
 
@@ -68,19 +112,18 @@ async function upsertPoolDayVolume(
                 chainId,
                 poolAddress,
                 dayTimestamp,
-                volumeToken0: absAmount0.toString(),
-                volumeToken1: absAmount1.toString(),
+                volumeToken0: in0.toString(),
+                volumeToken1: in1.toString(),
+                volumeUsd,
                 swapCount: 1,
                 updatedAt: timestamp,
             })
             .onConflictDoNothing()
     } else {
-        const newVol0 = BigInt(existing.volumeToken0) + absAmount0
-        const newVol1 = BigInt(existing.volumeToken1) + absAmount1
-
         await context.db.update(schema.v3PoolDayVolume, { id: dayId }).set({
-            volumeToken0: newVol0.toString(),
-            volumeToken1: newVol1.toString(),
+            volumeToken0: (BigInt(existing.volumeToken0) + in0).toString(),
+            volumeToken1: (BigInt(existing.volumeToken1) + in1).toString(),
+            volumeUsd: existing.volumeUsd + volumeUsd,
             swapCount: existing.swapCount + 1,
             updatedAt: timestamp,
         })
@@ -536,11 +579,6 @@ ponder.on('V3Pool:Swap', async ({ event, context }) => {
     const { amount0, amount1, sqrtPriceX96, liquidity, tick } = event.args
     const poolAddress = event.log.address.toLowerCase()
     const timestamp = Number(event.block.timestamp)
-    const absAmount0 = amount0 < 0n ? -amount0 : amount0
-    const absAmount1 = amount1 < 0n ? -amount1 : amount1
-
-    await upsertPoolDayVolume(context, 25925, poolAddress, timestamp, absAmount0, absAmount1)
-
     const poolRecord = await context.db.find(schema.v3Pool, { id: `25925-${poolAddress}` })
     if (!poolRecord) return
 
@@ -567,6 +605,7 @@ ponder.on('V3Pool:Swap', async ({ event, context }) => {
         event.log.logIndex
     )
 
+    await upsertPoolDayVolume(context, 25925, poolAddress, poolRecord, timestamp, amount0, amount1)
     await updateV3TokenSnapshot(context, 25925, poolAddress, poolRecord, sqrtPriceX96, timestamp)
 
     await recordV3SwapEvent(context, 25925, event, poolRecord, poolAddress, timestamp)
@@ -616,11 +655,6 @@ ponder.on('V3PoolBitkub:Swap', async ({ event, context }) => {
     const { amount0, amount1 } = event.args
     const poolAddress = event.log.address.toLowerCase()
     const timestamp = Number(event.block.timestamp)
-    const absAmount0 = amount0 < 0n ? -amount0 : amount0
-    const absAmount1 = amount1 < 0n ? -amount1 : amount1
-
-    await upsertPoolDayVolume(context, 96, poolAddress, timestamp, absAmount0, absAmount1)
-
     const poolRecord = await context.db.find(schema.v3Pool, { id: `96-${poolAddress}` })
     if (!poolRecord) return
 
@@ -646,6 +680,7 @@ ponder.on('V3PoolBitkub:Swap', async ({ event, context }) => {
         Number(event.block.number),
         event.log.logIndex
     )
+    await upsertPoolDayVolume(context, 96, poolAddress, poolRecord, timestamp, amount0, amount1)
     await updateV3TokenSnapshot(context, 96, poolAddress, poolRecord, sqrtPriceX96, timestamp)
     await recordV3SwapEvent(context, 96, event, poolRecord, poolAddress, timestamp)
 
@@ -694,11 +729,6 @@ ponder.on('V3PoolJbc:Swap', async ({ event, context }) => {
     const { amount0, amount1 } = event.args
     const poolAddress = event.log.address.toLowerCase()
     const timestamp = Number(event.block.timestamp)
-    const absAmount0 = amount0 < 0n ? -amount0 : amount0
-    const absAmount1 = amount1 < 0n ? -amount1 : amount1
-
-    await upsertPoolDayVolume(context, 8899, poolAddress, timestamp, absAmount0, absAmount1)
-
     const poolRecord = await context.db.find(schema.v3Pool, { id: `8899-${poolAddress}` })
     if (!poolRecord) return
 
@@ -724,6 +754,7 @@ ponder.on('V3PoolJbc:Swap', async ({ event, context }) => {
         Number(event.block.number),
         event.log.logIndex
     )
+    await upsertPoolDayVolume(context, 8899, poolAddress, poolRecord, timestamp, amount0, amount1)
     await updateV3TokenSnapshot(context, 8899, poolAddress, poolRecord, sqrtPriceX96, timestamp)
     await recordV3SwapEvent(context, 8899, event, poolRecord, poolAddress, timestamp)
 
