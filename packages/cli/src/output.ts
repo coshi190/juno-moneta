@@ -3,7 +3,7 @@ import { styleText } from 'node:util'
 const COLOR = styleText('dim', 'x') !== 'x'
 const NUMBERS = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 })
 const TIME_KEY = /(?:^|[a-z])(?:Time|At)$|(?:^|\.)timestamp$/
-const EMPTY = '(no results)'
+const EMPTY = dim('(no results)')
 
 type Row = Record<string, unknown>
 
@@ -12,7 +12,7 @@ function dim(text: string): string {
 }
 
 function isScalar(value: unknown): boolean {
-    return value === null || value === undefined || typeof value !== 'object'
+    return value === null || typeof value !== 'object'
 }
 
 function isRecord(value: unknown): value is Row {
@@ -23,20 +23,13 @@ function isNumeric(value: unknown): boolean {
     return value == null || typeof value === 'number' || typeof value === 'bigint'
 }
 
-function formatNumber(value: number, key: string | undefined): string {
-    if (!Number.isFinite(value)) return String(value)
-    if (key !== undefined && TIME_KEY.test(key) && value >= 1e9 && value <= 4e9) {
+function formatScalar(value: unknown, key = ''): string {
+    if (value == null) return '—'
+    if (typeof value !== 'number' || !Number.isFinite(value)) return String(value)
+    if (TIME_KEY.test(key) && value >= 1e9 && value <= 4e9)
         return new Date(value * 1000).toISOString()
-    }
-    if (Number.isInteger(value))
-        return Math.abs(value) < 1e6 ? String(value) : NUMBERS.format(value)
-    return Math.abs(value) >= 1 ? NUMBERS.format(value) : String(value)
-}
-
-function formatScalar(value: unknown, key?: string): string {
-    if (value === null || value === undefined) return '—'
-    if (typeof value === 'number') return formatNumber(value, key)
-    return String(value)
+    if (Math.abs(value) < (Number.isInteger(value) ? 1e6 : 1)) return String(value)
+    return NUMBERS.format(value)
 }
 
 function flatten(row: Row, key?: string): Row {
@@ -55,9 +48,11 @@ function renderTable(rows: Row[]): string[] {
     const widths = columns.map((n, i) =>
         Math.max(n.length, ...cells.map((r) => (r[i] ?? '').length))
     )
-    const pad = (v: string, i: number): string =>
-        right[i] === true ? v.padStart(widths[i] ?? 0) : v.padEnd(widths[i] ?? 0)
-    const line = (values: string[]): string => values.map(pad).join('  ').trimEnd()
+    const line = (values: string[]): string =>
+        values
+            .map((v, i) => v[right[i] ? 'padStart' : 'padEnd'](widths[i] ?? 0))
+            .join('  ')
+            .trimEnd()
     return [dim(line(columns)), ...cells.map(line)]
 }
 
@@ -66,20 +61,20 @@ function renderPairs(entries: (readonly [string, unknown])[]): string[] {
     return entries.flatMap(([key, value]) => {
         const label = `${dim(key.padEnd(width))}  `
         if (isScalar(value)) return [(label + formatScalar(value, key)).trimEnd()]
-        if (Array.isArray(value) && value.length === 0) return [label + dim(EMPTY)]
+        if (Array.isArray(value) && value.length === 0) return [label + EMPTY]
         return [dim(key), ...renderLines(value).map((line) => (line === '' ? line : `  ${line}`))]
     })
 }
 
 function renderArray(items: unknown[]): string[] {
-    if (items.length === 0) return [dim(EMPTY)]
+    if (items.length === 0) return [EMPTY]
     if (items.every(isRecord)) return renderTable(items.map((row) => flatten(row)))
     return items.map((value) => formatScalar(value))
 }
 
 function renderRecord(record: Row): string[] {
     const entries = Object.entries(record)
-    if (entries.length === 0) return [dim(EMPTY)]
+    if (entries.length === 0) return [EMPTY]
     if (!entries.every(([, value]) => isRecord(value))) return renderPairs(entries)
     return renderTable(entries.map(([key, value]) => flatten(value as Row, key)))
 }

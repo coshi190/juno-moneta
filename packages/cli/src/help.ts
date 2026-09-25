@@ -2,51 +2,23 @@ import { CHAIN_SLUGS } from './args.js'
 import { COMMANDS, type Command } from './commands.js'
 
 const WRAP_WIDTH = 96
-const FALLBACK_WIDTH = 120
-
-function terminalWidth(): number {
-    if (process.stdout.isTTY !== true) return Number.POSITIVE_INFINITY
-    return process.stdout.columns ?? FALLBACK_WIDTH
-}
-
-function flagGroups(flags: string): string[] {
-    const groups: string[] = []
-    for (const token of flags.split(' ')) {
-        const previous = groups.length - 1
-        if (previous >= 0 && !token.startsWith('--') && !token.startsWith('[')) {
-            groups[previous] += ` ${token}`
-        } else {
-            groups.push(token)
-        }
-    }
-    return groups
-}
 
 export function signature(name: string, command: Command, indent = 0): string {
-    if (!command.flags) return name
-
-    const wrap = Math.min(terminalWidth(), WRAP_WIDTH)
+    const width = Math.min(process.stdout.columns || WRAP_WIDTH, WRAP_WIDTH)
     const hang = ' '.repeat(indent + name.length + 1)
-    const lines: string[] = []
-    let line = name
-    let offset = indent
-    for (const group of flagGroups(command.flags)) {
-        const candidate = `${line} ${group}`
-        if (line === name || offset + candidate.length <= wrap) {
-            line = candidate
-            continue
-        }
-        lines.push(line)
-        line = hang + group
-        offset = 0
+    const [first, ...rest] = command.flags
+    const lines = [`${' '.repeat(indent)}${name} ${first}`]
+    for (const flag of rest) {
+        const last = lines.length - 1
+        if (lines[last]!.length + flag.length + 1 <= width) lines[last] += ` ${flag}`
+        else lines.push(hang + flag)
     }
-    lines.push(line)
     return lines.join('\n')
 }
 
 export function helpText(): string {
     const commands = Object.entries(COMMANDS).map(
-        ([name, command]) => `  ${signature(name, command, 2)}\n      ${command.describe}`
+        ([name, command]) => `${signature(name, command, 2)}\n      ${command.describe}`
     )
 
     return [

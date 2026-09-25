@@ -7,169 +7,97 @@ const CHAINS = {
     worldchain: 480,
 } as const
 
-type ChainSlug = keyof typeof CHAINS
+export const CHAIN_SLUGS = Object.keys(CHAINS) as (keyof typeof CHAINS)[]
 
-export class UsageError extends Error {}
+export type Parse<T> = (value: string | undefined, flag: string) => T
 
-export const CHAIN_SLUGS = Object.keys(CHAINS) as ChainSlug[]
-
-const ADDRESS = /^0x[0-9a-fA-F]{40}$/
-const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/
+function fail(message: string): never {
+    throw new Error(message)
+}
 
 function required(value: string | undefined, flag: string): string {
-    if (value === undefined) throw new UsageError(`missing required flag --${flag}`)
-    return value.trim()
+    return value?.trim() ?? fail(`missing required flag --${flag}`)
 }
 
-function normalizeAddress(item: string): string {
-    if (!ADDRESS.test(item)) {
-        throw new UsageError(`invalid address "${item}" (expected 0x + 40 hex chars)`)
+function match(value: string | undefined, flag: string, pattern: RegExp, expected: string) {
+    const text = required(value, flag)
+    return pattern.test(text) ? text : fail(`invalid --${flag} "${text}" (expected ${expected})`)
+}
+
+export const optional =
+    <T, D = undefined>(parse: Parse<T>, fallback?: D): Parse<NoInfer<T | D>> =>
+    (value, flag) =>
+        value === undefined ? (fallback as D) : parse(value, flag)
+
+const list =
+    <T>(item: Parse<T>): Parse<T[]> =>
+    (value, flag) => {
+        const items = required(value, flag)
+            .split(',')
+            .filter((text) => text.trim() !== '')
+        if (items.length === 0) fail(`--${flag} requires at least one value`)
+        return items.map((text) => item(text, flag))
     }
-    return item.toLowerCase()
+
+export const parseAddress: Parse<string> = (value, flag) =>
+    match(value, flag, /^0x[0-9a-fA-F]{40}$/, '0x + 40 hex chars').toLowerCase()
+
+export const parseAddressList = list(parseAddress)
+
+export const parseTokenIds = list((value, flag) =>
+    BigInt(match(value, flag, /^\d+$/, 'a non-negative integer'))
+)
+
+export const parseInteger: Parse<number> = (value, flag) =>
+    Number(match(value, flag, /^-?\d+$/, 'a whole number'))
+
+export const parsePositiveInt: Parse<number> = (value, flag) =>
+    Number(match(value, flag, /^0*[1-9]\d*$/, 'a positive integer'))
+
+export const parseUint: Parse<number> = (value, flag) =>
+    Number(match(value, flag, /^\d+$/, 'a non-negative integer'))
+
+export const parseBit: Parse<0 | 1> = (value, flag) =>
+    Number(match(value, flag, /^[01]$/, '0 or 1')) as 0 | 1
+
+export const parseName: Parse<string> = (value, flag) => match(value, flag, /./, 'a name')
+
+const parseField: Parse<string> = (value, flag) =>
+    match(value, flag, /^[A-Za-z_][A-Za-z0-9_]*$/, 'a plain field name')
+
+export const parseEnum =
+    <T extends string>(allowed: readonly T[]): Parse<T> =>
+    (value, flag) => {
+        const choice = required(value, flag) as T
+        return allowed.includes(choice)
+            ? choice
+            : fail(`invalid --${flag} "${choice}" (expected one of: ${allowed.join(', ')})`)
+    }
+
+export const parseChainId: Parse<number> = (value, flag) => {
+    const text = required(value, flag)
+    if (/^\d+$/.test(text)) return Number(text)
+    if (!Object.hasOwn(CHAINS, text)) {
+        fail(`unknown chain "${text}" (expected a numeric id or one of: ${CHAIN_SLUGS.join(', ')})`)
+    }
+    return CHAINS[text as keyof typeof CHAINS]
 }
 
-function splitList(value: string): string[] {
-    return value
-        .split(',')
-        .map((item) => item.trim())
-        .filter((item) => item.length > 0)
-}
-
-export function parseAddress(value: string | undefined, flag: string): string {
-    return normalizeAddress(required(value, flag))
-}
-
-export function parseAddressList(value: string | undefined, flag: string): string[] {
-    const items = splitList(required(value, flag))
-    if (items.length === 0) throw new UsageError(`--${flag} requires at least one address`)
-    return items.map(normalizeAddress)
-}
-
-export function optionalAddress(value: string | undefined): string | undefined {
-    return value === undefined ? undefined : normalizeAddress(value.trim())
-}
-
-export function optionalAddressList(value: string | undefined): string[] | undefined {
-    if (value === undefined) return undefined
-    return splitList(value).map(normalizeAddress)
-}
-
-export function parseTokenIds(value: string | undefined): bigint[] {
-    const items = splitList(required(value, 'tokenIds'))
-    if (items.length === 0) throw new UsageError('--tokenIds requires at least one token id')
-    return items.map((item) => {
-        if (!/^\d+$/.test(item)) {
-            throw new UsageError(`invalid token id "${item}" (expected a non-negative integer)`)
-        }
-        return BigInt(item)
-    })
+export const parseTime: Parse<number> = (value, flag) => {
+    const text = required(value, flag)
+    const relative = /^(\d+)([mhd])$/.exec(text)
+    if (relative) {
+        const unit = { m: 60, h: 3600, d: 86400 }[relative[2] as 'm' | 'h' | 'd']
+        return Math.floor(Date.now() / 1000) - Number(relative[1]) * unit
+    }
+    return Number(match(text, flag, /^\d+$/, 'unix seconds or a span like 30m, 24h, 7d'))
 }
 
 export function parsePonderUrl(value: string | undefined): string {
-    const url = value ?? process.env.JUNO_MONETA_PONDER_URL ?? process.env.JUNOSWAP_PONDER_URL
-    if (!url) {
-        throw new UsageError(
-            'missing indexer endpoint (pass --ponderUrl or set JUNO_MONETA_PONDER_URL)'
-        )
-    }
-    return url
-}
-
-function resolveChainId(value: string): number {
-    if (/^\d+$/.test(value)) return Number(value)
-
-    if (!(value in CHAINS)) {
-        throw new UsageError(
-            `unknown chain "${value}" (expected a numeric id or one of: ${CHAIN_SLUGS.join(', ')})`
-        )
-    }
-    return CHAINS[value as ChainSlug]
-}
-
-export function parseChainId(value: string | undefined): number {
-    return resolveChainId(required(value, 'chainId'))
-}
-
-export function optionalChainId(value: string | undefined): number | undefined {
-    return value === undefined ? undefined : resolveChainId(value.trim())
-}
-
-function optionalUint(value: string | undefined, flag: string, min: 0 | 1): number | undefined {
-    if (value === undefined) return undefined
-    const text = value.trim()
-    if (!/^\d+$/.test(text) || Number(text) < min) {
-        const expected = min === 1 ? 'positive' : 'non-negative'
-        throw new UsageError(`invalid --${flag} "${value}" (expected a ${expected} integer)`)
-    }
-    return Number(text)
-}
-
-export function optionalLimit(value: string | undefined): number | undefined {
-    return optionalUint(value, 'limit', 1)
-}
-
-export function optionalNonNegativeInt(
-    value: string | undefined,
-    flag: string
-): number | undefined {
-    return optionalUint(value, flag, 0)
-}
-
-export function optionalName(value: string | undefined, flag: string): string | undefined {
-    if (value === undefined) return undefined
-    const name = value.trim()
-    if (name.length === 0) throw new UsageError(`--${flag} requires a name`)
-    return name
-}
-
-const RELATIVE = /^(\d+)([mhd])$/
-
-export function parseTime(value: string | undefined, flag: string): number {
-    const text = required(value, flag)
-
-    const relative = RELATIVE.exec(text)
-    if (relative) {
-        const unit = relative[2]
-        const seconds = Number(relative[1]) * (unit === 'm' ? 60 : unit === 'h' ? 3600 : 86400)
-        return Math.floor(Date.now() / 1000) - seconds
-    }
-
-    if (!/^\d+$/.test(text)) {
-        throw new UsageError(
-            `invalid --${flag} "${value}" (expected unix seconds or a span like 30m, 24h, 7d)`
-        )
-    }
-    return Number(text)
-}
-
-export function parseEnum<T extends string>(
-    value: string | undefined,
-    flag: string,
-    allowed: readonly T[]
-): T {
-    const choice = required(value, flag) as T
-    if (!allowed.includes(choice)) {
-        throw new UsageError(
-            `invalid --${flag} "${value}" (expected one of: ${allowed.join(', ')})`
-        )
-    }
-    return choice
-}
-
-export function parseInteger(value: string | undefined, flag: string): number {
-    const text = required(value, flag)
-    if (!/^-?\d+$/.test(text)) {
-        throw new UsageError(`invalid --${flag} "${value}" (expected a whole number)`)
-    }
-    return Number(text)
-}
-
-export function optionalFlag(value: string | undefined, flag: string): 0 | 1 | undefined {
-    if (value === undefined) return undefined
-    const text = value.trim()
-    if (text === '0') return 0
-    if (text === '1') return 1
-    throw new UsageError(`invalid --${flag} "${value}" (expected 0 or 1)`)
+    return (
+        (value ?? process.env.JUNO_MONETA_PONDER_URL ?? process.env.JUNOSWAP_PONDER_URL) ||
+        fail('missing indexer endpoint (pass --ponderUrl or set JUNO_MONETA_PONDER_URL)')
+    )
 }
 
 export function parseFields<K extends string>(
@@ -178,26 +106,10 @@ export function parseFields<K extends string>(
     fallback: readonly K[]
 ): readonly K[] {
     if (value === undefined) return fallback
-
-    const preset = presets[value]
-    if (preset !== undefined) return preset
-
-    const names = splitList(value)
-    if (names.length === 0) {
-        throw new UsageError(
-            `--fields requires field names or one of: ${Object.keys(presets).join(', ')}`
-        )
-    }
-
-    return names.map((name) => {
-        if (!IDENTIFIER.test(name)) {
-            throw new UsageError(`invalid field "${name}" (expected a plain field name)`)
-        }
-        return name as K
-    })
+    return presets[value] ?? (list(parseField)(value, 'fields') as K[])
 }
 
-interface QueryOrder<K> {
+export interface QueryOrder<K> {
     orderBy: K
     orderDirection?: 'asc' | 'desc'
 }
@@ -207,16 +119,14 @@ export function optionalOrder<K extends string>(
     orderDirection: string | undefined
 ): QueryOrder<K> | undefined {
     if (orderBy === undefined) {
-        if (orderDirection !== undefined) {
-            throw new UsageError('--orderDirection requires --orderBy')
-        }
+        if (orderDirection !== undefined) fail('--orderDirection requires --orderBy')
         return undefined
     }
-    if (!IDENTIFIER.test(orderBy)) {
-        throw new UsageError(`invalid --orderBy "${orderBy}" (expected a plain field name)`)
+    return {
+        orderBy: parseField(orderBy, 'orderBy') as K,
+        orderDirection: optional(parseEnum(['asc', 'desc'] as const))(
+            orderDirection,
+            'orderDirection'
+        ),
     }
-    if (orderDirection !== undefined && orderDirection !== 'asc' && orderDirection !== 'desc') {
-        throw new UsageError(`invalid --orderDirection "${orderDirection}" (expected asc or desc)`)
-    }
-    return { orderBy: orderBy as K, orderDirection }
 }
