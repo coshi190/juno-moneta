@@ -1,26 +1,13 @@
 import { calculateMinAmounts, getAmountsForLiquidity } from './liquidity-math.js'
-import {
-    priceToSqrtPriceX96,
-    snapTickRange,
-    sortTokens,
-    tickToSqrtPriceX96,
-    type TickRange,
-} from './tick-math.js'
+import { priceToSqrtPriceX96, snapTickRange, sortTokens, tickToSqrtPriceX96 } from './tick-math.js'
 
-interface InitialPriceParams {
-    price: string
-    decimals0: number
-    decimals1: number
-    invert?: boolean
+interface PlanSettings {
+    slippageBps: number
+    deadlineMinutes: number
+    nowSeconds?: number
 }
 
-export interface LiquidityPlan {
-    amount0Min: bigint
-    amount1Min: bigint
-    deadline: bigint
-}
-
-export interface PlanAddLiquidityParams {
+export interface PlanAddLiquidityParams extends PlanSettings {
     token0: { address: string; decimals: number }
     token1: { address: string; decimals: number }
     fee: number
@@ -29,131 +16,72 @@ export interface PlanAddLiquidityParams {
     tickUpper: number
     amount0Desired: bigint
     amount1Desired: bigint
-    slippageBps: number
-    deadlineMinutes: number
     initialPrice?: string
-    nowSeconds?: number
 }
 
-export interface AddLiquidityPlan extends LiquidityPlan {
-    token0: string
-    token1: string
-    inverted: boolean
-    fee: number
-    tickLower: number
-    tickUpper: number
-    amount0Desired: bigint
-    amount1Desired: bigint
-    initialSqrtPriceX96: bigint | null
-}
-
-export interface PlanIncreaseLiquidityParams {
-    tokenId: bigint
-    amount0Desired: bigint
-    amount1Desired: bigint
-    slippageBps: number
-    deadlineMinutes: number
-    nowSeconds?: number
-}
-
-export interface IncreaseLiquidityPlan extends LiquidityPlan {
+export interface PlanIncreaseLiquidityParams extends PlanSettings {
     tokenId: bigint
     amount0Desired: bigint
     amount1Desired: bigint
 }
 
-export interface PlanRemoveLiquidityParams {
+export interface PlanRemoveLiquidityParams extends PlanSettings {
     liquidity: bigint
     percentage: number
     sqrtPriceX96: bigint
     tickLower: number
     tickUpper: number
-    slippageBps: number
-    deadlineMinutes: number
-    nowSeconds?: number
 }
 
-export interface RemoveLiquidityPlan extends LiquidityPlan {
-    liquidity: bigint
-    amount0: bigint
-    amount1: bigint
+function bounds(amount0: bigint, amount1: bigint, settings: PlanSettings) {
+    const now = settings.nowSeconds ?? Math.floor(Date.now() / 1000)
+    return {
+        ...calculateMinAmounts(amount0, amount1, settings.slippageBps),
+        deadline: BigInt(now + settings.deadlineMinutes * 60),
+    }
 }
 
-function resolveDeadline(deadlineMinutes: number, nowSeconds: number | undefined): bigint {
-    const base = nowSeconds ?? Math.floor(Date.now() / 1000)
-    return BigInt(base + deadlineMinutes * 60)
-}
-
-function mirrorRange(tickLower: number, tickUpper: number, invert: boolean | undefined): TickRange {
-    if (!invert) return { tickLower, tickUpper }
-    return { tickLower: -tickUpper, tickUpper: -tickLower }
-}
-
-function computeInitialSqrtPriceX96(params: InitialPriceParams): bigint {
-    const parsed = parseFloat(params.price)
-    const oriented = params.invert && parsed > 0 ? 1 / parsed : parsed
-    return priceToSqrtPriceX96(String(oriented), params.decimals0, params.decimals1)
-}
-
-export function planAddLiquidity(params: PlanAddLiquidityParams): AddLiquidityPlan {
-    const [poolToken0, poolToken1] = sortTokens(params.token0, params.token1)
-    const inverted = poolToken0.address.toLowerCase() !== params.token0.address.toLowerCase()
-
-    const mirrored = mirrorRange(params.tickLower, params.tickUpper, inverted)
-    const range = snapTickRange(mirrored.tickLower, mirrored.tickUpper, params.tickSpacing)
-
+export function planAddLiquidity(params: PlanAddLiquidityParams) {
+    const [token0, token1] = sortTokens(params.token0, params.token1)
+    const inverted = token0.address.toLowerCase() !== params.token0.address.toLowerCase()
+    const { tickLower, tickUpper } = inverted
+        ? snapTickRange(-params.tickUpper, -params.tickLower, params.tickSpacing)
+        : snapTickRange(params.tickLower, params.tickUpper, params.tickSpacing)
     const amount0Desired = inverted ? params.amount1Desired : params.amount0Desired
     const amount1Desired = inverted ? params.amount0Desired : params.amount1Desired
 
-    const { amount0Min, amount1Min } = calculateMinAmounts(
-        amount0Desired,
-        amount1Desired,
-        params.slippageBps
-    )
-
-    const initialSqrtPriceX96 =
-        params.initialPrice === undefined
-            ? null
-            : computeInitialSqrtPriceX96({
-                  price: params.initialPrice,
-                  decimals0: poolToken0.decimals,
-                  decimals1: poolToken1.decimals,
-                  invert: inverted,
-              })
+    let initialSqrtPriceX96: bigint | null = null
+    if (params.initialPrice !== undefined) {
+        const price = parseFloat(params.initialPrice)
+        const oriented = inverted && price > 0 ? 1 / price : price
+        initialSqrtPriceX96 = priceToSqrtPriceX96(oriented, token0.decimals, token1.decimals)
+    }
 
     return {
-        token0: poolToken0.address,
-        token1: poolToken1.address,
+        token0: token0.address,
+        token1: token1.address,
         inverted,
         fee: params.fee,
-        tickLower: range.tickLower,
-        tickUpper: range.tickUpper,
+        tickLower,
+        tickUpper,
         amount0Desired,
         amount1Desired,
-        amount0Min,
-        amount1Min,
-        deadline: resolveDeadline(params.deadlineMinutes, params.nowSeconds),
+        ...bounds(amount0Desired, amount1Desired, params),
         initialSqrtPriceX96,
     }
 }
 
-export function planIncreaseLiquidity(params: PlanIncreaseLiquidityParams): IncreaseLiquidityPlan {
-    const { amount0Min, amount1Min } = calculateMinAmounts(
-        params.amount0Desired,
-        params.amount1Desired,
-        params.slippageBps
-    )
+export function planIncreaseLiquidity(params: PlanIncreaseLiquidityParams) {
+    const { tokenId, amount0Desired, amount1Desired } = params
     return {
-        tokenId: params.tokenId,
-        amount0Desired: params.amount0Desired,
-        amount1Desired: params.amount1Desired,
-        amount0Min,
-        amount1Min,
-        deadline: resolveDeadline(params.deadlineMinutes, params.nowSeconds),
+        tokenId,
+        amount0Desired,
+        amount1Desired,
+        ...bounds(amount0Desired, amount1Desired, params),
     }
 }
 
-export function planRemoveLiquidity(params: PlanRemoveLiquidityParams): RemoveLiquidityPlan {
+export function planRemoveLiquidity(params: PlanRemoveLiquidityParams) {
     const liquidity = (params.liquidity * BigInt(params.percentage)) / 100n
     const { amount0, amount1 } = getAmountsForLiquidity(
         params.sqrtPriceX96,
@@ -161,13 +89,5 @@ export function planRemoveLiquidity(params: PlanRemoveLiquidityParams): RemoveLi
         tickToSqrtPriceX96(params.tickUpper),
         liquidity
     )
-    const { amount0Min, amount1Min } = calculateMinAmounts(amount0, amount1, params.slippageBps)
-    return {
-        liquidity,
-        amount0,
-        amount1,
-        amount0Min,
-        amount1Min,
-        deadline: resolveDeadline(params.deadlineMinutes, params.nowSeconds),
-    }
+    return { liquidity, amount0, amount1, ...bounds(amount0, amount1, params) }
 }

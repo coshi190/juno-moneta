@@ -6,18 +6,16 @@ export type DEXType = string
 
 export type Protocol = 'v2' | 'v3'
 
-interface DexBase {
+export interface V2Dex {
     dexId: DEXType
-}
-
-export interface V2Dex extends DexBase {
     protocol: 'v2'
     factory: Address
     router: Address
     wnative?: Address
 }
 
-export interface V3Dex extends DexBase {
+export interface V3Dex {
+    dexId: DEXType
     protocol: 'v3'
     factory: Address
     quoter: Address
@@ -29,56 +27,40 @@ export interface V3Dex extends DexBase {
 
 export type Dex = V2Dex | V3Dex
 
-interface RawDexRegistry {
-    [dexId: string]: {
-        protocols: Record<string, Record<string, Record<string, unknown>>>
-    }
-}
+type DexOf<P extends Protocol> = Extract<Dex, { protocol: P }>
+
+type RawDexRegistry = Record<
+    string,
+    { protocols: Record<string, Record<string, { enabled?: boolean } & Record<string, unknown>>> }
+>
 
 const DEXES_BY_CHAIN: Record<number, Dex[]> = (() => {
     const byChain: Record<number, Dex[]> = {}
     for (const [dexId, dex] of Object.entries(dexRegistry as RawDexRegistry)) {
         const perChain = byChainId(dex.protocols, (byProtocol) => byProtocol)
         for (const [chainId, byProtocol] of Object.entries(perChain)) {
-            for (const [protocol, cfg] of Object.entries(byProtocol)) {
-                if (!cfg.enabled) continue
-                const { enabled: _enabled, ...rest } = cfg
-                const entry = { ...rest, dexId, protocol } as Dex
-                ;(byChain[Number(chainId)] ??= []).push(entry)
+            for (const [protocol, { enabled, ...rest }] of Object.entries(byProtocol)) {
+                if (!enabled) continue
+                ;(byChain[Number(chainId)] ??= []).push({ ...rest, dexId, protocol } as Dex)
             }
         }
     }
     return byChain
 })()
 
-export function getDexes(chainId: number, protocol: 'v2'): V2Dex[]
-export function getDexes(chainId: number, protocol: 'v3'): V3Dex[]
-export function getDexes(chainId: number, protocol?: Protocol): Dex[]
-export function getDexes(chainId: number, protocol?: Protocol): Dex[] {
+export function getDexes<P extends Protocol = Protocol>(chainId: number, protocol?: P): DexOf<P>[] {
     const dexes = DEXES_BY_CHAIN[chainId] ?? []
-    return protocol === undefined ? dexes : dexes.filter((dex) => dex.protocol === protocol)
+    return (
+        protocol === undefined ? dexes : dexes.filter((dex) => dex.protocol === protocol)
+    ) as DexOf<P>[]
 }
 
-export function findDex(
+export function findDex<P extends Protocol>(
     chainId: number,
     dexId: DEXType | undefined,
-    protocol: 'v2'
-): V2Dex | undefined
-export function findDex(
-    chainId: number,
-    dexId: DEXType | undefined,
-    protocol: 'v3'
-): V3Dex | undefined
-export function findDex(
-    chainId: number,
-    dexId: DEXType | undefined,
-    protocol: Protocol
-): Dex | undefined
-export function findDex(
-    chainId: number,
-    dexId: DEXType | undefined,
-    protocol: Protocol
-): Dex | undefined {
-    const dexes = getDexes(chainId, protocol)
-    return dexId === undefined ? dexes[0] : dexes.find((dex) => dex.dexId === dexId)
+    protocol: P
+): DexOf<P> | undefined {
+    return DEXES_BY_CHAIN[chainId]?.find(
+        (dex) => dex.protocol === protocol && (dexId === undefined || dex.dexId === dexId)
+    ) as DexOf<P> | undefined
 }

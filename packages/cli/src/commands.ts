@@ -24,7 +24,6 @@ const ARGS = {
     address: ['[--address <holder>]', optional(parseAddress)],
     addresses: ['[--addresses <a,a>]', optional(parseAddressList)],
     after: ['[--after <cursor>]', (value) => value],
-    before: ['--before <unix|30m|24h|7d>', parseTime],
     chainId: ['--chainId <id|slug>', parseChainId],
     chainId$opt: ['[--chainId <id|slug>]', optional(parseChainId)],
     creator: ['[--creator <addr>]', optional(parseAddress)],
@@ -34,12 +33,24 @@ const ARGS = {
     launchpadId: ['[--launchpadId <id>]', optional(parseName)],
     limit: ['[--limit <n>]', optional(parsePositiveInt)],
     limit$50: ['[--limit <n=50>]', optional(parsePositiveInt, 50)],
+    limit$all: [
+        '[--limit <n|all=50>]',
+        optional(
+            (value, flag) => (value === 'all' ? ('all' as const) : parsePositiveInt(value, flag)),
+            50
+        ),
+    ],
     offset: ['[--offset <n=0>]', optional(parseUint, 0)],
+    orderDirection: [
+        '[--orderDirection asc|desc=desc]',
+        optional(parseEnum(['asc', 'desc'] as const)),
+    ],
     owner: ['--owner <addr>', parseAddress],
     poolAddress: ['--poolAddress <addr>', parseAddress],
     poolAddress$opt: ['[--poolAddress <addr>]', optional(parseAddress)],
     protocol: ['[--protocol <name>]', optional(parseName)],
     referrer: ['--referrer <addr>', parseAddress],
+    referrer$opt: ['[--referrer <addr>]', optional(parseAddress)],
     sender: ['--sender <addr>', parseAddress],
     sender$opt: ['[--sender <addr>]', optional(parseAddress)],
     since: ['--since <unix|30m|24h|7d>', parseTime],
@@ -192,8 +203,7 @@ const USER_SWAP = ['chainId', 'sender', 'limit$50', 'after'] as const
 const RUNNERS = {
     fetchUserStats: q(sdk.fetchUserStats, ['chainId', 'users']),
     fetchIndexerStatus: q(sdk.fetchIndexerStatus, []),
-    fetchAllReferralBindings: q(sdk.fetchAllReferralBindings, []),
-    fetchReferralBindings: q(sdk.fetchReferralBindings, ['referrer']),
+    fetchReferralBindings: q(sdk.fetchReferralBindings, ['referrer$opt']),
     fetchReferralRewards: q(sdk.fetchReferralRewards, ['chainId', 'referrer']),
     fetchIncentives: q(sdk.fetchIncentives, ['chainId', 'limit']),
     fetchDepositsByOwner: q(sdk.fetchDepositsByOwner, ['chainId', 'owner', 'limit']),
@@ -215,10 +225,9 @@ const RUNNERS = {
         TOKEN_HOLDER_PRESETS,
         TOKEN_HOLDER_PRESETS.balance
     ),
-    fetchRecentSwaps: q(sdk.fetchRecentSwaps, ['chainId', 'limit']),
     fetchUserPositions: q(sdk.fetchUserPositions, ['chainId', 'owner', 'limit']),
     fetchPositionsByTokenIds: q(sdk.fetchPositionsByTokenIds, ['chainId', 'tokenIds', 'limit']),
-    fetchPoolMetrics: q(sdk.fetchPoolMetrics, ['chainId', 'protocol', 'limit']),
+    fetchPoolMetrics: q(sdk.fetchPoolMetrics, ['chainId', 'protocol']),
     fetchNativeUsdPrice: q(sdk.fetchNativeUsdPrice, ['chainId']),
     fetchNativeUsdPriceSnapshots: q(
         async (client, { chainId, limit }) => {
@@ -232,23 +241,38 @@ const RUNNERS = {
     fetchUserV2Swaps: q(sdk.fetchUserV2Swaps, USER_SWAP),
     fetchUserAggSwaps: q(sdk.fetchUserAggSwaps, USER_SWAP),
     fetchUserTransfers: q(sdk.fetchUserTransfers, ['chainId', 'sender', 'limit$50']),
-    fetchTokenBondingCurveSwaps: q(sdk.fetchTokenBondingCurveSwaps, [
-        'tokenAddr',
-        'limit$50',
-        'offset',
-        'isBuy',
-        'sender$opt',
-    ]),
-    fetchTokenV3Swaps: q(sdk.fetchTokenV3Swaps, [
-        'chainId',
-        'tokenAddr',
-        'limit$50',
-        'offset',
-        'txFrom',
-        'poolAddress$opt',
-    ]),
-    fetchBondingCurveHistory: q(sdk.fetchBondingCurveHistory, ['tokenAddr']),
-    fetchV3History: q(sdk.fetchV3History, ['chainId', 'tokenAddr', 'poolAddress$opt']),
+    fetchBondingCurveSwaps: q(
+        (client, { limit, offset, ...args }) =>
+            sdk.fetchBondingCurveSwaps(client, {
+                ...args,
+                page: limit === 'all' ? 'all' : { limit, offset },
+            }),
+        [
+            'chainId$opt',
+            'tokenAddr$opt',
+            'isBuy',
+            'sender$opt',
+            'orderDirection',
+            'limit$all',
+            'offset',
+        ]
+    ),
+    fetchTokenV3Swaps: q(
+        (client, { limit, offset, ...args }) =>
+            sdk.fetchTokenV3Swaps(client, {
+                ...args,
+                page: limit === 'all' ? 'all' : { limit, offset },
+            }),
+        [
+            'chainId',
+            'tokenAddr',
+            'txFrom',
+            'poolAddress$opt',
+            'orderDirection',
+            'limit$all',
+            'offset',
+        ]
+    ),
     fetchTokenCandles: q(sdk.fetchTokenCandles, [
         'chainId',
         'tokenAddr',
@@ -264,24 +288,21 @@ const RUNNERS = {
         'poolAddress$opt',
     ]),
     fetchPoolPriceHistory: q(sdk.fetchPoolPriceHistory, ['chainId', 'poolAddress', 'since']),
-    fetchPoolPriceAnchor: q(sdk.fetchPoolPriceAnchor, ['chainId', 'poolAddress', 'before']),
-    fetchV3Pools: q(sdk.fetchV3Pools, ['chainId', 'protocol', 'addresses', 'limit']),
-    fetchV3Tokens: q(sdk.fetchV3Tokens, ['chainId', 'limit']),
-    fetchV3TokenSnapshots: q(sdk.fetchV3TokenSnapshots, ['chainId', 'limit']),
+    fetchV3Pools: q(sdk.fetchV3Pools, ['chainId', 'protocol', 'addresses']),
+    fetchV3Tokens: q((c, p) => sdk.fetchV3Tokens(c, { ...p, prices: true }), ['chainId']),
 }
 
 const DESCRIBE: Record<keyof typeof RUNNERS, string> = {
     fetchUserStats: 'Aggregate trade volume, counts, points, and USD volume per user',
     fetchIndexerStatus: 'Latest indexed block and lag per chain from the indexer',
-    fetchAllReferralBindings: 'Every referee and referrer pair, oldest binding first',
-    fetchReferralBindings: 'Referees bound to a referrer, oldest binding first',
+    fetchReferralBindings:
+        'Referee and referrer pairs, optionally filtered by referrer, oldest binding first',
     fetchReferralRewards: 'Referral points and referred trader breakdown for a referrer',
     fetchIncentives: 'V3 staker incentives with reward token, pool, window, and refund state',
     fetchDepositsByOwner: 'V3 staker deposits held by an owner on a chain, with position token id',
     fetchLaunchTokens: 'Launchpad tokens, filtered by chain, launchpad, creator, or graduation',
     fetchTokenSnapshots: 'Per-token market cap, price, fee, and holder snapshots',
     fetchTokenHolders: 'Launch token holders and balances from the indexer',
-    fetchRecentSwaps: 'Latest bonding curve swaps on a chain, newest first, with token metadata',
     fetchUserPositions: 'V3 positions held by an owner, with range, liquidity, and fees owed',
     fetchPositionsByTokenIds: 'V3 positions on a chain looked up by NFT token id',
     fetchPoolMetrics: 'Pools with token metadata, price, TVL, 1d and 30d volume, and fee APR',
@@ -292,18 +313,17 @@ const DESCRIBE: Record<keyof typeof RUNNERS, string> = {
     fetchUserV2Swaps: 'V2 swaps sent by an address on a chain, newest first',
     fetchUserAggSwaps: 'Aggregate router swaps sent by an address on a chain, newest first',
     fetchUserTransfers: 'Token transfers into or out of an address on a chain, newest first',
-    fetchTokenBondingCurveSwaps: 'Paged bonding curve swaps for a token, newest first, with count',
-    fetchTokenV3Swaps: 'Paged V3 swaps for a token, newest first, with total count',
-    fetchBondingCurveHistory: 'Every bonding curve swap for a token, oldest first, with reserves',
-    fetchV3History: 'Every V3 swap for a token, oldest first, with tick and sqrt price',
+    fetchBondingCurveSwaps:
+        'Bonding curve swaps by chain, token, side, or sender; 50 newest by default, --limit all for full history',
+    fetchTokenV3Swaps: 'V3 swaps for a token; 50 newest by default, --limit all for full history',
     fetchTokenCandles: 'OHLC candles for a token on one source and bucket size, oldest first',
     fetchBondingCurvePricesSince: 'Bonding curve prices for a token since a time, oldest first',
     fetchV3PricesSince: 'V3 price points for a token since a time, oldest first',
-    fetchPoolPriceHistory: 'Sqrt price points for one V3 pool since a time, oldest first',
-    fetchPoolPriceAnchor: 'Last V3 pool price point at or before a time, for anchoring a change',
+    fetchPoolPriceHistory:
+        'Last V3 pool price at or before a time plus every price point after it, oldest first',
     fetchV3Pools: 'V3 pools on a chain with their token pair, fee tier, and tick spacing',
-    fetchV3Tokens: 'Tokens seen in V3 pools on a chain, with symbol, name, and decimals',
-    fetchV3TokenSnapshots: 'Latest USD price per V3 token on a chain, from the indexer',
+    fetchV3Tokens:
+        'Tokens seen in V3 pools on a chain, with symbol, name, decimals, and latest USD price',
 }
 
 export const COMMANDS: Record<string, Command> = Object.fromEntries(

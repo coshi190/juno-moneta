@@ -4,7 +4,7 @@ export function bigIntSqrt(n: bigint): bigint {
     if (n < 0n) throw new Error('square root of negative')
     if (n < 2n) return n
 
-    let x = 1n << ((bitLength(n) + 1n) / 2n)
+    let x = 1n << BigInt((n.toString(2).length + 1) >> 1)
     let y = (x + n / x) / 2n
     while (y < x) {
         x = y
@@ -13,62 +13,20 @@ export function bigIntSqrt(n: bigint): bigint {
     return x
 }
 
-function bitLength(n: bigint): bigint {
-    let len = 0n
-    while (n > 0n) {
-        n >>= 1n
-        len++
-    }
-    return len
-}
-
-function getAmount0ForLiquidity(
-    sqrtPriceAX96: bigint,
-    sqrtPriceBX96: bigint,
-    liquidity: bigint
-): bigint {
-    if (sqrtPriceAX96 > sqrtPriceBX96) {
-        ;[sqrtPriceAX96, sqrtPriceBX96] = [sqrtPriceBX96, sqrtPriceAX96]
-    }
-    return (liquidity * Q96 * (sqrtPriceBX96 - sqrtPriceAX96)) / sqrtPriceBX96 / sqrtPriceAX96
-}
-
-function getAmount1ForLiquidity(
-    sqrtPriceAX96: bigint,
-    sqrtPriceBX96: bigint,
-    liquidity: bigint
-): bigint {
-    if (sqrtPriceAX96 > sqrtPriceBX96) {
-        ;[sqrtPriceAX96, sqrtPriceBX96] = [sqrtPriceBX96, sqrtPriceAX96]
-    }
-    return (liquidity * (sqrtPriceBX96 - sqrtPriceAX96)) / Q96
-}
-
 export function getAmountsForLiquidity(
     sqrtPriceX96: bigint,
     sqrtPriceAX96: bigint,
     sqrtPriceBX96: bigint,
     liquidity: bigint
 ): { amount0: bigint; amount1: bigint } {
-    if (sqrtPriceAX96 > sqrtPriceBX96) {
-        ;[sqrtPriceAX96, sqrtPriceBX96] = [sqrtPriceBX96, sqrtPriceAX96]
-    }
-
-    if (sqrtPriceX96 <= sqrtPriceAX96) {
-        return {
-            amount0: getAmount0ForLiquidity(sqrtPriceAX96, sqrtPriceBX96, liquidity),
-            amount1: 0n,
-        }
-    } else if (sqrtPriceX96 < sqrtPriceBX96) {
-        return {
-            amount0: getAmount0ForLiquidity(sqrtPriceX96, sqrtPriceBX96, liquidity),
-            amount1: getAmount1ForLiquidity(sqrtPriceAX96, sqrtPriceX96, liquidity),
-        }
-    } else {
-        return {
-            amount0: 0n,
-            amount1: getAmount1ForLiquidity(sqrtPriceAX96, sqrtPriceBX96, liquidity),
-        }
+    const [lower, upper] =
+        sqrtPriceAX96 < sqrtPriceBX96
+            ? [sqrtPriceAX96, sqrtPriceBX96]
+            : [sqrtPriceBX96, sqrtPriceAX96]
+    const price = sqrtPriceX96 < lower ? lower : sqrtPriceX96 > upper ? upper : sqrtPriceX96
+    return {
+        amount0: (liquidity * Q96 * (upper - price)) / upper / price,
+        amount1: (liquidity * (price - lower)) / Q96,
     }
 }
 

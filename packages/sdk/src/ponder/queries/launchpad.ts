@@ -1,23 +1,6 @@
 import type { PonderClient } from '../client.js'
-import type { LaunchToken, TokenSnapshot, SwapEvent, TokenHolder } from '../entities.js'
-import { sel, MAX_LIMIT, type Items, type Page, type Row, type OrderDirection } from './internal.js'
-
-const LAUNCH_TOKEN_META_FIELDS = [
-    'tokenAddr',
-    'name',
-    'symbol',
-    'logo',
-] as const satisfies readonly (keyof LaunchToken)[]
-
-export type LaunchTokenMeta = Row<LaunchToken, typeof LAUNCH_TOKEN_META_FIELDS>
-
-export interface LaunchTokenFilter {
-    chainId?: number
-    launchpadId?: string
-    creator?: string
-    isGraduated?: 0 | 1
-    tokenAddrs?: string[]
-}
+import type { LaunchToken, TokenSnapshot, TokenHolder } from '../entities.js'
+import { fetchAllRows, type Row, type OrderDirection } from './internal.js'
 
 export interface TokenSnapshotFilter {
     chainId?: number
@@ -25,121 +8,9 @@ export interface TokenSnapshotFilter {
     tokenAddrs?: string[]
 }
 
-export interface QueryOrder<TEntity> {
-    orderBy: keyof TEntity
-    orderDirection?: OrderDirection
-}
-
-function launchTokenWhere(filter: LaunchTokenFilter) {
-    const where: Record<string, unknown> = {}
-    if (filter.chainId !== undefined) where.chainId = filter.chainId
-    if (filter.launchpadId) where.launchpadId = filter.launchpadId
-    if (filter.creator) where.creator = filter.creator.toLowerCase()
-    if (filter.isGraduated !== undefined) where.isGraduated = filter.isGraduated
-    if (filter.tokenAddrs) where.tokenAddr_in = filter.tokenAddrs.map((a) => a.toLowerCase())
-    return where
-}
-
-function tokenSnapshotWhere(filter: TokenSnapshotFilter) {
-    const where: Record<string, unknown> = {}
-    if (filter.chainId !== undefined) where.chainId = filter.chainId
-    if (filter.launchpadId) where.launchpadId = filter.launchpadId
-    if (filter.tokenAddrs) where.tokenAddr_in = filter.tokenAddrs.map((a) => a.toLowerCase())
-    return where
-}
-
-function orderArgs<TEntity>(order: QueryOrder<TEntity> | undefined) {
-    if (!order) return ''
-    return `orderBy: "${String(order.orderBy)}" orderDirection: "${order.orderDirection ?? 'asc'}"`
-}
-
-export function fetchLaunchTokens<F extends readonly (keyof LaunchToken)[]>(
-    client: PonderClient,
-    filter: LaunchTokenFilter,
-    fields: F,
-    order?: QueryOrder<LaunchToken>
-): Promise<Row<LaunchToken, F>[]> {
-    if (filter.tokenAddrs && filter.tokenAddrs.length === 0) return Promise.resolve([])
-    return client.fetchAllPages<{ launchTokens: Page<Row<LaunchToken, F>> }, Row<LaunchToken, F>>(
-        `query LaunchTokens($where: launchTokenFilter, $after: String) {
-            launchTokens(
-                where: $where
-                ${orderArgs(order)}
-                limit: ${MAX_LIMIT}
-                after: $after
-            ) {
-                pageInfo { hasNextPage endCursor }
-                items { ${sel(fields)} }
-            }
-        }`,
-        { where: launchTokenWhere(filter) },
-        (r) => r.launchTokens
-    )
-}
-
-export function fetchTokenSnapshots<F extends readonly (keyof TokenSnapshot)[]>(
-    client: PonderClient,
-    filter: TokenSnapshotFilter,
-    fields: F,
-    order?: QueryOrder<TokenSnapshot>
-): Promise<Row<TokenSnapshot, F>[]> {
-    if (filter.tokenAddrs && filter.tokenAddrs.length === 0) return Promise.resolve([])
-    return client.fetchAllPages<
-        { tokenSnapshots: Page<Row<TokenSnapshot, F>> },
-        Row<TokenSnapshot, F>
-    >(
-        `query TokenSnapshots($where: tokenSnapshotFilter, $after: String) {
-            tokenSnapshots(
-                where: $where
-                ${orderArgs(order)}
-                limit: ${MAX_LIMIT}
-                after: $after
-            ) {
-                pageInfo { hasNextPage endCursor }
-                items { ${sel(fields)} }
-            }
-        }`,
-        { where: tokenSnapshotWhere(filter) },
-        (r) => r.tokenSnapshots
-    )
-}
-
-const RECENT_SWAP_FIELDS = [
-    'tokenAddr',
-    'sender',
-    'isBuy',
-    'amountIn',
-    'amountOut',
-    'reserveIn',
-    'reserveOut',
-    'timestamp',
-    'transactionHash',
-] as const satisfies readonly (keyof SwapEvent)[]
-
-export type RecentSwap = Row<SwapEvent, typeof RECENT_SWAP_FIELDS>
-
-export async function fetchRecentSwaps(
-    client: PonderClient,
-    { chainId, limit = 50 }: { chainId: number; limit?: number }
-): Promise<{ swaps: RecentSwap[]; tokens: LaunchTokenMeta[] }> {
-    const data = await client.request<{
-        swapEvents: Items<RecentSwap>
-        launchTokens: Items<LaunchTokenMeta>
-    }>(
-        `query RecentSwaps($chainId: Int!, $limit: Int!) {
-            swapEvents(
-                where: { chainId: $chainId }
-                orderBy: "timestamp"
-                orderDirection: "desc"
-                limit: $limit
-            ) { items { ${sel(RECENT_SWAP_FIELDS)} } }
-            launchTokens(where: { chainId: $chainId }, limit: ${MAX_LIMIT}) {
-                items { ${sel(LAUNCH_TOKEN_META_FIELDS)} }
-            }
-        }`,
-        { chainId, limit }
-    )
-    return { swaps: data.swapEvents.items, tokens: data.launchTokens.items }
+export interface LaunchTokenFilter extends TokenSnapshotFilter {
+    creator?: string
+    isGraduated?: 0 | 1
 }
 
 export interface TokenHolderFilter {
@@ -148,33 +19,59 @@ export interface TokenHolderFilter {
     address?: string
 }
 
-function tokenHolderWhere(filter: TokenHolderFilter) {
-    const where: Record<string, unknown> = {}
-    if (filter.chainId !== undefined) where.chainId = filter.chainId
-    if (filter.tokenAddr) where.tokenAddr = filter.tokenAddr.toLowerCase()
-    if (filter.address) where.address = filter.address.toLowerCase()
-    return where
+export interface QueryOrder<TEntity> {
+    orderBy: keyof TEntity
+    orderDirection?: OrderDirection
 }
 
-export function fetchTokenHolders<F extends readonly (keyof TokenHolder)[]>(
+const lower = (a?: string) => (a ? a.toLowerCase() : undefined)
+
+function fetchAll<T, F extends readonly (keyof T)[]>(
+    client: PonderClient,
+    entity: string,
+    {
+        tokenAddrs,
+        creator,
+        tokenAddr,
+        address,
+        launchpadId,
+        ...rest
+    }: LaunchTokenFilter & TokenHolderFilter,
+    fields: F,
+    order?: QueryOrder<T>
+): Promise<Row<T, F>[]> {
+    if (tokenAddrs?.length === 0) return Promise.resolve([])
+    const orderArgs = order
+        ? `orderBy: "${String(order.orderBy)}" orderDirection: "${order.orderDirection ?? 'asc'}"`
+        : ''
+    const where = {
+        ...rest,
+        launchpadId: launchpadId || undefined,
+        creator: lower(creator),
+        tokenAddr: lower(tokenAddr),
+        address: lower(address),
+        tokenAddr_in: tokenAddrs?.map((a) => a.toLowerCase()),
+    }
+    return fetchAllRows(client, entity, where, fields, orderArgs)
+}
+
+export const fetchLaunchTokens = <F extends readonly (keyof LaunchToken)[]>(
+    client: PonderClient,
+    filter: LaunchTokenFilter,
+    fields: F,
+    order?: QueryOrder<LaunchToken>
+) => fetchAll(client, 'launchToken', filter, fields, order)
+
+export const fetchTokenSnapshots = <F extends readonly (keyof TokenSnapshot)[]>(
+    client: PonderClient,
+    filter: TokenSnapshotFilter,
+    fields: F,
+    order?: QueryOrder<TokenSnapshot>
+) => fetchAll(client, 'tokenSnapshot', filter, fields, order)
+
+export const fetchTokenHolders = <F extends readonly (keyof TokenHolder)[]>(
     client: PonderClient,
     filter: TokenHolderFilter,
     fields: F,
     order?: QueryOrder<TokenHolder>
-): Promise<Row<TokenHolder, F>[]> {
-    return client.fetchAllPages<{ tokenHolders: Page<Row<TokenHolder, F>> }, Row<TokenHolder, F>>(
-        `query TokenHolders($where: tokenHolderFilter, $after: String) {
-            tokenHolders(
-                where: $where
-                ${orderArgs(order)}
-                limit: ${MAX_LIMIT}
-                after: $after
-            ) {
-                pageInfo { hasNextPage endCursor }
-                items { ${sel(fields)} }
-            }
-        }`,
-        { where: tokenHolderWhere(filter) },
-        (r) => r.tokenHolders
-    )
-}
+) => fetchAll(client, 'tokenHolder', filter, fields, order)

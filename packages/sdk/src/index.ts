@@ -12,7 +12,6 @@ export { planCurveCall } from './dex/curve-calls.js'
 export {
     fetchLaunchTokens,
     fetchTokenSnapshots,
-    fetchRecentSwaps,
     fetchTokenHolders,
 } from './ponder/queries/launchpad.js'
 export {
@@ -21,7 +20,7 @@ export {
     fetchUserV2Swaps,
     fetchUserAggSwaps,
     fetchUserTransfers,
-    fetchTokenBondingCurveSwaps,
+    fetchBondingCurveSwaps,
     fetchTokenV3Swaps,
 } from './ponder/queries/swaps.js'
 export {
@@ -29,25 +28,17 @@ export {
     fetchV3Tokens,
     fetchNativeUsdPrice,
     fetchNativeUsdPriceSnapshots,
-    fetchV3TokenSnapshots,
     fetchPoolMetrics,
 } from './ponder/queries/pools.js'
 export { fetchUserPositions, fetchPositionsByTokenIds } from './ponder/queries/positions.js'
 export { fetchIncentives, fetchDepositsByOwner } from './ponder/queries/incentives.js'
 export {
-    fetchBondingCurveHistory,
-    fetchV3History,
     fetchTokenCandles,
     fetchBondingCurvePricesSince,
     fetchV3PricesSince,
     fetchPoolPriceHistory,
-    fetchPoolPriceAnchor,
 } from './ponder/queries/history.js'
-export {
-    fetchAllReferralBindings,
-    fetchReferralBindings,
-    fetchReferralRewards,
-} from './ponder/queries/referrals.js'
+export { fetchReferralBindings, fetchReferralRewards } from './ponder/queries/referrals.js'
 export { fetchUserStats } from './ponder/queries/user-stats.js'
 export { fetchIndexerStatus } from './ponder/queries/status.js'
 

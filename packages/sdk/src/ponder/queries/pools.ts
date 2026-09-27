@@ -13,10 +13,8 @@ import {
     computePoolTvlUsd,
     computePoolVolumesUsd,
     priceFromSqrtPriceX96,
-    type PoolBalances,
-    type PoolUsdMeta,
 } from '../../pool/pool-math.js'
-import { sel, MAX_LIMIT, type Items, type Page, type Row } from './internal.js'
+import { fetchAllRows, type Items, type Row } from './internal.js'
 
 const POOL_FIELDS = [
     'address',
@@ -40,7 +38,6 @@ const DAY_VOLUME_FIELDS = [
     'poolAddress',
     'dayTimestamp',
     'volumeUsd',
-    'swapCount',
 ] as const satisfies readonly (keyof V3PoolDayVolume)[]
 
 const POOL_STATE_FIELDS = [
@@ -51,11 +48,6 @@ const POOL_STATE_FIELDS = [
     'tick',
     'liquidity',
 ] as const satisfies readonly (keyof V3PoolState)[]
-
-const NATIVE_PRICE_FIELDS = [
-    'chainId',
-    'price',
-] as const satisfies readonly (keyof NativeUsdPrice)[]
 
 const SNAPSHOT_POINT_FIELDS = [
     'timestamp',
@@ -68,128 +60,71 @@ const V3_TOKEN_PRICE_FIELDS = [
     'lastPriceUsd',
 ] as const satisfies readonly (keyof V3TokenSnapshot)[]
 
+type V3TokenPriceRow = Row<V3TokenSnapshot, typeof V3_TOKEN_PRICE_FIELDS>
 export type V3PoolRow = Row<V3Pool, typeof POOL_FIELDS>
-export type V3TokenRow = Row<V3Token, typeof TOKEN_FIELDS>
+export type V3TokenRow = Row<V3Token, typeof TOKEN_FIELDS> &
+    Partial<Omit<V3TokenPriceRow, 'tokenAddr'>>
 export type V3PoolDayVolumeRow = Row<V3PoolDayVolume, typeof DAY_VOLUME_FIELDS>
 export type V3PoolStateRow = Row<V3PoolState, typeof POOL_STATE_FIELDS>
 export type NativeUsdPricePoint = Row<NativeUsdPriceSnapshot, typeof SNAPSHOT_POINT_FIELDS>
-export type V3TokenPrice = Row<V3TokenSnapshot, typeof V3_TOKEN_PRICE_FIELDS>
 
 export interface V3PoolFilter {
     chainId: number
     protocol?: string
     addresses?: string[]
-    limit?: number
 }
 
-function v3PoolWhere(filter: V3PoolFilter) {
-    const where: Record<string, unknown> = { chainId: filter.chainId }
-    if (filter.protocol) where.protocol = filter.protocol
-    if (filter.addresses) where.address_in = filter.addresses.map((a) => a.toLowerCase())
-    return where
-}
-
-export function fetchV3Pools(client: PonderClient, filter: V3PoolFilter): Promise<V3PoolRow[]> {
-    if (filter.addresses && filter.addresses.length === 0) return Promise.resolve([])
-    return client.fetchAllPages<{ v3Pools: Page<V3PoolRow> }, V3PoolRow>(
-        `query V3Pools($where: v3PoolFilter, $limit: Int!, $after: String) {
-            v3Pools(
-                where: $where
-                limit: $limit
-                after: $after
-            ) {
-                pageInfo { hasNextPage endCursor }
-                items { ${sel(POOL_FIELDS)} }
-            }
-        }`,
-        { where: v3PoolWhere(filter), limit: filter.limit ?? 500 },
-        (r) => r.v3Pools
-    )
+export function fetchV3Pools(
+    client: PonderClient,
+    { chainId, protocol, addresses }: V3PoolFilter
+): Promise<V3PoolRow[]> {
+    if (addresses?.length === 0) return Promise.resolve([])
+    const where = {
+        chainId,
+        protocol: protocol || undefined,
+        address_in: addresses?.map((a) => a.toLowerCase()),
+    }
+    return fetchAllRows(client, 'v3Pool', where, POOL_FIELDS)
 }
 
 export async function fetchV3Tokens(
     client: PonderClient,
-    { chainId, limit = 500 }: { chainId: number; limit?: number }
+    { chainId, prices = false }: { chainId: number; prices?: boolean }
 ): Promise<V3TokenRow[]> {
-    const data = await client.request<{ v3Tokens: Items<V3TokenRow> }>(
-        `query V3Tokens($chainId: Int!, $limit: Int!) {
-            v3Tokens(where: { chainId: $chainId }, limit: $limit) {
-                items { ${sel(TOKEN_FIELDS)} }
-            }
-        }`,
-        { chainId, limit }
-    )
-    return data.v3Tokens.items
-}
-
-async function fetchV3PoolDayVolumes(
-    client: PonderClient,
-    {
-        chainId,
-        poolAddresses,
-        since,
-        limit = 1000,
-    }: { chainId: number; poolAddresses: string[]; since: number; limit?: number }
-): Promise<V3PoolDayVolumeRow[]> {
-    if (poolAddresses.length === 0) return []
-    const data = await client.request<{ v3PoolDayVolumes: Items<V3PoolDayVolumeRow> }>(
-        `query V3PoolDayVolumes(
-            $chainId: Int!, $poolAddresses: [String!], $since: Int!, $limit: Int!
-        ) {
-            v3PoolDayVolumes(
-                where: {
-                    chainId: $chainId
-                    poolAddress_in: $poolAddresses
-                    dayTimestamp_gte: $since
-                }
-                orderBy: "dayTimestamp"
-                orderDirection: "desc"
-                limit: $limit
-            ) { items { ${sel(DAY_VOLUME_FIELDS)} } }
-        }`,
-        { chainId, poolAddresses, since, limit }
-    )
-    return data.v3PoolDayVolumes.items
-}
-
-async function fetchV3PoolReserves(
-    client: PonderClient,
-    {
-        chainId,
-        poolAddresses,
-        limit = 1000,
-    }: { chainId: number; poolAddresses: string[]; limit?: number }
-): Promise<V3PoolStateRow[]> {
-    if (poolAddresses.length === 0) return []
-    const data = await client.request<{ v3PoolStates: Items<V3PoolStateRow> }>(
-        `query V3PoolStates($chainId: Int!, $poolAddresses: [String!], $limit: Int!) {
-            v3PoolStates(
-                where: { chainId: $chainId, poolAddress_in: $poolAddresses }
-                limit: $limit
-            ) { items { ${sel(POOL_STATE_FIELDS)} } }
-        }`,
-        { chainId, poolAddresses, limit }
-    )
-    return data.v3PoolStates.items
+    const [tokens, snapshots] = await Promise.all([
+        fetchAllRows<V3TokenRow>(client, 'v3Token', { chainId }, TOKEN_FIELDS),
+        prices
+            ? fetchAllRows<V3TokenPriceRow>(
+                  client,
+                  'v3TokenSnapshot',
+                  { chainId },
+                  V3_TOKEN_PRICE_FIELDS
+              )
+            : null,
+    ])
+    if (!snapshots) return tokens
+    const snapshotMap = new Map(snapshots.map((row) => [row.tokenAddr, row]))
+    return tokens.map((token) => {
+        const snapshot = snapshotMap.get(token.address)
+        return {
+            ...token,
+            lastPriceNative: snapshot?.lastPriceNative ?? null,
+            lastPriceUsd: snapshot?.lastPriceUsd ?? null,
+        }
+    })
 }
 
 export async function fetchNativeUsdPrice(
     client: PonderClient,
     { chainId }: { chainId: number }
 ): Promise<number | null> {
-    const data = await client.request<{
-        nativeUsdPrices: Items<Row<NativeUsdPrice, typeof NATIVE_PRICE_FIELDS>>
-    }>(
+    const data = await client.request<{ nativeUsdPrices: Items<Pick<NativeUsdPrice, 'price'>> }>(
         `query NativeUsdPrice($chainId: Int!) {
-            nativeUsdPrices(where: { chainId: $chainId }, limit: 1) {
-                items { ${sel(NATIVE_PRICE_FIELDS)} }
-            }
+            nativeUsdPrices(where: { chainId: $chainId }, limit: 1) { items { price } }
         }`,
         { chainId }
     )
-    const row = data.nativeUsdPrices.items[0]
-    if (!row) return null
-    const price = parseFloat(row.price)
+    const price = parseFloat(data.nativeUsdPrices.items[0]?.price ?? '')
     return Number.isFinite(price) ? price : null
 }
 
@@ -197,40 +132,13 @@ export function fetchNativeUsdPriceSnapshots(
     client: PonderClient,
     { chainId }: { chainId: number }
 ): Promise<NativeUsdPricePoint[]> {
-    return client.fetchAllPages<
-        { nativeUsdPriceSnapshots: Page<NativeUsdPricePoint> },
-        NativeUsdPricePoint
-    >(
-        `query NativeUsdPriceSnapshots($chainId: Int!, $after: String) {
-            nativeUsdPriceSnapshots(
-                where: { chainId: $chainId }
-                orderBy: "timestamp"
-                orderDirection: "asc"
-                limit: ${MAX_LIMIT}
-                after: $after
-            ) {
-                pageInfo { hasNextPage endCursor }
-                items { ${sel(SNAPSHOT_POINT_FIELDS)} }
-            }
-        }`,
+    return fetchAllRows(
+        client,
+        'nativeUsdPriceSnapshot',
         { chainId },
-        (r) => r.nativeUsdPriceSnapshots
+        SNAPSHOT_POINT_FIELDS,
+        'orderBy: "timestamp" orderDirection: "asc"'
     )
-}
-
-export async function fetchV3TokenSnapshots(
-    client: PonderClient,
-    { chainId, limit = 500 }: { chainId: number; limit?: number }
-): Promise<V3TokenPrice[]> {
-    const data = await client.request<{ v3TokenSnapshots: Items<V3TokenPrice> }>(
-        `query V3TokenSnapshots($chainId: Int!, $limit: Int!) {
-            v3TokenSnapshots(where: { chainId: $chainId }, limit: $limit) {
-                items { ${sel(V3_TOKEN_PRICE_FIELDS)} }
-            }
-        }`,
-        { chainId, limit }
-    )
-    return data.v3TokenSnapshots.items
 }
 
 export interface PoolMetricsToken {
@@ -280,113 +188,82 @@ function toMetricsToken(row: V3TokenRow | undefined, address: string): PoolMetri
     }
 }
 
-function toTokenPriceMap(rows: V3TokenPrice[]): Map<string, number> {
-    const priceMap = new Map<string, number>()
-    for (const row of rows) {
-        const price = row.lastPriceUsd === null ? NaN : parseFloat(row.lastPriceUsd)
-        if (Number.isFinite(price)) priceMap.set(row.tokenAddr.toLowerCase(), price)
-    }
-    return priceMap
-}
-
 export async function fetchPoolMetrics(
     client: PonderClient,
-    {
-        chainId,
-        protocol = 'junoswap',
-        limit = 500,
-        nowSeconds = Math.floor(Date.now() / 1000),
-        tokens,
-        tokenPrices,
-    }: {
-        chainId: number
-        protocol?: string
-        limit?: number
-        nowSeconds?: number
-        tokens?: V3TokenRow[]
-        tokenPrices?: V3TokenPrice[]
-    }
+    { chainId, protocol = 'junoswap' }: { chainId: number; protocol?: string }
 ): Promise<PoolMetrics[]> {
-    const pools = await fetchV3Pools(client, { chainId, protocol, limit })
+    const nowSeconds = Math.floor(Date.now() / 1000)
+    const [pools, tokens] = await Promise.all([
+        fetchV3Pools(client, { chainId, protocol }),
+        fetchV3Tokens(client, { chainId, prices: true }),
+    ])
     if (pools.length === 0) return []
 
-    const poolAddresses = pools.map((pool) => pool.address.toLowerCase())
-    const [tokenRows, reserves, dayVolumes, priceRows] = await Promise.all([
-        tokens ?? fetchV3Tokens(client, { chainId, limit }),
-        fetchV3PoolReserves(client, { chainId, poolAddresses }),
-        fetchV3PoolDayVolumes(client, {
-            chainId,
-            poolAddresses,
-            since: nowSeconds - VOLUME_LOOKBACK_SECONDS,
-        }),
-        tokenPrices ?? fetchV3TokenSnapshots(client, { chainId, limit }),
+    const poolAddress_in = pools.map((pool) => pool.address)
+    const [states, dayVolumes] = await Promise.all([
+        fetchAllRows<V3PoolStateRow>(
+            client,
+            'v3PoolState',
+            { chainId, poolAddress_in },
+            POOL_STATE_FIELDS
+        ),
+        fetchAllRows<V3PoolDayVolumeRow>(
+            client,
+            'v3PoolDayVolume',
+            { chainId, poolAddress_in, dayTimestamp_gte: nowSeconds - VOLUME_LOOKBACK_SECONDS },
+            DAY_VOLUME_FIELDS
+        ),
     ])
 
-    const tokenMap = new Map(tokenRows.map((token) => [token.address.toLowerCase(), token]))
-    const stateMap = new Map(reserves.map((row) => [row.poolAddress.toLowerCase(), row]))
-
-    const priceMap = toTokenPriceMap(priceRows)
-
-    const meta: PoolUsdMeta[] = []
-    const balances = new Map<string, PoolBalances>()
-
-    for (const pool of pools) {
-        const key = pool.address.toLowerCase()
-        const state = stateMap.get(key)
-        const token0 = tokenMap.get(pool.token0.toLowerCase())
-        const token1 = tokenMap.get(pool.token1.toLowerCase())
-        meta.push({
-            address: pool.address,
-            token0: { address: pool.token0, decimals: token0?.decimals ?? 18 },
-            token1: { address: pool.token1, decimals: token1?.decimals ?? 18 },
-            sqrtPriceX96: state ? BigInt(state.sqrtPriceX96) : 0n,
-        })
-        if (state) {
-            balances.set(key, {
-                balance0: BigInt(state.reserve0),
-                balance1: BigInt(state.reserve1),
-            })
-        }
+    const tokenMap = new Map(tokens.map((token) => [token.address, token]))
+    const stateMap = new Map(states.map((row) => [row.poolAddress, row]))
+    const priceMap = new Map<string, number>()
+    for (const token of tokens) {
+        const price = parseFloat(token.lastPriceUsd ?? '')
+        if (Number.isFinite(price)) priceMap.set(token.address, price)
     }
 
-    const wrappedNative = getWrappedNativeAddress(chainId)
-    const usdStable = [...(getStablecoins(chainId) ?? [])][0]
+    const meta = pools.map((pool) => ({
+        address: pool.address,
+        token0: toMetricsToken(tokenMap.get(pool.token0), pool.token0),
+        token1: toMetricsToken(tokenMap.get(pool.token1), pool.token1),
+        sqrtPriceX96: BigInt(stateMap.get(pool.address)?.sqrtPriceX96 ?? 0),
+    }))
+    const balances = new Map(
+        states.map((row) => [
+            row.poolAddress,
+            { balance0: BigInt(row.reserve0), balance1: BigInt(row.reserve1) },
+        ])
+    )
 
     const tvl = computePoolTvlUsd({
         pools: meta,
         balances,
         priceMap,
-        ...(wrappedNative === undefined ? {} : { wrappedNative }),
-        ...(usdStable === undefined ? {} : { usdStable }),
+        wrappedNative: getWrappedNativeAddress(chainId),
+        usdStable: getStablecoins(chainId)?.values().next().value,
     })
     const volumes = computePoolVolumesUsd({ rows: dayVolumes, nowSeconds })
 
     return pools.map((pool, index) => {
-        const key = pool.address.toLowerCase()
-        const state = stateMap.get(key)
-        const entry = meta[index]!
-        const tvlUsd = tvl[key] ?? null
-        const volume = volumes[key]
-        const volume30dUsd = volume?.volume30d ?? null
-
+        const { token0, token1, sqrtPriceX96 } = meta[index]!
+        const state = stateMap.get(pool.address)
+        const tvlUsd = tvl[pool.address] ?? null
+        const volume = volumes[pool.address]
         return {
             address: pool.address,
             fee: pool.fee,
             tickSpacing: pool.tickSpacing,
-            token0: toMetricsToken(tokenMap.get(pool.token0.toLowerCase()), pool.token0),
-            token1: toMetricsToken(tokenMap.get(pool.token1.toLowerCase()), pool.token1),
-            sqrtPriceX96: entry.sqrtPriceX96,
+            token0,
+            token1,
+            sqrtPriceX96,
             tick: state?.tick ?? null,
-            liquidity: state ? BigInt(state.liquidity) : 0n,
-            price: priceFromSqrtPriceX96(
-                entry.sqrtPriceX96,
-                entry.token0.decimals,
-                entry.token1.decimals
-            ),
+            liquidity: BigInt(state?.liquidity ?? 0),
+            price: priceFromSqrtPriceX96(sqrtPriceX96, token0.decimals, token1.decimals),
             tvlUsd,
             volume1dUsd: volume?.volume1d ?? null,
-            volume30dUsd,
-            feeAprPercent: computeFeeAprPercent(pool.fee, tvlUsd, volume30dUsd ?? 0),
+            volume30dUsd: volume?.volume30d ?? null,
+            feeAprPercent: computeFeeAprPercent(pool.fee, tvlUsd, volume?.volume30d ?? 0),
         }
     })
 }

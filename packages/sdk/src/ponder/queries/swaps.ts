@@ -6,7 +6,16 @@ import type {
     V2SwapEvent,
     V3SwapEvent,
 } from '../entities.js'
-import { sel, type CountedItems, type Items, type Row } from './internal.js'
+import {
+    sel,
+    v3SwapWhere,
+    MAX_LIMIT,
+    type CountedItems,
+    type Items,
+    type OrderDirection,
+    type Page,
+    type Row,
+} from './internal.js'
 
 const BC_ACTIVITY_FIELDS = [
     'id',
@@ -69,24 +78,28 @@ const TRANSFER_FIELDS = [
     'transactionHash',
 ] as const satisfies readonly (keyof TransferEvent)[]
 
-const BC_DETAIL_FIELDS = [
+const BC_SWAP_FIELDS = [
+    'tokenAddr',
     'sender',
     'isBuy',
     'amountIn',
     'amountOut',
     'reserveIn',
     'reserveOut',
+    'priceNative',
+    'preSwapPriceNative',
     'timestamp',
     'transactionHash',
     'blockNumber',
 ] as const satisfies readonly (keyof SwapEvent)[]
 
-const V3_DETAIL_FIELDS = [
+const V3_SWAP_FIELDS = [
     'txFrom',
     'tokenIsToken0',
     'amount0',
     'amount1',
     'sqrtPriceX96',
+    'tick',
     'timestamp',
     'transactionHash',
     'blockNumber',
@@ -97,8 +110,13 @@ export type V3Activity = Row<V3SwapEvent, typeof V3_ACTIVITY_FIELDS>
 export type V2Activity = Row<V2SwapEvent, typeof V2_ACTIVITY_FIELDS>
 export type AggActivity = Row<AggSwapEvent, typeof AGG_ACTIVITY_FIELDS>
 export type TransferActivity = Row<TransferEvent, typeof TRANSFER_FIELDS>
-export type BondingCurveSwapDetail = Row<SwapEvent, typeof BC_DETAIL_FIELDS>
-export type V3SwapDetail = Row<V3SwapEvent, typeof V3_DETAIL_FIELDS>
+export type BondingCurveSwap = Row<SwapEvent, typeof BC_SWAP_FIELDS>
+export type V3Swap = Row<V3SwapEvent, typeof V3_SWAP_FIELDS>
+
+type EventTable =
+    'swapEvents' | 'v3SwapEvents' | 'v2SwapEvents' | 'aggSwapEvents' | 'transferEvents'
+
+const filterType = (table: EventTable) => `${table.slice(0, -1)}Filter`
 
 export interface ActivityArgs {
     chainId: number
@@ -107,173 +125,149 @@ export interface ActivityArgs {
     after?: string | null
 }
 
-export async function fetchUserBondingCurveSwaps(
+async function fetchUserActivity<T>(
     client: PonderClient,
-    { chainId, sender, limit, after = null }: ActivityArgs
+    table: EventTable,
+    fields: readonly PropertyKey[],
+    where: Record<string, unknown>,
+    { limit, after = null }: { limit: number; after?: string | null }
+): Promise<T[]> {
+    const data = await client.request<Record<typeof table, Items<T>>>(
+        `query UserActivity($where: ${filterType(table)}, $limit: Int!, $after: String) {
+            ${table}(
+                where: $where orderBy: "timestamp" orderDirection: "desc"
+                limit: $limit after: $after
+            ) {
+                items { ${sel(fields)} }
+            }
+        }`,
+        { where, limit, after }
+    )
+    return data[table].items
+}
+
+export function fetchUserBondingCurveSwaps(
+    client: PonderClient,
+    { chainId, sender, ...page }: ActivityArgs
 ): Promise<BondingCurveActivity[]> {
-    const data = await client.request<{ swapEvents: Items<BondingCurveActivity> }>(
-        `query UserBondingCurveSwaps($sender: String!, $chainId: Int!, $limit: Int!, $after: String) {
-            swapEvents(
-                where: { sender: $sender, chainId: $chainId }
-                orderBy: "timestamp"
-                orderDirection: "desc"
-                limit: $limit
-                after: $after
-            ) { items { ${sel(BC_ACTIVITY_FIELDS)} } }
-        }`,
-        { sender, chainId, limit, after }
-    )
-    return data.swapEvents.items
+    const where = { sender, chainId }
+    return fetchUserActivity(client, 'swapEvents', BC_ACTIVITY_FIELDS, where, page)
 }
 
-export async function fetchUserV3Swaps(
+export function fetchUserV3Swaps(
     client: PonderClient,
-    { chainId, sender, limit, after = null }: ActivityArgs
+    { chainId, sender, ...page }: ActivityArgs
 ): Promise<V3Activity[]> {
-    const data = await client.request<{ v3SwapEvents: Items<V3Activity> }>(
-        `query UserV3Swaps($sender: String!, $chainId: Int!, $limit: Int!, $after: String) {
-            v3SwapEvents(
-                where: { txFrom: $sender, chainId: $chainId }
-                orderBy: "timestamp"
-                orderDirection: "desc"
-                limit: $limit
-                after: $after
-            ) { items { ${sel(V3_ACTIVITY_FIELDS)} } }
-        }`,
-        { sender, chainId, limit, after }
-    )
-    return data.v3SwapEvents.items
+    const where = { txFrom: sender, chainId }
+    return fetchUserActivity(client, 'v3SwapEvents', V3_ACTIVITY_FIELDS, where, page)
 }
 
-export async function fetchUserV2Swaps(
+export function fetchUserV2Swaps(
     client: PonderClient,
-    { chainId, sender, limit, after = null }: ActivityArgs
+    { chainId, sender, ...page }: ActivityArgs
 ): Promise<V2Activity[]> {
-    const data = await client.request<{ v2SwapEvents: Items<V2Activity> }>(
-        `query UserV2Swaps($sender: String!, $chainId: Int!, $limit: Int!, $after: String) {
-            v2SwapEvents(
-                where: { txFrom: $sender, chainId: $chainId }
-                orderBy: "timestamp"
-                orderDirection: "desc"
-                limit: $limit
-                after: $after
-            ) { items { ${sel(V2_ACTIVITY_FIELDS)} } }
-        }`,
-        { sender, chainId, limit, after }
-    )
-    return data.v2SwapEvents.items
+    const where = { txFrom: sender, chainId }
+    return fetchUserActivity(client, 'v2SwapEvents', V2_ACTIVITY_FIELDS, where, page)
 }
 
-export async function fetchUserAggSwaps(
+export function fetchUserAggSwaps(
     client: PonderClient,
-    { chainId, sender, limit, after = null }: ActivityArgs
+    { chainId, sender, ...page }: ActivityArgs
 ): Promise<AggActivity[]> {
-    const data = await client.request<{ aggSwapEvents: Items<AggActivity> }>(
-        `query UserAggSwaps($sender: String!, $chainId: Int!, $limit: Int!, $after: String) {
-            aggSwapEvents(
-                where: { sender: $sender, chainId: $chainId }
-                orderBy: "timestamp"
-                orderDirection: "desc"
-                limit: $limit
-                after: $after
-            ) { items { ${sel(AGG_ACTIVITY_FIELDS)} } }
-        }`,
-        { sender, chainId, limit, after }
-    )
-    return data.aggSwapEvents.items
+    const where = { sender, chainId }
+    return fetchUserActivity(client, 'aggSwapEvents', AGG_ACTIVITY_FIELDS, where, page)
 }
 
-export async function fetchUserTransfers(
+export function fetchUserTransfers(
     client: PonderClient,
     { chainId, sender, limit }: Omit<ActivityArgs, 'after'>
 ): Promise<TransferActivity[]> {
-    const data = await client.request<{ transferEvents: Items<TransferActivity> }>(
-        `query UserTransfers($sender: String!, $chainId: Int!, $limit: Int!) {
-            transferEvents(
-                where: {
-                    AND: [{ OR: [{ from: $sender }, { to: $sender }] }, { chainId: $chainId }]
-                }
-                orderBy: "timestamp"
-                orderDirection: "desc"
-                limit: $limit
-            ) { items { ${sel(TRANSFER_FIELDS)} } }
-        }`,
-        { sender, chainId, limit }
-    )
-    return data.transferEvents.items
+    const where = { AND: [{ OR: [{ from: sender }, { to: sender }] }, { chainId }] }
+    return fetchUserActivity(client, 'transferEvents', TRANSFER_FIELDS, where, { limit })
 }
 
-export interface TokenSwapPageArgs {
+export interface TokenSwapArgs {
     tokenAddr: string
-    chainId: number
-    limit: number
-    offset: number
+    orderDirection?: OrderDirection
+    page: { limit: number; offset: number } | 'all'
 }
 
-export async function fetchTokenBondingCurveSwaps(
+async function fetchTokenSwaps<T>(
+    client: PonderClient,
+    table: 'swapEvents' | 'v3SwapEvents',
+    fields: readonly PropertyKey[],
+    where: Record<string, unknown>,
+    { orderDirection = 'desc', page }: Omit<TokenSwapArgs, 'tokenAddr'>
+): Promise<CountedItems<T>> {
+    if (orderDirection !== 'asc' && orderDirection !== 'desc') {
+        throw new Error(`invalid orderDirection "${String(orderDirection)}"`)
+    }
+    const filter = filterType(table)
+    const order = `orderBy: "timestamp" orderDirection: "${orderDirection}"`
+
+    if (page !== 'all') {
+        const data = await client.request<Record<typeof table, CountedItems<T>>>(
+            `query TokenSwapPage($where: ${filter}, $limit: Int!, $offset: Int!) {
+                ${table}(where: $where ${order} limit: $limit offset: $offset) {
+                    items { ${sel(fields)} }
+                    totalCount
+                }
+            }`,
+            { where, ...page }
+        )
+        return data[table]
+    }
+
+    const items = await client.fetchAllPages<Record<typeof table, Page<T>>, T>(
+        `query TokenSwaps($where: ${filter}, $after: String) {
+            ${table}(where: $where ${order} limit: ${MAX_LIMIT} after: $after) {
+                pageInfo { hasNextPage endCursor }
+                items { ${sel(fields)} }
+            }
+        }`,
+        { where },
+        (r) => r[table]
+    )
+    return { items, totalCount: items.length }
+}
+
+export async function fetchBondingCurveSwaps(
     client: PonderClient,
     {
+        chainId,
         tokenAddr,
-        limit,
-        offset,
         isBuy,
         sender,
-    }: Omit<TokenSwapPageArgs, 'chainId'> & {
+        ...opts
+    }: Omit<TokenSwapArgs, 'tokenAddr'> & {
+        chainId?: number
+        tokenAddr?: string
         isBuy?: number
         sender?: string
     }
-): Promise<CountedItems<BondingCurveSwapDetail>> {
-    const where: Record<string, unknown> = { tokenAddr }
+): Promise<CountedItems<BondingCurveSwap>> {
+    if (!tokenAddr && chainId === undefined) {
+        throw new Error('fetchBondingCurveSwaps requires tokenAddr or chainId')
+    }
+    const where: Record<string, unknown> = {}
+    if (chainId !== undefined) where.chainId = chainId
+    if (tokenAddr) where.tokenAddr = tokenAddr
     if (isBuy !== undefined) where.isBuy = isBuy
     if (sender) where.sender = sender
-
-    const data = await client.request<{ swapEvents: CountedItems<BondingCurveSwapDetail> }>(
-        `query TokenBondingCurveSwaps($where: swapEventFilter, $limit: Int!, $offset: Int!) {
-            swapEvents(
-                where: $where
-                orderBy: "timestamp"
-                orderDirection: "desc"
-                limit: $limit
-                offset: $offset
-            ) {
-                items { ${sel(BC_DETAIL_FIELDS)} }
-                totalCount
-            }
-        }`,
-        { where, limit, offset }
-    )
-    return data.swapEvents
+    return fetchTokenSwaps(client, 'swapEvents', BC_SWAP_FIELDS, where, opts)
 }
 
-export async function fetchTokenV3Swaps(
+export function fetchTokenV3Swaps(
     client: PonderClient,
     {
         tokenAddr,
         chainId,
-        limit,
-        offset,
         txFrom,
         poolAddress,
-    }: TokenSwapPageArgs & { txFrom?: string; poolAddress?: string }
-): Promise<CountedItems<V3SwapDetail>> {
-    const where: Record<string, unknown> = { tokenAddr, chainId }
+        ...opts
+    }: TokenSwapArgs & { chainId: number; txFrom?: string; poolAddress?: string }
+): Promise<CountedItems<V3Swap>> {
+    const where = v3SwapWhere(tokenAddr, chainId, poolAddress)
     if (txFrom) where.txFrom = txFrom
-    if (poolAddress) where.poolAddress = poolAddress.toLowerCase()
-
-    const data = await client.request<{ v3SwapEvents: CountedItems<V3SwapDetail> }>(
-        `query TokenV3Swaps($where: v3SwapEventFilter, $limit: Int!, $offset: Int!) {
-            v3SwapEvents(
-                where: $where
-                orderBy: "timestamp"
-                orderDirection: "desc"
-                limit: $limit
-                offset: $offset
-            ) {
-                items { ${sel(V3_DETAIL_FIELDS)} }
-                totalCount
-            }
-        }`,
-        { where, limit, offset }
-    )
-    return data.v3SwapEvents
+    return fetchTokenSwaps(client, 'v3SwapEvents', V3_SWAP_FIELDS, where, opts)
 }
