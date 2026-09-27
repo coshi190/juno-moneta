@@ -68,7 +68,13 @@ export function computePnl({
     }
 
     const perToken = new Map<string, TokenPnl>()
-    const totals = { totalInvestedUsd: 0, realizedUsd: 0, unrealizedUsd: 0, totalPnlUsd: 0, totalPnlPercent: 0 }
+    const totals = {
+        totalInvestedUsd: 0,
+        realizedUsd: 0,
+        unrealizedUsd: 0,
+        totalPnlUsd: 0,
+        totalPnlPercent: 0,
+    }
     for (const [addr, f] of foldsByToken) {
         const price = priceUsdByToken?.get(addr) ?? null
         const costBasisUsd = f.position > 0 ? f.costPoolUsd : 0
