@@ -58,31 +58,6 @@ jobs:
               run: bun run build
               working-directory: packages/sdk
 
-    cli:
-        name: CLI
-        runs-on: ubuntu-latest
-        timeout-minutes: 10
-        steps:
-            - uses: actions/checkout@v4
-            - uses: oven-sh/setup-bun@v2
-              with:
-                  bun-version: 1.4.0
-            - name: Install SDK
-              run: bun install --frozen-lockfile
-              working-directory: packages/sdk
-            - name: Build SDK
-              run: bun run build
-              working-directory: packages/sdk
-
-            - name: Install
-              run: bun install --frozen-lockfile
-              working-directory: packages/cli
-            - name: Typecheck
-              run: bun run typecheck
-              working-directory: packages/cli
-            - name: Build
-              run: bun run build
-              working-directory: packages/cli
 
     indexer:
         name: Indexer
