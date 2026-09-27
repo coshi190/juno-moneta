@@ -58,7 +58,6 @@ jobs:
               run: bun run build
               working-directory: packages/sdk
 
-
     indexer:
         name: Indexer
         runs-on: ubuntu-latest
