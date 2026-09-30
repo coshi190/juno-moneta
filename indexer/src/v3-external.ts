@@ -3,7 +3,7 @@ import schema from 'ponder:schema'
 import { readTrackingTag } from '@coshi190/juno-moneta-sdk'
 import { getChains } from './config.js'
 import { getSeedV3Pool } from './seed.js'
-import { upsertToken, recordV3SwapEvent } from './v3-pools.js'
+import { upsertToken, recordV3SwapEvent, refreshV3TokenPrice } from './v3-pools.js'
 
 type DynamicEvent = Parameters<typeof ponder.on>[0]
 type PoolInfo = { token0: string; token1: string; fee: number; tickSpacing: number }
@@ -61,6 +61,7 @@ for (const contract of ['KublerxV3PoolSeeded', 'KublerxV3Pool']) {
         const pool = await getOrSeedPool(context, event, address)
         if (!pool) return
         const timestamp = Number(event.block.timestamp)
+        await refreshV3TokenPrice(context, CHAIN, pool, event)
         await recordV3SwapEvent(context, CHAIN, event, pool, address, timestamp, false, 'kublerx')
     })
 }

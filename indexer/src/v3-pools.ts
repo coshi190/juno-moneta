@@ -200,6 +200,20 @@ async function updateV3TokenSnapshot(
         .onConflictDoUpdate(row)
 }
 
+export async function refreshV3TokenPrice(context: any, chainId: number, pool: Pool, event: any) {
+    const side = nativeSide(pool, getWrappedNativeAddress(chainId))
+    const nativeUsd = await getNativeUsd(context, chainId)
+    const timestamp = Number(event.block.timestamp)
+    await updateV3TokenSnapshot(
+        context,
+        chainId,
+        side,
+        event.args.sqrtPriceX96,
+        timestamp,
+        nativeUsd
+    )
+}
+
 export async function recordV3SwapEvent(
     context: any,
     chainId: number,
