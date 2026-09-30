@@ -47,11 +47,11 @@ interface V2SwapRow {
     protocol: string
 }
 
-const abs = (x: bigint) => (x < 0n ? -x : x)
+export const abs = (x: bigint) => (x < 0n ? -x : x)
 
 export function parseBondingCurveSwap(e: BondingCurveSwapRow): ParsedSwap {
     return {
-        tokenAddr: e.tokenAddr.toLowerCase(),
+        tokenAddr: e.tokenAddr,
         sender: e.sender,
         isBuy: e.isBuy === 1,
         amountIn: e.amountIn,
@@ -63,52 +63,36 @@ export function parseBondingCurveSwap(e: BondingCurveSwapRow): ParsedSwap {
 }
 
 export function parseV3Swap(e: V3SwapRow, wrappedNative: string): ParsedSwap | null {
-    const token0 = e.token0Addr?.toLowerCase()
-    const token1 = e.token1Addr?.toLowerCase()
-    let nativeIsToken0: boolean
-    if (token1 === wrappedNative) nativeIsToken0 = false
-    else if (token0 === wrappedNative) nativeIsToken0 = true
-    else return null
-    const nativeAmt = BigInt(nativeIsToken0 ? e.amount0 : e.amount1)
-    const tokenAmt = BigInt(nativeIsToken0 ? e.amount1 : e.amount0)
-    const isBuy = tokenAmt < 0n
-    const amountIn = (isBuy ? abs(nativeAmt) : abs(tokenAmt)).toString()
+    const native0 = e.token1Addr !== wrappedNative
+    if (native0 && e.token0Addr !== wrappedNative) return null
+    const [native, token] = (native0 ? [e.amount0, e.amount1] : [e.amount1, e.amount0]).map(BigInt)
+    const isBuy = token < 0n
+    const amountIn = abs(isBuy ? native : token).toString()
     return {
-        tokenAddr: e.tokenAddr.toLowerCase(),
+        tokenAddr: e.tokenAddr,
         sender: e.txFrom,
         isBuy,
         amountIn,
         grossAmountIn: amountIn,
-        amountOut: (isBuy ? abs(tokenAmt) : abs(nativeAmt)).toString(),
+        amountOut: abs(isBuy ? token : native).toString(),
         timestamp: e.timestamp,
         protocol: e.protocol || 'junoswap',
     }
 }
 
 export function parseV2Swap(e: V2SwapRow, wrappedNative: string): ParsedSwap | null {
-    const token0 = e.token0Addr.toLowerCase()
-    const token1 = e.token1Addr.toLowerCase()
-    let nativeIn: bigint, nativeOut: bigint, tokenIn: bigint, tokenOut: bigint
-    let tokenAddr: string
-    if (token0 === wrappedNative) {
-        nativeIn = BigInt(e.amount0In)
-        nativeOut = BigInt(e.amount0Out)
-        tokenIn = BigInt(e.amount1In)
-        tokenOut = BigInt(e.amount1Out)
-        tokenAddr = token1
-    } else if (token1 === wrappedNative) {
-        nativeIn = BigInt(e.amount1In)
-        nativeOut = BigInt(e.amount1Out)
-        tokenIn = BigInt(e.amount0In)
-        tokenOut = BigInt(e.amount0Out)
-        tokenAddr = token0
-    } else {
-        return null
-    }
+    const native0 = e.token0Addr === wrappedNative
+    if (!native0 && e.token1Addr !== wrappedNative) return null
+    const [in0, in1, out0, out1] = [e.amount0In, e.amount1In, e.amount0Out, e.amount1Out].map(
+        BigInt
+    )
+    const [nativeIn, tokenIn, nativeOut, tokenOut] = native0
+        ? [in0, in1, out0, out1]
+        : [in1, in0, out1, out0]
     const isBuy = nativeIn > 0n
     const amountIn = (isBuy ? nativeIn : tokenIn).toString()
     return {
-        tokenAddr,
+        tokenAddr: native0 ? e.token1Addr : e.token0Addr,
         sender: e.txFrom,
         isBuy,
         amountIn,

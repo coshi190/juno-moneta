@@ -1,32 +1,27 @@
 import { db } from 'ponder:api'
 import schema from 'ponder:schema'
-import { graphql, eq, and, gte, inArray } from 'ponder'
+import { graphql, eq, and, gte, inArray, type AnyPgColumn } from 'ponder'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { computePnl, computePoints } from '@coshi190/juno-moneta-sdk'
 import { getWrappedNativeAddress } from '../config.js'
 import { parseBondingCurveSwap, parseV2Swap, parseV3Swap, type ParsedSwap } from '../parse-swaps.js'
-import { computeWindowedTraderStats, type LeaderboardSwapEvent } from '../trader-stats.js'
+import { computeWindowedTraderStats } from '../trader-stats.js'
 import {
     makePriceAt,
     computePriceFromSqrtPriceX96,
     sanitizePricePoints,
-    sanitizeUsdPrice,
-    MAX_TOKEN_USD_PRICE,
-    type NativePricePoint,
+    parseTokenUsdPrice,
+    type PricePoint,
 } from '../price-history.js'
 
 const app = new Hono()
 
 app.use('*', cors())
 
-app.use('/', graphql({ db, schema }))
-app.use('/graphql', graphql({ db, schema }))
-
-function toPrice(raw: string | null | undefined): number | null {
-    if (!raw) return null
-    return sanitizeUsdPrice(parseFloat(raw), MAX_TOKEN_USD_PRICE)
-}
+const gql = graphql({ db, schema })
+app.use('/', gql)
+app.use('/graphql', gql)
 
 async function priceMapForTokens(
     chainId: number,
@@ -44,15 +39,15 @@ async function priceMapForTokens(
             .where(inArray(schema.tokenSnapshot.tokenAddr, tokenAddrs)),
     ])
 
-    for (const s of bcSnaps) prices.set(s.tokenAddr, toPrice(s.lastPriceUsd))
+    for (const s of bcSnaps) prices.set(s.tokenAddr, parseTokenUsdPrice(s.lastPriceUsd))
     for (const s of v3Snaps) {
-        const p = toPrice(s.lastPriceUsd)
+        const p = parseTokenUsdPrice(s.lastPriceUsd)
         if (p !== null) prices.set(s.tokenAddr, p)
     }
     return prices
 }
 
-async function nativeUsdPoints(chainId: number, since: number): Promise<NativePricePoint[]> {
+async function nativeUsdPoints(chainId: number, since: number): Promise<PricePoint[]> {
     const rows = await db
         .select()
         .from(schema.nativeUsdPriceSnapshot)
@@ -64,21 +59,31 @@ async function nativeUsdPoints(chainId: number, since: number): Promise<NativePr
         )
     return sanitizePricePoints(
         rows.map((s) => ({ timestamp: s.timestamp, price: parseFloat(s.price) }))
-    ).sort((a, b) => a.timestamp - b.timestamp)
+    )
 }
 
-function foldOf(row: {
-    position: number
-    costPoolUsd: number
-    realizedUsd: number
-    totalInvestedUsd: number
-}) {
-    return {
-        position: row.position,
-        costPoolUsd: row.costPoolUsd,
-        realizedUsd: row.realizedUsd,
-        totalInvestedUsd: row.totalInvestedUsd,
-    }
+async function loadSwaps(
+    chainId: number,
+    filter: { user: string } | { since: number }
+): Promise<ParsedSwap[]> {
+    const where = (t: { chainId: AnyPgColumn; timestamp: AnyPgColumn }, userCol: AnyPgColumn) =>
+        and(
+            eq(t.chainId, chainId),
+            'user' in filter ? eq(userCol, filter.user) : gte(t.timestamp, filter.since)
+        )
+    const wn = getWrappedNativeAddress(chainId)
+    const { swapEvent: bc, v2SwapEvent: v2, v3SwapEvent: v3 } = schema
+
+    const [bcRows, v2Rows, v3Rows] = await Promise.all([
+        db.select().from(bc).where(where(bc, bc.sender)),
+        wn ? db.select().from(v2).where(where(v2, v2.txFrom)) : [],
+        wn ? db.select().from(v3).where(where(v3, v3.txFrom)) : [],
+    ])
+
+    const dex = wn
+        ? [...v2Rows.map((r) => parseV2Swap(r, wn)), ...v3Rows.map((r) => parseV3Swap(r, wn))]
+        : []
+    return [...bcRows.map(parseBondingCurveSwap), ...dex.filter((p) => p !== null)]
 }
 
 app.get('/user-pnl', async (c) => {
@@ -97,9 +102,7 @@ app.get('/user-pnl', async (c) => {
         chainId,
         rows.map((r) => r.tokenAddr)
     )
-
-    const folds = new Map(rows.map((r) => [r.tokenAddr, foldOf(r)]))
-
+    const folds = new Map(rows.map((r) => [r.tokenAddr, r]))
     const { perToken, totals } = computePnl({ folds, priceUsdByToken: prices })
 
     return c.json({ perToken: Object.fromEntries(perToken), totals })
@@ -112,38 +115,7 @@ app.get('/user-swaps', async (c) => {
         return c.json({ error: 'chainId and user are required' }, 400)
     }
 
-    const wn = getWrappedNativeAddress(chainId)?.toLowerCase() ?? null
-
-    const [bcRows, v2Rows, v3Rows] = await Promise.all([
-        db
-            .select()
-            .from(schema.swapEvent)
-            .where(and(eq(schema.swapEvent.chainId, chainId), eq(schema.swapEvent.sender, user))),
-        db
-            .select()
-            .from(schema.v2SwapEvent)
-            .where(
-                and(eq(schema.v2SwapEvent.chainId, chainId), eq(schema.v2SwapEvent.txFrom, user))
-            ),
-        db
-            .select()
-            .from(schema.v3SwapEvent)
-            .where(
-                and(eq(schema.v3SwapEvent.chainId, chainId), eq(schema.v3SwapEvent.txFrom, user))
-            ),
-    ])
-
-    const swaps: ParsedSwap[] = bcRows.map(parseBondingCurveSwap)
-    if (wn) {
-        for (const r of v2Rows) {
-            const p = parseV2Swap(r, wn)
-            if (p) swaps.push(p)
-        }
-        for (const r of v3Rows) {
-            const p = parseV3Swap(r, wn)
-            if (p) swaps.push(p)
-        }
-    }
+    const swaps = await loadSwaps(chainId, { user })
     swaps.sort((a, b) => a.timestamp - b.timestamp)
 
     return c.json({ swaps })
@@ -152,85 +124,40 @@ app.get('/user-swaps', async (c) => {
 const PERIOD_SECONDS: Record<string, number> = { '24h': 86400, '7d': 604800, '30d': 2592000 }
 
 async function windowedLeaderboardTraders(chainId: number, since: number) {
-    const wn = getWrappedNativeAddress(chainId)?.toLowerCase() ?? null
-
-    const [bcRows, v2Rows, v3Rows] = await Promise.all([
-        db
-            .select()
-            .from(schema.swapEvent)
-            .where(
-                and(eq(schema.swapEvent.chainId, chainId), gte(schema.swapEvent.timestamp, since))
-            ),
-        db
-            .select()
-            .from(schema.v2SwapEvent)
-            .where(
-                and(
-                    eq(schema.v2SwapEvent.chainId, chainId),
-                    gte(schema.v2SwapEvent.timestamp, since)
-                )
-            ),
-        db
-            .select()
-            .from(schema.v3SwapEvent)
-            .where(
-                and(
-                    eq(schema.v3SwapEvent.chainId, chainId),
-                    gte(schema.v3SwapEvent.timestamp, since)
-                )
-            ),
-    ])
-
-    const events: LeaderboardSwapEvent[] = bcRows.map(parseBondingCurveSwap)
-    if (wn) {
-        for (const r of v2Rows) {
-            const p = parseV2Swap(r, wn)
-            if (p) events.push(p)
-        }
-        for (const r of v3Rows) {
-            const p = parseV3Swap(r, wn)
-            if (p) events.push(p)
-        }
-    }
+    const events = await loadSwaps(chainId, { since })
     if (events.length === 0) return []
 
-    const [currentNative] = await db
-        .select()
-        .from(schema.nativeUsdPrice)
-        .where(eq(schema.nativeUsdPrice.chainId, chainId))
-        .limit(1)
-    const points = await nativeUsdPoints(chainId, since)
-    const priceAt = makePriceAt(points, currentNative ? parseFloat(currentNative.price) : 0)
-
     const tokenAddrs = [...new Set(events.map((e) => e.tokenAddr))]
-    const tokenRows = await db
-        .select()
-        .from(schema.v3Token)
-        .where(
-            inArray(
-                schema.v3Token.id,
-                tokenAddrs.map((t) => `${chainId}-${t}`)
-            )
-        )
-    const decimalsByToken = new Map<string, number>()
-    for (const t of tokenRows) decimalsByToken.set(t.address, t.decimals ?? 18)
-
-    const prices = await priceMapForTokens(chainId, tokenAddrs)
+    const [[currentNative], points, tokenRows, prices] = await Promise.all([
+        db
+            .select()
+            .from(schema.nativeUsdPrice)
+            .where(eq(schema.nativeUsdPrice.chainId, chainId))
+            .limit(1),
+        nativeUsdPoints(chainId, since),
+        db
+            .select()
+            .from(schema.v3Token)
+            .where(
+                inArray(
+                    schema.v3Token.id,
+                    tokenAddrs.map((t) => `${chainId}-${t}`)
+                )
+            ),
+        priceMapForTokens(chainId, tokenAddrs),
+    ])
+    const priceAt = makePriceAt(points, currentNative ? parseFloat(currentNative.price) : 0)
+    const decimalsByToken = new Map(tokenRows.map((t) => [t.address, t.decimals ?? 18]))
 
     const statsByAddr = computeWindowedTraderStats(events, priceAt, prices, decimalsByToken)
     return [...statsByAddr].map(([address, s]) => ({ address, ...s }))
 }
 
-async function withReferredPoints<T extends { address: string; points: number }>(
-    chainId: number,
-    traders: T[]
-): Promise<Array<T & { referredPoints: number }>> {
-    const bindings = await db
-        .select()
-        .from(schema.referralBinding)
-        .where(eq(schema.referralBinding.chainId, chainId))
-
-    const pointsByUser = new Map(traders.map((t) => [t.address.toLowerCase(), t.points]))
+function withReferredPoints<T extends { address: string; points: number }>(
+    traders: T[],
+    bindings: { referrer: string; referee: string }[]
+): Array<T & { referredPoints: number }> {
+    const pointsByUser = new Map(traders.map((t) => [t.address, t.points]))
     const byReferrer = new Map<string, number[]>()
     for (const b of bindings) {
         const list = byReferrer.get(b.referrer) ?? []
@@ -240,7 +167,7 @@ async function withReferredPoints<T extends { address: string; points: number }>
 
     return traders.map((t) => ({
         ...t,
-        referredPoints: computePoints(byReferrer.get(t.address.toLowerCase()) ?? []),
+        referredPoints: computePoints(byReferrer.get(t.address) ?? []),
     }))
 }
 
@@ -250,42 +177,41 @@ app.get('/leaderboard', async (c) => {
         return c.json({ error: 'chainId is required' }, 400)
     }
 
+    const bindingsQuery = db
+        .select()
+        .from(schema.referralBinding)
+        .where(eq(schema.referralBinding.chainId, chainId))
+
     const windowSeconds = PERIOD_SECONDS[c.req.query('period') ?? '']
     if (windowSeconds) {
         const since = Math.floor(Date.now() / 1000) - windowSeconds
-        const windowed = await windowedLeaderboardTraders(chainId, since)
-        return c.json({ traders: await withReferredPoints(chainId, windowed) })
+        const [windowed, bindings] = await Promise.all([
+            windowedLeaderboardTraders(chainId, since),
+            bindingsQuery,
+        ])
+        return c.json({ traders: withReferredPoints(windowed, bindings) })
     }
 
-    const [pnlRows, statRows] = await Promise.all([
+    const [pnlRows, statRows, bindings] = await Promise.all([
         db.select().from(schema.userTokenPnl).where(eq(schema.userTokenPnl.chainId, chainId)),
         db.select().from(schema.userStat).where(eq(schema.userStat.chainId, chainId)),
+        bindingsQuery,
     ])
 
     const prices = await priceMapForTokens(chainId, [...new Set(pnlRows.map((r) => r.tokenAddr))])
 
-    const foldsByUser = new Map<string, Map<string, ReturnType<typeof foldOf>>>()
+    const foldsByUser = new Map<string, Map<string, (typeof pnlRows)[number]>>()
     for (const r of pnlRows) {
-        let folds = foldsByUser.get(r.user)
-        if (!folds) {
-            folds = new Map()
-            foldsByUser.set(r.user, folds)
-        }
-        folds.set(r.tokenAddr, foldOf(r))
-    }
-
-    const pnlByUser = new Map<string, { pnlUsd: number; pnlPercent: number }>()
-    for (const [user, folds] of foldsByUser) {
-        const { totals } = computePnl({ folds, priceUsdByToken: prices })
-        pnlByUser.set(user, { pnlUsd: totals.totalPnlUsd, pnlPercent: totals.totalPnlPercent })
+        foldsByUser.set(r.user, (foldsByUser.get(r.user) ?? new Map()).set(r.tokenAddr, r))
     }
 
     const traders = statRows.map((s) => {
-        const agg = pnlByUser.get(s.user) ?? { pnlUsd: 0, pnlPercent: 0 }
+        const folds = foldsByUser.get(s.user)
+        const totals = folds && computePnl({ folds, priceUsdByToken: prices }).totals
         return {
             address: s.user,
-            pnlUsd: agg.pnlUsd,
-            pnlPercent: agg.pnlPercent,
+            pnlUsd: totals?.totalPnlUsd ?? 0,
+            pnlPercent: totals?.totalPnlPercent ?? 0,
             volumeNative: s.volumeNative,
             junoVolumeNative: s.junoVolumeNative,
             externalVolumeNative: s.externalVolumeNative,
@@ -297,7 +223,7 @@ app.get('/leaderboard', async (c) => {
         }
     })
 
-    return c.json({ traders: await withReferredPoints(chainId, traders) })
+    return c.json({ traders: withReferredPoints(traders, bindings) })
 })
 
 app.get('/native-usd-price-history', async (c) => {
@@ -327,47 +253,26 @@ app.get('/token-price-history', async (c) => {
         return c.json({ error: 'source must be bc or v3' }, 400)
     }
 
-    const raw: NativePricePoint[] = []
-    if (source === 'bc') {
-        const rows = await db
-            .select()
-            .from(schema.swapEvent)
-            .where(
-                and(
-                    eq(schema.swapEvent.chainId, chainId),
-                    eq(schema.swapEvent.tokenAddr, tokenAddr),
-                    gte(schema.swapEvent.timestamp, since)
-                )
-            )
-        for (const r of rows) {
-            raw.push({ timestamp: r.timestamp, price: parseFloat(r.priceNative) })
-        }
-    } else {
-        const rows = await db
-            .select()
-            .from(schema.v3SwapEvent)
-            .where(
-                and(
-                    eq(schema.v3SwapEvent.chainId, chainId),
-                    eq(schema.v3SwapEvent.tokenAddr, tokenAddr),
-                    gte(schema.v3SwapEvent.timestamp, since)
-                )
-            )
-        for (const r of rows) {
-            raw.push({
-                timestamp: r.timestamp,
-                price: computePriceFromSqrtPriceX96(
-                    BigInt(r.sqrtPriceX96),
-                    r.tokenIsToken0 === 1,
-                    18,
-                    18
-                ),
-            })
-        }
-    }
+    const { swapEvent: bc, v3SwapEvent: v3 } = schema
+    const match = (t: { chainId: AnyPgColumn; tokenAddr: AnyPgColumn; timestamp: AnyPgColumn }) =>
+        and(eq(t.chainId, chainId), eq(t.tokenAddr, tokenAddr), gte(t.timestamp, since))
+    const raw: PricePoint[] =
+        source === 'bc'
+            ? (await db.select().from(bc).where(match(bc))).map((r) => ({
+                  timestamp: r.timestamp,
+                  price: parseFloat(r.priceNative),
+              }))
+            : (await db.select().from(v3).where(match(v3))).map((r) => ({
+                  timestamp: r.timestamp,
+                  price: computePriceFromSqrtPriceX96(
+                      BigInt(r.sqrtPriceX96),
+                      r.tokenIsToken0 === 1,
+                      18,
+                      18
+                  ),
+              }))
 
-    const points = sanitizePricePoints(raw).sort((a, b) => a.timestamp - b.timestamp)
-    return c.json({ points })
+    return c.json({ points: sanitizePricePoints(raw) })
 })
 
 export default app

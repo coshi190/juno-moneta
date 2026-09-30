@@ -4,8 +4,8 @@ import { formatEther } from 'viem'
 import { readERC20Metadata } from './erc20-read.js'
 import { foldTokenCandle } from './candles.js'
 import { readTrackingTag } from '@coshi190/juno-moneta-sdk'
-import { getStablecoins, getWrappedNativeAddress } from './config.js'
-import { parseV3Swap } from './parse-swaps.js'
+import { getChains, getStablecoins, getWrappedNativeAddress } from './config.js'
+import { abs, parseV3Swap } from './parse-swaps.js'
 import {
     sanitizeUsdPrice,
     computePriceFromSqrtPriceX96,
@@ -13,6 +13,10 @@ import {
     MAX_TOKEN_USD_PRICE,
 } from './price-history.js'
 import { recordUserSwap } from './user-pnl.js'
+
+type DynamicEvent = Parameters<typeof ponder.on>[0]
+type Pool = { token0: string; token1: string }
+type Side = { tokenAddr: string; tokenIsToken0: boolean } | null
 
 const GRADUATED_FEE_TIER = 10000
 const SECONDS_PER_DAY = 86400
@@ -24,22 +28,11 @@ export async function upsertToken(
     timestamp: number
 ) {
     const id = `${chainId}-${address}`
-    const existing = await context.db.find(schema.v3Token, { id })
-    if (existing) return
-
+    if (await context.db.find(schema.v3Token, { id })) return
     const meta = await readERC20Metadata(context.client, address)
-
     await context.db
         .insert(schema.v3Token)
-        .values({
-            id,
-            chainId,
-            address,
-            name: meta.name,
-            symbol: meta.symbol,
-            decimals: meta.decimals,
-            createdAt: timestamp,
-        })
+        .values({ id, chainId, address, ...meta, createdAt: timestamp })
         .onConflictDoNothing()
 }
 
@@ -47,39 +40,45 @@ function getDayTimestamp(timestamp: number): number {
     return Math.floor(timestamp / SECONDS_PER_DAY) * SECONDS_PER_DAY
 }
 
+// The non-native token of a pool paired with wrapped native, or null.
+function nativeSide(pool: Pool, wn: string | undefined): Side {
+    if (pool.token1 === wn) return { tokenAddr: pool.token0, tokenIsToken0: true }
+    if (pool.token0 === wn) return { tokenAddr: pool.token1, tokenIsToken0: false }
+    return null
+}
+
+async function getNativeUsd(context: any, chainId: number): Promise<number> {
+    const rec = await context.db.find(schema.nativeUsdPrice, { chainId })
+    return rec ? parseFloat(rec.price) : 0
+}
+
+async function decimalsOf(context: any, chainId: number, addr: string): Promise<number> {
+    const token = await context.db.find(schema.v3Token, { id: `${chainId}-${addr}` })
+    return token?.decimals ?? 18
+}
+
 async function swapVolumeUsd(
     context: any,
     chainId: number,
-    poolRecord: { token0: string; token1: string },
-    absAmount0: bigint,
-    absAmount1: bigint
+    pool: Pool,
+    side: Side,
+    amount0: bigint,
+    amount1: bigint,
+    nativeUsd: number
 ): Promise<number> {
-    const { token0, token1 } = poolRecord
-    const wn = getWrappedNativeAddress(chainId)
-    if (token0 === wn || token1 === wn) {
-        const nativePriceRecord = await context.db.find(schema.nativeUsdPrice, { chainId })
-        const nativeUsd = nativePriceRecord ? parseFloat(nativePriceRecord.price) : 0
-        return Number(formatEther(token0 === wn ? absAmount0 : absAmount1)) * nativeUsd
-    }
+    if (side) return Number(formatEther(abs(side.tokenIsToken0 ? amount1 : amount0))) * nativeUsd
+    const legs = [
+        [pool.token0, abs(amount0)],
+        [pool.token1, abs(amount1)],
+    ] as const
     const stables = getStablecoins(chainId)
-    const stableIsToken0 = stables?.has(token0) ?? false
-    if (stableIsToken0 || stables?.has(token1)) {
-        const stableAddr = stableIsToken0 ? token0 : token1
-        const stableToken = await context.db.find(schema.v3Token, {
-            id: `${chainId}-${stableAddr}`,
-        })
-        const decimals = stableToken?.decimals ?? 18
-        return Number(stableIsToken0 ? absAmount0 : absAmount1) / 10 ** decimals
-    }
-    for (const [addr, amount] of [
-        [token0, absAmount0],
-        [token1, absAmount1],
-    ] as const) {
+    const stable = legs.find(([addr]) => stables?.has(addr))
+    if (stable) return Number(stable[1]) / 10 ** (await decimalsOf(context, chainId, stable[0]))
+    for (const [addr, amount] of legs) {
         const snap = await context.db.find(schema.v3TokenSnapshot, { id: `${chainId}-${addr}` })
-        const priceUsd = snap ? parseFloat(snap.lastPriceUsd ?? '0') : 0
+        const priceUsd = parseFloat(snap?.lastPriceUsd ?? '0')
         if (priceUsd > 0) {
-            const token = await context.db.find(schema.v3Token, { id: `${chainId}-${addr}` })
-            return (Number(amount) / 10 ** (token?.decimals ?? 18)) * priceUsd
+            return (Number(amount) / 10 ** (await decimalsOf(context, chainId, addr))) * priceUsd
         }
     }
     return 0
@@ -89,172 +88,88 @@ async function upsertPoolDayVolume(
     context: any,
     chainId: number,
     poolAddress: string,
-    poolRecord: { token0: string; token1: string },
     timestamp: number,
-    amount0: bigint,
-    amount1: bigint
+    volumeUsd: number
 ) {
     const dayTimestamp = getDayTimestamp(timestamp)
-    const dayId = `${chainId}-${poolAddress}-${dayTimestamp}`
-    const absAmount0 = amount0 < 0n ? -amount0 : amount0
-    const absAmount1 = amount1 < 0n ? -amount1 : amount1
-    const volumeUsd = await swapVolumeUsd(context, chainId, poolRecord, absAmount0, absAmount1)
-
-    const existing = await context.db.find(schema.v3PoolDayVolume, { id: dayId })
-
-    if (!existing) {
-        await context.db
-            .insert(schema.v3PoolDayVolume)
-            .values({
-                id: dayId,
-                chainId,
-                poolAddress,
-                dayTimestamp,
-                volumeUsd,
-                swapCount: 1,
-                updatedAt: timestamp,
-            })
-            .onConflictDoNothing()
-    } else {
-        await context.db.update(schema.v3PoolDayVolume, { id: dayId }).set({
-            volumeUsd: existing.volumeUsd + volumeUsd,
-            swapCount: existing.swapCount + 1,
+    await context.db
+        .insert(schema.v3PoolDayVolume)
+        .values({
+            id: `${chainId}-${poolAddress}-${dayTimestamp}`,
+            chainId,
+            poolAddress,
+            dayTimestamp,
+            volumeUsd,
+            swapCount: 1,
             updatedAt: timestamp,
         })
-    }
-}
-
-async function applyReserveDelta(
-    context: any,
-    chainId: number,
-    poolAddress: string,
-    timestamp: number,
-    delta0: bigint,
-    delta1: bigint,
-    sqrtPriceX96?: bigint,
-    liquidity?: bigint,
-    tick?: number | bigint
-) {
-    const stateId = `${chainId}-${poolAddress}`
-    const prev = await context.db.find(schema.v3PoolState, { id: stateId })
-
-    let reserve0 = (prev ? BigInt(prev.reserve0) : 0n) + delta0
-    let reserve1 = (prev ? BigInt(prev.reserve1) : 0n) + delta1
-    if (reserve0 < 0n) reserve0 = 0n
-    if (reserve1 < 0n) reserve1 = 0n
-
-    const sp = sqrtPriceX96 !== undefined ? sqrtPriceX96.toString() : (prev?.sqrtPriceX96 ?? '0')
-    const liq = liquidity !== undefined ? liquidity.toString() : (prev?.liquidity ?? '0')
-    const tk = tick !== undefined ? Number(tick) : (prev?.tick ?? null)
-
-    if (!prev) {
-        await context.db
-            .insert(schema.v3PoolState)
-            .values({
-                id: stateId,
-                chainId,
-                poolAddress,
-                reserve0: reserve0.toString(),
-                reserve1: reserve1.toString(),
-                sqrtPriceX96: sp,
-                tick: tk,
-                liquidity: liq,
-                updatedAt: timestamp,
-            })
-            .onConflictDoNothing()
-    } else {
-        await context.db.update(schema.v3PoolState, { id: stateId }).set({
-            reserve0: reserve0.toString(),
-            reserve1: reserve1.toString(),
-            sqrtPriceX96: sp,
-            tick: tk,
-            liquidity: liq,
+        .onConflictDoUpdate((row: any) => ({
+            volumeUsd: row.volumeUsd + volumeUsd,
+            swapCount: row.swapCount + 1,
             updatedAt: timestamp,
+        }))
+}
+
+// Swap args carry the new price state; Mint/Collect args don't, so it falls back to prev.
+async function applyReserveDelta(context: any, chainId: number, event: any, sign: 1n | -1n) {
+    const { amount0, amount1, sqrtPriceX96, liquidity, tick } = event.args
+    const poolAddress = event.log.address.toLowerCase()
+    const clamp = (x: bigint) => (x < 0n ? 0n : x)
+    const tk = tick !== undefined ? Number(tick) : undefined
+    await context.db
+        .insert(schema.v3PoolState)
+        .values({
+            id: `${chainId}-${poolAddress}`,
+            chainId,
+            poolAddress,
+            reserve0: clamp(sign * amount0).toString(),
+            reserve1: clamp(sign * amount1).toString(),
+            sqrtPriceX96: sqrtPriceX96?.toString() ?? '0',
+            tick: tk ?? null,
+            liquidity: liquidity?.toString() ?? '0',
+            updatedAt: Number(event.block.timestamp),
         })
-    }
-}
-
-async function handleV3Mint(context: any, chainId: number, event: any) {
-    const { amount0, amount1 } = event.args
-    await applyReserveDelta(
-        context,
-        chainId,
-        event.log.address.toLowerCase(),
-        Number(event.block.timestamp),
-        amount0,
-        amount1
-    )
-}
-
-async function handleV3Collect(context: any, chainId: number, event: any) {
-    const { amount0, amount1 } = event.args as { amount0: bigint; amount1: bigint }
-    await applyReserveDelta(
-        context,
-        chainId,
-        event.log.address.toLowerCase(),
-        Number(event.block.timestamp),
-        -amount0,
-        -amount1
-    )
+        .onConflictDoUpdate((prev: any) => ({
+            reserve0: clamp(BigInt(prev.reserve0) + sign * amount0).toString(),
+            reserve1: clamp(BigInt(prev.reserve1) + sign * amount1).toString(),
+            sqrtPriceX96: sqrtPriceX96?.toString() ?? prev.sqrtPriceX96,
+            tick: tk ?? prev.tick,
+            liquidity: liquidity?.toString() ?? prev.liquidity,
+            updatedAt: Number(event.block.timestamp),
+        }))
 }
 
 async function updateNativeUsdPrice(
     context: any,
     chainId: number,
     poolAddress: string,
-    poolRecord: { token0: string; token1: string },
-    sqrtPriceX96: bigint,
-    timestamp: number,
-    blockNumber: number,
-    logIndex: number
+    side: Side,
+    event: any
 ) {
-    const wn = getWrappedNativeAddress(chainId)
-    const stables = getStablecoins(chainId)
-    if (!wn || !stables) return
-
-    const { token0, token1 } = poolRecord
-    let nativeIsToken0 = false
-    let isNativeStablePool = false
-
-    if (token0 === wn && stables.has(token1)) {
-        nativeIsToken0 = true
-        isNativeStablePool = true
-    } else if (token1 === wn && stables.has(token0)) {
-        nativeIsToken0 = false
-        isNativeStablePool = true
-    }
-
-    if (!isNativeStablePool) return
-
-    const stableAddr = nativeIsToken0 ? token1 : token0
-    const stableToken = await context.db.find(schema.v3Token, { id: `${chainId}-${stableAddr}` })
-    const stableDecimals = stableToken?.decimals ?? 18
-    const price = computePriceFromSqrtPriceX96(sqrtPriceX96, nativeIsToken0, 18, stableDecimals)
-
+    if (!side || !getStablecoins(chainId)?.has(side.tokenAddr)) return
+    const stableDecimals = await decimalsOf(context, chainId, side.tokenAddr)
+    const price = computePriceFromSqrtPriceX96(
+        event.args.sqrtPriceX96,
+        !side.tokenIsToken0,
+        18,
+        stableDecimals
+    )
     if (sanitizeUsdPrice(price, MAX_NATIVE_USD_PRICE) === null) return
 
+    const timestamp = Number(event.block.timestamp)
+    const row = { price: price.toString(), poolAddress, updatedAt: timestamp }
     await context.db
         .insert(schema.nativeUsdPrice)
-        .values({
-            chainId,
-            price: price.toString(),
-            poolAddress,
-            updatedAt: timestamp,
-        })
-        .onConflictDoUpdate({
-            price: price.toString(),
-            poolAddress,
-            updatedAt: timestamp,
-        })
-
+        .values({ chainId, ...row })
+        .onConflictDoUpdate(row)
     await context.db
         .insert(schema.nativeUsdPriceSnapshot)
         .values({
-            id: `${chainId}-${blockNumber}-${logIndex}`,
+            id: `${chainId}-${event.block.number}-${event.log.logIndex}`,
             chainId,
-            price: price.toString(),
+            price: row.price,
             timestamp,
-            blockNumber,
+            blockNumber: Number(event.block.number),
         })
         .onConflictDoNothing()
 }
@@ -262,62 +177,34 @@ async function updateNativeUsdPrice(
 async function updateV3TokenSnapshot(
     context: any,
     chainId: number,
-    poolAddress: string,
-    poolRecord: { token0: string; token1: string },
+    side: Side,
     sqrtPriceX96: bigint,
-    timestamp: number
+    timestamp: number,
+    nativeUsd: number
 ) {
-    const wn = getWrappedNativeAddress(chainId)
-    if (!wn) return
-
-    const { token0, token1 } = poolRecord
-    let tokenAddr: string | null = null
-    let tokenIsToken0 = false
-
-    if (token1 === wn) {
-        tokenAddr = token0
-        tokenIsToken0 = true
-    } else if (token0 === wn) {
-        tokenAddr = token1
-        tokenIsToken0 = false
-    }
-
-    if (!tokenAddr) return
-
-    const tokenRecord = await context.db.find(schema.v3Token, { id: `${chainId}-${tokenAddr}` })
-    const tokenDecimals = tokenRecord?.decimals ?? 18
-    const priceNative = computePriceFromSqrtPriceX96(sqrtPriceX96, tokenIsToken0, tokenDecimals, 18)
-
-    const nativePrice = await context.db.find(schema.nativeUsdPrice, { chainId })
-    const nativeUsd = nativePrice ? parseFloat(nativePrice.price) : 0
+    if (!side) return
+    const { tokenAddr, tokenIsToken0 } = side
+    const decimals = await decimalsOf(context, chainId, tokenAddr)
+    const priceNative = computePriceFromSqrtPriceX96(sqrtPriceX96, tokenIsToken0, decimals, 18)
     const rawPriceUsd = nativeUsd > 0 ? priceNative * nativeUsd : 0
     const priceUsd = sanitizeUsdPrice(rawPriceUsd, MAX_TOKEN_USD_PRICE) ?? 0
-
-    const id = `${chainId}-${tokenAddr}`
+    const row = {
+        lastPriceNative: priceNative.toString(),
+        lastPriceUsd: priceUsd.toString(),
+        lastSwapAt: timestamp,
+        updatedAt: timestamp,
+    }
     await context.db
         .insert(schema.v3TokenSnapshot)
-        .values({
-            id,
-            chainId,
-            tokenAddr,
-            lastPriceNative: priceNative.toString(),
-            lastPriceUsd: priceUsd.toString(),
-            lastSwapAt: timestamp,
-            updatedAt: timestamp,
-        })
-        .onConflictDoUpdate({
-            lastPriceNative: priceNative.toString(),
-            lastPriceUsd: priceUsd.toString(),
-            lastSwapAt: timestamp,
-            updatedAt: timestamp,
-        })
+        .values({ id: `${chainId}-${tokenAddr}`, chainId, tokenAddr, ...row })
+        .onConflictDoUpdate(row)
 }
 
 export async function recordV3SwapEvent(
     context: any,
     chainId: number,
     event: any,
-    poolRecord: { token0: string; token1: string },
+    poolRecord: Pool,
     poolAddress: string,
     timestamp: number,
     requireNative = true,
@@ -326,28 +213,19 @@ export async function recordV3SwapEvent(
     const { sender, recipient, amount0, amount1, sqrtPriceX96, liquidity, tick } = event.args
     const wn = getWrappedNativeAddress(chainId)
     const { token0, token1 } = poolRecord
+    const side =
+        nativeSide(poolRecord, wn) ??
+        (requireNative ? null : { tokenAddr: token0, tokenIsToken0: true })
+    if (!side) return
+    const { tokenAddr, tokenIsToken0 } = side
 
-    let tokenAddr: string
-    let tokenIsToken0: boolean
-    if (token1 === wn) {
-        tokenAddr = token0
-        tokenIsToken0 = true
-    } else if (token0 === wn) {
-        tokenAddr = token1
-        tokenIsToken0 = false
-    } else if (requireNative) {
-        return
-    } else {
-        tokenAddr = token0
-        tokenIsToken0 = true
-    }
-
+    const txFrom = event.transaction.from.toLowerCase()
+    const blockNumber = Number(event.block.number)
     const tag = readTrackingTag(event.transaction.input, event.transaction.from)
-    const id = `${chainId}-${event.block.number}-${event.log.logIndex}`
     await context.db
         .insert(schema.v3SwapEvent)
         .values({
-            id,
+            id: `${chainId}-${event.block.number}-${event.log.logIndex}`,
             chainId,
             poolAddress,
             tokenAddr,
@@ -356,13 +234,13 @@ export async function recordV3SwapEvent(
             token1Addr: token1,
             sender: sender.toLowerCase(),
             recipient: recipient.toLowerCase(),
-            txFrom: event.transaction.from.toLowerCase(),
+            txFrom,
             amount0: amount0.toString(),
             amount1: amount1.toString(),
             sqrtPriceX96: sqrtPriceX96.toString(),
             liquidity: liquidity.toString(),
             tick: Number(tick),
-            blockNumber: Number(event.block.number),
+            blockNumber,
             timestamp,
             transactionHash: event.transaction.hash,
             viaFrontend: tag ? 1 : 0,
@@ -371,157 +249,102 @@ export async function recordV3SwapEvent(
         })
         .onConflictDoNothing()
 
-    const binding = tag?.binding ?? null
-    if (binding) {
+    if (tag?.binding) {
         await context.db
             .insert(schema.referralBinding)
             .values({
-                referee: binding.referee,
-                referrer: binding.referrer,
-                boundAtBlock: Number(event.block.number),
+                referee: tag.binding.referee,
+                referrer: tag.binding.referrer,
+                boundAtBlock: blockNumber,
                 boundAtTimestamp: Number(event.block.timestamp),
                 chainId,
             })
             .onConflictDoNothing()
     }
 
-    const parsed = wn
-        ? parseV3Swap(
-              {
-                  tokenAddr,
-                  txFrom: event.transaction.from.toLowerCase(),
-                  amount0: amount0.toString(),
-                  amount1: amount1.toString(),
-                  token0Addr: token0,
-                  token1Addr: token1,
-                  timestamp,
-                  protocol,
-              },
-              wn
-          )
-        : null
-    if (parsed) {
-        const nativePriceRecord = await context.db.find(schema.nativeUsdPrice, { chainId })
-        const nativeUsd = nativePriceRecord ? parseFloat(nativePriceRecord.price) : 0
-        const tokenRec = await context.db.find(schema.v3Token, {
-            id: `${chainId}-${parsed.tokenAddr}`,
-        })
-        await recordUserSwap(
-            context,
-            chainId,
-            parsed.tokenAddr,
-            parsed.sender,
-            parsed.isBuy,
-            parsed.amountIn,
-            parsed.grossAmountIn,
-            parsed.amountOut,
-            tokenRec?.decimals ?? 18,
-            nativeUsd,
+    if (!wn) return
+    const parsed = parseV3Swap(
+        {
+            tokenAddr,
+            txFrom,
+            amount0: amount0.toString(),
+            amount1: amount1.toString(),
+            token0Addr: token0,
+            token1Addr: token1,
             timestamp,
-            parsed.protocol
-        )
+            protocol,
+        },
+        wn
+    )
+    if (!parsed) return
 
-        const priceNative = computePriceFromSqrtPriceX96(
-            sqrtPriceX96,
-            tokenIsToken0,
-            tokenRec?.decimals ?? 18,
-            18
-        )
-        await foldTokenCandle(context, chainId, parsed.tokenAddr, 'v3', timestamp, priceNative)
-    }
+    const decimals = await decimalsOf(context, chainId, parsed.tokenAddr)
+    await recordUserSwap(
+        context,
+        chainId,
+        parsed.tokenAddr,
+        parsed.sender,
+        parsed.isBuy,
+        parsed.amountIn,
+        parsed.grossAmountIn,
+        parsed.amountOut,
+        decimals,
+        await getNativeUsd(context, chainId),
+        timestamp,
+        parsed.protocol,
+        event.transaction.hash
+    )
+    const priceNative = computePriceFromSqrtPriceX96(sqrtPriceX96, tokenIsToken0, decimals, 18)
+    await foldTokenCandle(context, chainId, parsed.tokenAddr, 'v3', timestamp, priceNative)
 }
 
 async function updateGraduatedTokenSnapshot(
     context: any,
-    chainId: number,
-    poolRecord: { token0: string; token1: string; fee: number },
-    sqrtPriceX96: bigint,
-    amount0: bigint,
-    amount1: bigint,
-    timestamp: number
+    pool: { fee: number },
+    side: Side,
+    event: any,
+    nativeUsd: number
 ) {
-    if (poolRecord.fee !== GRADUATED_FEE_TIER) return
+    if (pool.fee !== GRADUATED_FEE_TIER || !side) return
+    const { tokenAddr, tokenIsToken0 } = side
+    const launchToken = await context.db.find(schema.launchToken, { tokenAddr })
+    if (launchToken?.isGraduated !== 1) return
+    const snap = await context.db.find(schema.tokenSnapshot, { tokenAddr })
+    if (!snap) return
 
-    const wn = getWrappedNativeAddress(chainId)
-    if (!wn) return
-
-    const { token0, token1 } = poolRecord
-    const absAmount0 = amount0 < 0n ? -amount0 : amount0
-    const absAmount1 = amount1 < 0n ? -amount1 : amount1
-
-    let launchTokenAddr: string | null = null
-    let launchTokenIsToken0 = false
-
-    if (token1 === wn) {
-        const launchToken = await context.db.find(schema.launchToken, { tokenAddr: token0 })
-        if (launchToken?.isGraduated === 1) {
-            launchTokenAddr = token0
-            launchTokenIsToken0 = true
-        }
-    } else if (token0 === wn) {
-        const launchToken = await context.db.find(schema.launchToken, { tokenAddr: token1 })
-        if (launchToken?.isGraduated === 1) {
-            launchTokenAddr = token1
-            launchTokenIsToken0 = false
-        }
-    }
-
-    if (!launchTokenAddr) return
-
-    const priceNative = computePriceFromSqrtPriceX96(sqrtPriceX96, launchTokenIsToken0, 18, 18)
+    const { amount0, amount1, sqrtPriceX96 } = event.args
+    const timestamp = Number(event.block.timestamp)
+    const priceNative = computePriceFromSqrtPriceX96(sqrtPriceX96, tokenIsToken0, 18, 18)
     const marketCap = priceNative * 1_000_000_000
-
-    const nativePriceRecord = await context.db.find(schema.nativeUsdPrice, { chainId })
-    const nativeUsd = nativePriceRecord ? parseFloat(nativePriceRecord.price) : 0
     const priceUsd = nativeUsd > 0 ? priceNative * nativeUsd : 0
+    const isBuy = (tokenIsToken0 ? amount0 : amount1) < 0n
+    const nativeVolume = abs(tokenIsToken0 ? amount1 : amount0)
 
-    const nativeVolume = launchTokenIsToken0 ? absAmount1 : absAmount0
-    const tokenAmount = launchTokenIsToken0 ? amount0 : amount1
-    const isBuy = tokenAmount < 0n
-
-    const existingSnapshot = await context.db.find(schema.tokenSnapshot, {
-        tokenAddr: launchTokenAddr,
-    })
-    if (!existingSnapshot) return
-
-    const athMarketCap = Math.max(
-        marketCap,
-        parseFloat(existingSnapshot.athMarketCapNative ?? '0')
-    ).toString()
-
-    let price1dAgo: string | null = existingSnapshot.price1dAgo ?? null
-    let price1dAgoTimestamp: number | null = existingSnapshot.price1dAgoTimestamp ?? null
-    let priceChange1dPct: string | null = existingSnapshot.priceChange1dPct ?? null
-
-    const currentDayStart = Math.floor(timestamp / 86400) * 86400
-    const refDayStart = existingSnapshot.price1dAgoTimestamp
-        ? Math.floor(existingSnapshot.price1dAgoTimestamp / 86400) * 86400
-        : null
-
-    if (refDayStart === null || currentDayStart > refDayStart) {
-        if ((existingSnapshot.lastSwapAt ?? 0) > 0) {
-            price1dAgo = existingSnapshot.lastPrice ?? '0'
-            price1dAgoTimestamp = existingSnapshot.lastSwapAt ?? null
-        }
+    let { price1dAgo, price1dAgoTimestamp, priceChange1dPct } = snap
+    if (
+        (snap.lastSwapAt ?? 0) > 0 &&
+        (!snap.price1dAgoTimestamp ||
+            getDayTimestamp(timestamp) > getDayTimestamp(snap.price1dAgoTimestamp))
+    ) {
+        price1dAgo = snap.lastPrice ?? '0'
+        price1dAgoTimestamp = snap.lastSwapAt
+    }
+    const pastPrice = parseFloat(price1dAgo ?? '0')
+    if (pastPrice > 0 && priceNative > 0) {
+        priceChange1dPct = (((priceNative - pastPrice) / pastPrice) * 100).toString()
     }
 
-    if (price1dAgo !== null && price1dAgo !== '0') {
-        const pastPrice = parseFloat(price1dAgo)
-        if (pastPrice > 0 && priceNative > 0) {
-            priceChange1dPct = (((priceNative - pastPrice) / pastPrice) * 100).toString()
-        }
-    }
-
-    await context.db.update(schema.tokenSnapshot, { tokenAddr: launchTokenAddr }).set({
-        lastPrice: priceNative > 0 ? priceNative.toString() : existingSnapshot.lastPrice,
-        lastPriceUsd: priceUsd > 0 ? priceUsd.toString() : (existingSnapshot.lastPriceUsd ?? '0'),
+    await context.db.update(schema.tokenSnapshot, { tokenAddr }).set({
+        lastPrice: priceNative > 0 ? priceNative.toString() : snap.lastPrice,
+        lastPriceUsd: priceUsd > 0 ? priceUsd.toString() : (snap.lastPriceUsd ?? '0'),
         marketCapNative: marketCap.toString(),
-        athMarketCapNative: athMarketCap,
-        totalBuys: (existingSnapshot.totalBuys ?? 0) + (isBuy ? 1 : 0),
-        totalSells: (existingSnapshot.totalSells ?? 0) + (isBuy ? 0 : 1),
-        totalVolumeNative: (
-            BigInt(existingSnapshot.totalVolumeNative ?? '0') + nativeVolume
+        athMarketCapNative: Math.max(
+            marketCap,
+            parseFloat(snap.athMarketCapNative ?? '0')
         ).toString(),
+        totalBuys: (snap.totalBuys ?? 0) + (isBuy ? 1 : 0),
+        totalSells: (snap.totalSells ?? 0) + (isBuy ? 0 : 1),
+        totalVolumeNative: (BigInt(snap.totalVolumeNative ?? '0') + nativeVolume).toString(),
         lastSwapAt: timestamp,
         price1dAgo,
         price1dAgoTimestamp,
@@ -530,23 +353,21 @@ async function updateGraduatedTokenSnapshot(
     })
 }
 
-ponder.on('V3Factory:PoolCreated', async ({ event, context }) => {
+async function handlePoolCreated(context: any, chainId: number, event: any) {
     const { token0, token1, fee, tickSpacing, pool } = event.args
     const address = pool.toLowerCase()
     const timestamp = Number(event.block.timestamp)
     const t0 = token0.toLowerCase()
     const t1 = token1.toLowerCase()
-
     await Promise.all([
-        upsertToken(context, 25925, t0, timestamp),
-        upsertToken(context, 25925, t1, timestamp),
+        upsertToken(context, chainId, t0, timestamp),
+        upsertToken(context, chainId, t1, timestamp),
     ])
-
     await context.db
         .insert(schema.v3Pool)
         .values({
-            id: `25925-${address}`,
-            chainId: 25925,
+            id: `${chainId}-${address}`,
+            chainId,
             address,
             token0: t0,
             token1: t1,
@@ -557,205 +378,42 @@ ponder.on('V3Factory:PoolCreated', async ({ event, context }) => {
             protocol: 'junoswap',
         })
         .onConflictDoNothing()
-})
+}
 
-ponder.on('V3Pool:Swap', async ({ event, context }) => {
-    const { amount0, amount1, sqrtPriceX96, liquidity, tick } = event.args
+async function handleSwap(context: any, chainId: number, event: any) {
+    const { amount0, amount1, sqrtPriceX96 } = event.args
     const poolAddress = event.log.address.toLowerCase()
     const timestamp = Number(event.block.timestamp)
-    const poolRecord = await context.db.find(schema.v3Pool, { id: `25925-${poolAddress}` })
-    if (!poolRecord) return
+    const pool = await context.db.find(schema.v3Pool, { id: `${chainId}-${poolAddress}` })
+    if (!pool) return
+    const side = nativeSide(pool, getWrappedNativeAddress(chainId))
 
-    await applyReserveDelta(
-        context,
-        25925,
-        poolAddress,
-        timestamp,
-        amount0,
-        amount1,
-        sqrtPriceX96,
-        liquidity,
-        tick
+    await applyReserveDelta(context, chainId, event, 1n)
+    await updateNativeUsdPrice(context, chainId, poolAddress, side, event)
+    const nativeUsd = await getNativeUsd(context, chainId)
+    const volumeUsd = await swapVolumeUsd(context, chainId, pool, side, amount0, amount1, nativeUsd)
+    await upsertPoolDayVolume(context, chainId, poolAddress, timestamp, volumeUsd)
+    await updateV3TokenSnapshot(context, chainId, side, sqrtPriceX96, timestamp, nativeUsd)
+    await recordV3SwapEvent(context, chainId, event, pool, poolAddress, timestamp)
+    await updateGraduatedTokenSnapshot(context, pool, side, event, nativeUsd)
+}
+
+const { kubTestnet, bitkub, jbc } = getChains()
+for (const [suffix, chainId] of [
+    ['', kubTestnet],
+    ['Bitkub', bitkub],
+    ['Jbc', jbc],
+] as const) {
+    ponder.on(`V3Factory${suffix}:PoolCreated` as DynamicEvent, ({ event, context }) =>
+        handlePoolCreated(context, chainId, event)
     )
-
-    await updateNativeUsdPrice(
-        context,
-        25925,
-        poolAddress,
-        poolRecord,
-        sqrtPriceX96,
-        timestamp,
-        Number(event.block.number),
-        event.log.logIndex
+    ponder.on(`V3Pool${suffix}:Swap` as DynamicEvent, ({ event, context }) =>
+        handleSwap(context, chainId, event)
     )
-
-    await upsertPoolDayVolume(context, 25925, poolAddress, poolRecord, timestamp, amount0, amount1)
-    await updateV3TokenSnapshot(context, 25925, poolAddress, poolRecord, sqrtPriceX96, timestamp)
-
-    await recordV3SwapEvent(context, 25925, event, poolRecord, poolAddress, timestamp)
-
-    await updateGraduatedTokenSnapshot(
-        context,
-        25925,
-        poolRecord,
-        sqrtPriceX96,
-        amount0,
-        amount1,
-        timestamp
+    ponder.on(`V3Pool${suffix}:Mint` as DynamicEvent, ({ event, context }) =>
+        applyReserveDelta(context, chainId, event, 1n)
     )
-})
-
-ponder.on('V3FactoryBitkub:PoolCreated', async ({ event, context }) => {
-    const { token0, token1, fee, tickSpacing, pool } = event.args
-    const address = pool.toLowerCase()
-    const timestamp = Number(event.block.timestamp)
-    const t0 = token0.toLowerCase()
-    const t1 = token1.toLowerCase()
-
-    await Promise.all([
-        upsertToken(context, 96, t0, timestamp),
-        upsertToken(context, 96, t1, timestamp),
-    ])
-
-    await context.db
-        .insert(schema.v3Pool)
-        .values({
-            id: `96-${address}`,
-            chainId: 96,
-            address,
-            token0: t0,
-            token1: t1,
-            fee: Number(fee),
-            tickSpacing: Number(tickSpacing),
-            createdAtBlock: Number(event.block.number),
-            createdAtTimestamp: timestamp,
-            protocol: 'junoswap',
-        })
-        .onConflictDoNothing()
-})
-
-ponder.on('V3PoolBitkub:Swap', async ({ event, context }) => {
-    const { sqrtPriceX96, liquidity, tick } = event.args
-    const { amount0, amount1 } = event.args
-    const poolAddress = event.log.address.toLowerCase()
-    const timestamp = Number(event.block.timestamp)
-    const poolRecord = await context.db.find(schema.v3Pool, { id: `96-${poolAddress}` })
-    if (!poolRecord) return
-
-    await applyReserveDelta(
-        context,
-        96,
-        poolAddress,
-        timestamp,
-        amount0,
-        amount1,
-        sqrtPriceX96,
-        liquidity,
-        tick
+    ponder.on(`V3Pool${suffix}:Collect` as DynamicEvent, ({ event, context }) =>
+        applyReserveDelta(context, chainId, event, -1n)
     )
-
-    await updateNativeUsdPrice(
-        context,
-        96,
-        poolAddress,
-        poolRecord,
-        sqrtPriceX96,
-        timestamp,
-        Number(event.block.number),
-        event.log.logIndex
-    )
-    await upsertPoolDayVolume(context, 96, poolAddress, poolRecord, timestamp, amount0, amount1)
-    await updateV3TokenSnapshot(context, 96, poolAddress, poolRecord, sqrtPriceX96, timestamp)
-    await recordV3SwapEvent(context, 96, event, poolRecord, poolAddress, timestamp)
-
-    await updateGraduatedTokenSnapshot(
-        context,
-        96,
-        poolRecord,
-        sqrtPriceX96,
-        amount0,
-        amount1,
-        timestamp
-    )
-})
-
-ponder.on('V3FactoryJbc:PoolCreated', async ({ event, context }) => {
-    const { token0, token1, fee, tickSpacing, pool } = event.args
-    const address = pool.toLowerCase()
-    const timestamp = Number(event.block.timestamp)
-    const t0 = token0.toLowerCase()
-    const t1 = token1.toLowerCase()
-
-    await Promise.all([
-        upsertToken(context, 8899, t0, timestamp),
-        upsertToken(context, 8899, t1, timestamp),
-    ])
-
-    await context.db
-        .insert(schema.v3Pool)
-        .values({
-            id: `8899-${address}`,
-            chainId: 8899,
-            address,
-            token0: t0,
-            token1: t1,
-            fee: Number(fee),
-            tickSpacing: Number(tickSpacing),
-            createdAtBlock: Number(event.block.number),
-            createdAtTimestamp: timestamp,
-            protocol: 'junoswap',
-        })
-        .onConflictDoNothing()
-})
-
-ponder.on('V3PoolJbc:Swap', async ({ event, context }) => {
-    const { sqrtPriceX96, liquidity, tick } = event.args
-    const { amount0, amount1 } = event.args
-    const poolAddress = event.log.address.toLowerCase()
-    const timestamp = Number(event.block.timestamp)
-    const poolRecord = await context.db.find(schema.v3Pool, { id: `8899-${poolAddress}` })
-    if (!poolRecord) return
-
-    await applyReserveDelta(
-        context,
-        8899,
-        poolAddress,
-        timestamp,
-        amount0,
-        amount1,
-        sqrtPriceX96,
-        liquidity,
-        tick
-    )
-
-    await updateNativeUsdPrice(
-        context,
-        8899,
-        poolAddress,
-        poolRecord,
-        sqrtPriceX96,
-        timestamp,
-        Number(event.block.number),
-        event.log.logIndex
-    )
-    await upsertPoolDayVolume(context, 8899, poolAddress, poolRecord, timestamp, amount0, amount1)
-    await updateV3TokenSnapshot(context, 8899, poolAddress, poolRecord, sqrtPriceX96, timestamp)
-    await recordV3SwapEvent(context, 8899, event, poolRecord, poolAddress, timestamp)
-
-    await updateGraduatedTokenSnapshot(
-        context,
-        8899,
-        poolRecord,
-        sqrtPriceX96,
-        amount0,
-        amount1,
-        timestamp
-    )
-})
-
-ponder.on('V3Pool:Mint', ({ event, context }) => handleV3Mint(context, 25925, event))
-ponder.on('V3Pool:Collect', ({ event, context }) => handleV3Collect(context, 25925, event))
-ponder.on('V3PoolBitkub:Mint', ({ event, context }) => handleV3Mint(context, 96, event))
-ponder.on('V3PoolBitkub:Collect', ({ event, context }) => handleV3Collect(context, 96, event))
-ponder.on('V3PoolJbc:Mint', ({ event, context }) => handleV3Mint(context, 8899, event))
-ponder.on('V3PoolJbc:Collect', ({ event, context }) => handleV3Collect(context, 8899, event))
+}

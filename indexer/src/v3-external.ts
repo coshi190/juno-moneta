@@ -1,31 +1,28 @@
 import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
-import { upsertToken, recordV3SwapEvent } from './v3-pools.js'
 import { readTrackingTag } from '@coshi190/juno-moneta-sdk'
+import { getChains } from './config.js'
 import { getSeedV3Pool } from './seed.js'
+import { upsertToken, recordV3SwapEvent } from './v3-pools.js'
 
-async function recordExternalV3Pool(context: any, chainId: number, event: any) {
-    const { token0, token1, fee, tickSpacing, pool } = event.args
-    const address = pool.toLowerCase()
+type DynamicEvent = Parameters<typeof ponder.on>[0]
+type PoolInfo = { token0: string; token1: string; fee: number; tickSpacing: number }
+
+const CHAIN = getChains().bitkub
+
+async function insertPool(context: any, event: any, address: string, p: PoolInfo) {
     const timestamp = Number(event.block.timestamp)
-    const t0 = token0.toLowerCase()
-    const t1 = token1.toLowerCase()
-
     await Promise.all([
-        upsertToken(context, chainId, t0, timestamp),
-        upsertToken(context, chainId, t1, timestamp),
+        upsertToken(context, CHAIN, p.token0, timestamp),
+        upsertToken(context, CHAIN, p.token1, timestamp),
     ])
-
     await context.db
         .insert(schema.v3Pool)
         .values({
-            id: `${chainId}-${address}`,
-            chainId,
+            id: `${CHAIN}-${address}`,
+            chainId: CHAIN,
             address,
-            token0: t0,
-            token1: t1,
-            fee: Number(fee),
-            tickSpacing: Number(tickSpacing),
+            ...p,
             createdAtBlock: Number(event.block.number),
             createdAtTimestamp: timestamp,
             protocol: 'kublerx',
@@ -33,59 +30,37 @@ async function recordExternalV3Pool(context: any, chainId: number, event: any) {
         .onConflictDoNothing()
 }
 
-async function getOrSeedKublerxPool(context: any, poolAddress: string, event: any) {
-    const id = `96-${poolAddress}`
-    const existing = await context.db.find(schema.v3Pool, { id })
-    if (existing) return existing as { token0: string; token1: string }
-
-    const s = getSeedV3Pool(96, poolAddress)
+async function getOrSeedPool(
+    context: any,
+    event: any,
+    address: string
+): Promise<{ token0: string; token1: string } | null> {
+    const existing = await context.db.find(schema.v3Pool, { id: `${CHAIN}-${address}` })
+    if (existing) return existing
+    const s = getSeedV3Pool(address)
     if (!s) return null
-
-    const timestamp = Number(event.block.timestamp)
-    await upsertToken(context, 96, s.token0, timestamp)
-    await upsertToken(context, 96, s.token1, timestamp)
-    await context.db
-        .insert(schema.v3Pool)
-        .values({
-            id,
-            chainId: 96,
-            address: poolAddress,
-            token0: s.token0,
-            token1: s.token1,
-            fee: s.fee,
-            tickSpacing: s.tickSpacing,
-            createdAtBlock: Number(event.block.number),
-            createdAtTimestamp: timestamp,
-            protocol: 'kublerx',
-        })
-        .onConflictDoNothing()
+    await insertPool(context, event, address, s)
     return s
 }
 
-async function recordKublerxSwap(context: any, event: any) {
-    const poolAddress = event.log.address.toLowerCase()
-    const graduated = await context.db.find(schema.graduatedPool, { pool: poolAddress })
-    if (!graduated && !readTrackingTag(event.transaction.input, event.transaction.from)) return
-    const poolRecord = await getOrSeedKublerxPool(context, poolAddress, event)
-    if (!poolRecord) return
-    await recordV3SwapEvent(
-        context,
-        96,
-        event,
-        poolRecord,
-        poolAddress,
-        Number(event.block.timestamp),
-        false,
-        'kublerx'
-    )
-}
+ponder.on('KublerxV3Factory:PoolCreated', ({ event, context }) => {
+    const { token0, token1, fee, tickSpacing, pool } = event.args
+    return insertPool(context, event, pool.toLowerCase(), {
+        token0: token0.toLowerCase(),
+        token1: token1.toLowerCase(),
+        fee: Number(fee),
+        tickSpacing: Number(tickSpacing),
+    })
+})
 
-ponder.on('KublerxV3Factory:PoolCreated', async ({ event, context }) => {
-    await recordExternalV3Pool(context, 96, event)
-})
-ponder.on('KublerxV3PoolSeeded:Swap', async ({ event, context }) => {
-    await recordKublerxSwap(context, event)
-})
-ponder.on('KublerxV3Pool:Swap', async ({ event, context }) => {
-    await recordKublerxSwap(context, event)
-})
+for (const contract of ['KublerxV3PoolSeeded', 'KublerxV3Pool']) {
+    ponder.on(`${contract}:Swap` as DynamicEvent, async ({ event, context }) => {
+        const address = event.log.address.toLowerCase()
+        const tagged = readTrackingTag(event.transaction.input, event.transaction.from)
+        if (!tagged && !(await context.db.find(schema.graduatedPool, { pool: address }))) return
+        const pool = await getOrSeedPool(context, event, address)
+        if (!pool) return
+        const timestamp = Number(event.block.timestamp)
+        await recordV3SwapEvent(context, CHAIN, event, pool, address, timestamp, false, 'kublerx')
+    })
+}
