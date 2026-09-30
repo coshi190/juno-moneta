@@ -327,7 +327,6 @@ export const userTokenPnl = onchainTable('user_token_pnl', (t) => ({
     costPoolUsd: t.doublePrecision().notNull().default(0),
     realizedUsd: t.doublePrecision().notNull().default(0),
     totalInvestedUsd: t.doublePrecision().notNull().default(0),
-    lastAvgCostUsd: t.doublePrecision().notNull().default(0),
     updatedAt: t.integer().notNull(),
 }))
 
@@ -335,6 +334,8 @@ export const pnlTxLeg = onchainTable('pnl_tx_leg', (t) => ({
     id: t.text().primaryKey(),
     inCostUsd: t.doublePrecision().notNull().default(0),
     buySeen: t.integer().notNull().default(0),
+    outCostUsd: t.doublePrecision().notNull().default(0),
+    sellSeen: t.integer().notNull().default(0),
 }))
 
 export const userStat = onchainTable('user_stat', (t) => ({

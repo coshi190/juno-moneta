@@ -9,7 +9,6 @@ type PnlRow = {
     costPoolUsd: number
     realizedUsd: number
     totalInvestedUsd: number
-    lastAvgCostUsd: number
 }
 
 const rowOf = (existing: PnlRow | null | undefined): PnlRow => ({
@@ -17,7 +16,6 @@ const rowOf = (existing: PnlRow | null | undefined): PnlRow => ({
     costPoolUsd: existing?.costPoolUsd ?? 0,
     realizedUsd: existing?.realizedUsd ?? 0,
     totalInvestedUsd: existing?.totalInvestedUsd ?? 0,
-    lastAvgCostUsd: existing?.lastAvgCostUsd ?? 0,
 })
 
 async function upsertPnl(
@@ -62,10 +60,10 @@ export async function applyPnlTransfer(
     })
     const next = rowOf(existing)
     next.position = parseFloat(formatEther(newBalance))
+    const legId = `${chainId}-${txHash}-${tokenAddr}-${user}`
+    const leg = await context.db.find(schema.pnlTxLeg, { id: legId })
 
     if (newBalance > oldBalance) {
-        const legId = `${chainId}-${txHash}-${tokenAddr}-${user}`
-        const leg = await context.db.find(schema.pnlTxLeg, { id: legId })
         if (!leg?.buySeen) {
             const tokens = parseFloat(formatEther(newBalance - oldBalance))
             const costUsd = tokens * (await priceUsdNow(context, chainId, tokenAddr))
@@ -79,8 +77,18 @@ export async function applyPnlTransfer(
         }
     } else if (oldBalance > 0n) {
         const oldPosition = parseFloat(formatEther(oldBalance))
-        next.lastAvgCostUsd = next.costPoolUsd / oldPosition
-        next.costPoolUsd *= next.position / oldPosition
+        const outCostUsd = next.costPoolUsd * (1 - next.position / oldPosition)
+        next.costPoolUsd -= outCostUsd
+        if (leg?.sellSeen) {
+            next.realizedUsd -= outCostUsd
+        } else {
+            await context.db
+                .insert(schema.pnlTxLeg)
+                .values({ id: legId, outCostUsd })
+                .onConflictDoUpdate((row: any) => ({
+                    outCostUsd: row.outCostUsd + outCostUsd,
+                }))
+        }
     }
 
     await upsertPnl(context, chainId, tokenAddr, user, next, timestamp)
@@ -166,14 +174,20 @@ export async function recordUserSwap(
                 .values({ id: legId, buySeen: 1 })
                 .onConflictDoUpdate({ inCostUsd: 0, buySeen: 1 })
         }
+    } else if (tracked) {
+        const legId = `${chainId}-${txHash}-${t}-${u}`
+        const leg = await context.db.find(schema.pnlTxLeg, { id: legId })
+        next.realizedUsd += usd - (leg?.outCostUsd ?? 0)
+        await context.db
+            .insert(schema.pnlTxLeg)
+            .values({ id: legId, sellSeen: 1 })
+            .onConflictDoUpdate({ outCostUsd: 0, sellSeen: 1 })
     } else {
-        const avg = next.position > 0 ? next.costPoolUsd / next.position : next.lastAvgCostUsd
-        const sold = tracked ? tokens : Math.min(tokens, next.position)
+        const avg = next.position > 0 ? next.costPoolUsd / next.position : 0
+        const sold = Math.min(tokens, next.position)
         next.realizedUsd += usd - avg * sold
-        if (!tracked) {
-            next.costPoolUsd -= avg * sold
-            next.position = Math.max(0, next.position - tokens)
-        }
+        next.costPoolUsd -= avg * sold
+        next.position = Math.max(0, next.position - tokens)
     }
     await upsertPnl(context, chainId, t, u, next, timestamp)
 }
