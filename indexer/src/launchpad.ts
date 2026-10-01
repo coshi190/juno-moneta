@@ -1,11 +1,13 @@
 import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
 import { formatEther, parseEther, zeroAddress } from 'viem'
+import { readTrackingTag } from '@coshi190/juno-moneta-sdk'
 import { readERC20Metadata } from './erc20-read.js'
 import { sanitizeUsdPrice, MAX_TOKEN_USD_PRICE } from './price-history.js'
 import { computePriceFromReserves, computeMarketCapFromReserves } from './curve-math.js'
 import { applyPnlTransfer, recordUserSwap } from './user-pnl.js'
 import { foldTokenCandle } from './candles.js'
+import { countsTowardStats } from './parse-swaps.js'
 import {
     contractNameFor,
     contractNames,
@@ -121,6 +123,7 @@ async function handleSwap(
     const tokenAddrLower = tokenAddr.toLowerCase()
     const senderLower = sender.toLowerCase()
     const timestamp = Number(event.block.timestamp)
+    const viaFrontend = !!readTrackingTag(event.transaction.input, event.transaction.from)
 
     const orient = (inV: bigint, outV: bigint) =>
         isBuy ? ([inV, outV] as const) : ([outV, inV] as const)
@@ -147,6 +150,7 @@ async function handleSwap(
         blockNumber: Number(event.block.number),
         timestamp,
         transactionHash: event.transaction.hash,
+        viaFrontend: viaFrontend ? 1 : 0,
     })
 
     const marketCap = computeMarketCapFromReserves(nativeReserve, tokenReserve, curve)
@@ -158,21 +162,23 @@ async function handleSwap(
     const nativeUsd = nativePriceRecord ? parseFloat(nativePriceRecord.price) : 0
     const priceUsd = sanitizeUsdPrice(price * nativeUsd, MAX_TOKEN_USD_PRICE) ?? 0
 
-    await recordUserSwap(
-        context,
-        chainId,
-        tokenAddrLower,
-        senderLower,
-        isBuy,
-        amountIn.toString(),
-        grossAmountIn.toString(),
-        amountOut.toString(),
-        18,
-        nativeUsd,
-        timestamp,
-        launchpadId,
-        event.transaction.hash
-    )
+    if (countsTowardStats(launchpadId, viaFrontend)) {
+        await recordUserSwap(
+            context,
+            chainId,
+            tokenAddrLower,
+            senderLower,
+            isBuy,
+            amountIn.toString(),
+            grossAmountIn.toString(),
+            amountOut.toString(),
+            18,
+            nativeUsd,
+            timestamp,
+            launchpadId,
+            event.transaction.hash
+        )
+    }
 
     const existingSnapshot = await context.db.find(schema.tokenSnapshot, {
         tokenAddr: tokenAddrLower,

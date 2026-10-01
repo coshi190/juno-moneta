@@ -61,6 +61,7 @@ export const swapEvent = onchainTable(
         blockNumber: t.integer().notNull(),
         timestamp: t.integer().notNull(),
         transactionHash: t.text().notNull(),
+        viaFrontend: t.integer().notNull().default(0),
     }),
     (table) => ({
         byToken: index().on(table.chainId, table.tokenAddr, table.timestamp),

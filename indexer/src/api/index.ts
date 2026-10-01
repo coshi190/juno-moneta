@@ -87,13 +87,16 @@ async function loadSwaps(
         wn ? db.select().from(v3).where(where(v3, v3.txFrom)) : [],
     ])
 
+    const bcCounted = statsOnly
+        ? bcRows.filter((r) => countsTowardStats(r.launchpadId, r.viaFrontend === 1))
+        : bcRows
     const v3Counted = statsOnly
         ? v3Rows.filter((r) => countsTowardStats(r.protocol, r.viaFrontend === 1))
         : v3Rows
     const dex = wn
         ? [...v2Rows.map((r) => parseV2Swap(r, wn)), ...v3Counted.map((r) => parseV3Swap(r, wn))]
         : []
-    return [...bcRows.map(parseBondingCurveSwap), ...dex.filter((p) => p !== null)]
+    return [...bcCounted.map(parseBondingCurveSwap), ...dex.filter((p) => p !== null)]
 }
 
 app.get('/user-pnl', async (c) => {
