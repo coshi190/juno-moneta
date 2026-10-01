@@ -12,9 +12,6 @@ export async function readERC20Metadata(
             cache: 'immutable',
             retryEmptyResponse,
         })
-
-    /* name and symbol are optional in ERC-20, so an empty reply is final; decimals keeps
-     * Ponder's retries because a wrong value would skew every amount for the token. */
     const [name, symbol, decimals] = await Promise.allSettled([
         read('name', false),
         read('symbol', false),
