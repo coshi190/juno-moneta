@@ -4,32 +4,26 @@ export async function readERC20Metadata(
     client: any,
     address: string
 ): Promise<{ name: string; symbol: string; decimals: number }> {
-    const addr = address as `0x${string}`
+    const read = (functionName: string, retryEmptyResponse: boolean) =>
+        client.readContract({
+            abi: getAbi('erc20'),
+            functionName,
+            address: address as `0x${string}`,
+            cache: 'immutable',
+            retryEmptyResponse,
+        })
 
-    try {
-        const [name, symbol, decimals] = await Promise.all([
-            client.readContract({
-                abi: getAbi('erc20'),
-                functionName: 'name',
-                address: addr,
-                cache: 'immutable',
-            }),
-            client.readContract({
-                abi: getAbi('erc20'),
-                functionName: 'symbol',
-                address: addr,
-                cache: 'immutable',
-            }),
-            client.readContract({
-                abi: getAbi('erc20'),
-                functionName: 'decimals',
-                address: addr,
-                cache: 'immutable',
-            }),
-        ])
-        return { name: name as string, symbol: symbol as string, decimals: decimals as number }
-    } catch {
-        return { name: '', symbol: '', decimals: 18 }
+    /* name and symbol are optional in ERC-20, so an empty reply is final; decimals keeps
+     * Ponder's retries because a wrong value would skew every amount for the token. */
+    const [name, symbol, decimals] = await Promise.allSettled([
+        read('name', false),
+        read('symbol', false),
+        read('decimals', true),
+    ])
+    return {
+        name: name.status === 'fulfilled' ? (name.value as string) : '',
+        symbol: symbol.status === 'fulfilled' ? (symbol.value as string) : '',
+        decimals: decimals.status === 'fulfilled' ? Number(decimals.value) : 18,
     }
 }
 
