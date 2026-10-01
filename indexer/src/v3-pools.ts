@@ -5,7 +5,7 @@ import { readERC20Metadata } from './erc20-read.js'
 import { foldTokenCandle } from './candles.js'
 import { readTrackingTag } from '@coshi190/juno-moneta-sdk'
 import { getChains, getStablecoins, getWrappedNativeAddress } from './config.js'
-import { abs, parseV3Swap } from './parse-swaps.js'
+import { abs, countsTowardStats, parseV3Swap } from './parse-swaps.js'
 import {
     sanitizeUsdPrice,
     computePriceFromSqrtPriceX96,
@@ -293,21 +293,23 @@ export async function recordV3SwapEvent(
     if (!parsed) return
 
     const decimals = await decimalsOf(context, chainId, parsed.tokenAddr)
-    await recordUserSwap(
-        context,
-        chainId,
-        parsed.tokenAddr,
-        parsed.sender,
-        parsed.isBuy,
-        parsed.amountIn,
-        parsed.grossAmountIn,
-        parsed.amountOut,
-        decimals,
-        await getNativeUsd(context, chainId),
-        timestamp,
-        parsed.protocol,
-        event.transaction.hash
-    )
+    if (countsTowardStats(protocol, !!tag)) {
+        await recordUserSwap(
+            context,
+            chainId,
+            parsed.tokenAddr,
+            parsed.sender,
+            parsed.isBuy,
+            parsed.amountIn,
+            parsed.grossAmountIn,
+            parsed.amountOut,
+            decimals,
+            await getNativeUsd(context, chainId),
+            timestamp,
+            parsed.protocol,
+            event.transaction.hash
+        )
+    }
     const priceNative = computePriceFromSqrtPriceX96(sqrtPriceX96, tokenIsToken0, decimals, 18)
     await foldTokenCandle(context, chainId, parsed.tokenAddr, 'v3', timestamp, priceNative)
 }

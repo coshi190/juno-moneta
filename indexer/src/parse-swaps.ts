@@ -2,6 +2,10 @@ export function isJunoswapProtocol(protocol: string): boolean {
     return protocol === 'junoswap' || protocol === 'junoswap-v1_1'
 }
 
+export function countsTowardStats(protocol: string, viaFrontend: boolean): boolean {
+    return viaFrontend || isJunoswapProtocol(protocol || 'junoswap')
+}
+
 export interface ParsedSwap {
     tokenAddr: string
     sender: string

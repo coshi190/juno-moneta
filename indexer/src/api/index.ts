@@ -5,7 +5,13 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { computePnl, computePoints } from '@coshi190/juno-moneta-sdk'
 import { getWrappedNativeAddress } from '../config.js'
-import { parseBondingCurveSwap, parseV2Swap, parseV3Swap, type ParsedSwap } from '../parse-swaps.js'
+import {
+    countsTowardStats,
+    parseBondingCurveSwap,
+    parseV2Swap,
+    parseV3Swap,
+    type ParsedSwap,
+} from '../parse-swaps.js'
 import { computeWindowedTraderStats } from '../trader-stats.js'
 import {
     makePriceAt,
@@ -64,7 +70,8 @@ async function nativeUsdPoints(chainId: number, since: number): Promise<PricePoi
 
 async function loadSwaps(
     chainId: number,
-    filter: { user: string } | { since: number }
+    filter: { user: string } | { since: number },
+    statsOnly = false
 ): Promise<ParsedSwap[]> {
     const where = (t: { chainId: AnyPgColumn; timestamp: AnyPgColumn }, userCol: AnyPgColumn) =>
         and(
@@ -80,8 +87,11 @@ async function loadSwaps(
         wn ? db.select().from(v3).where(where(v3, v3.txFrom)) : [],
     ])
 
+    const v3Counted = statsOnly
+        ? v3Rows.filter((r) => countsTowardStats(r.protocol, r.viaFrontend === 1))
+        : v3Rows
     const dex = wn
-        ? [...v2Rows.map((r) => parseV2Swap(r, wn)), ...v3Rows.map((r) => parseV3Swap(r, wn))]
+        ? [...v2Rows.map((r) => parseV2Swap(r, wn)), ...v3Counted.map((r) => parseV3Swap(r, wn))]
         : []
     return [...bcRows.map(parseBondingCurveSwap), ...dex.filter((p) => p !== null)]
 }
@@ -124,7 +134,7 @@ app.get('/user-swaps', async (c) => {
 const PERIOD_SECONDS: Record<string, number> = { '24h': 86400, '7d': 604800, '30d': 2592000 }
 
 async function windowedLeaderboardTraders(chainId: number, since: number) {
-    const events = await loadSwaps(chainId, { since })
+    const events = await loadSwaps(chainId, { since }, true)
     if (events.length === 0) return []
 
     const tokenAddrs = [...new Set(events.map((e) => e.tokenAddr))]
