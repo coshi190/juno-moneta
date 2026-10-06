@@ -1,10 +1,9 @@
 import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
 import { readTrackingTag } from '@coshi190/juno-moneta-sdk'
-import { getWrappedNativeAddress } from './config.js'
+import { getSeedV2Pool, getWrappedNativeAddress, V2_DEX_CHAIN } from './registry.js'
 import { parseV2Swap } from './parse-swaps.js'
 import { upsertToken } from './v3-pools.js'
-import { getSeedV2Pool, V2_DEX_CHAIN } from './seed.js'
 import { recordUserSwap } from './user-pnl.js'
 
 type DynamicEvent = Parameters<typeof ponder.on>[0]

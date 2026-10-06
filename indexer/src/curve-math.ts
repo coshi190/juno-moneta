@@ -1,4 +1,4 @@
-import type { CurveParams } from './launchpads/registry.js'
+import type { CurveParams } from './registry.js'
 
 const WAD = 10n ** 18n
 

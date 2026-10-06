@@ -1,6 +1,6 @@
 import schema from 'ponder:schema'
 import { formatEther, formatUnits } from 'viem'
-import { getStablecoins } from './config.js'
+import { getStablecoins } from './registry.js'
 import { isJunoswapProtocol } from './parse-swaps.js'
 import { sanitizeUsdPrice, parseTokenUsdPrice, MAX_NATIVE_USD_PRICE } from './price-history.js'
 

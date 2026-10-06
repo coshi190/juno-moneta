@@ -1,8 +1,8 @@
 import { decodeFunctionData } from 'viem'
 import schema from 'ponder:schema'
 import { DURIANFUN_FACTORY_ABI } from '../abis/durianfun.js'
-import { DURIANFUN_VIRTUAL_RESERVE } from './registry.js'
-import type { LaunchpadAdapter, NormalizedSwap } from './types.js'
+import { DURIANFUN_VIRTUAL_RESERVE } from '../registry.js'
+import type { LaunchpadAdapter, NormalizedSwap } from './index.js'
 
 const TOTAL_SUPPLY = 1_000_000_000n * 10n ** 18n
 

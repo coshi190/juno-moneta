@@ -1,0 +1,34 @@
+{
+    "junoswap": {
+        "kubTestnet": {
+            "address": "0x77e5D3fC554e30aceFd5322ca65beE15ee6E39a9",
+            "startBlock": 29065000
+        },
+        "bitkub": {
+            "address": "0x65F6EC30A9E70822721585f6Bba15c40c2F8ab4e",
+            "startBlock": 32995517
+        }
+    },
+    "junoswap-v1_1": {
+        "kubTestnet": {
+            "address": "0x22Cf23cd7799C3A24D53191C8514Dd7E42fEF790",
+            "startBlock": 33661943,
+            "feeCollector": "0x3E482C8Bac01ebE70207DC68652aA9f706e67E7C",
+            "lpLocker": "0x08a064BbfDa30a6620ab774532382D4874ef90F4"
+        }
+    },
+    "durianfun": {
+        "bitkub": {
+            "address": [
+                "0xeadEc9dA89F97Ae6215362EBA4B33F3F1d1775b2",
+                "0xdf4f3dB298A9aDe853191F58b4b2a322D47EC005",
+                "0x89b6b73BD18dbEA0e2218c25c1963fd5FBaB3c87",
+                "0x0480017E51dC813a0fad8aA73EAb2f8476ac0e8F",
+                "0xa1000BB39f36a630F1AB1b245B25Ca75a6744Aa5",
+                "0x96D0117DE988C20f4E4D4B27b46351D760b99D97",
+                "0xE3861e300043d8c20A927340cbA6379D0BECb793"
+            ],
+            "startBlock": 32202357
+        }
+    }
+}

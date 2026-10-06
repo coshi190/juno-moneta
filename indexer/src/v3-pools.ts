@@ -4,7 +4,7 @@ import { formatEther } from 'viem'
 import { readERC20Metadata } from './erc20-read.js'
 import { foldTokenCandle } from './candles.js'
 import { readTrackingTag } from '@coshi190/juno-moneta-sdk'
-import { getChains, getStablecoins, getWrappedNativeAddress } from './config.js'
+import { getChains, getStablecoins, getWrappedNativeAddress } from './registry.js'
 import { abs, countsTowardStats, parseV3Swap } from './parse-swaps.js'
 import {
     sanitizeUsdPrice,

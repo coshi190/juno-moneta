@@ -1,8 +1,8 @@
 import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
 import { zeroAddress } from 'viem'
-import { contractNames, enabledLaunchpads } from './launchpads/index.js'
-import type { HandlerArgs } from './launchpads/types.js'
+import type { HandlerArgs } from './launchpads/index.js'
+import { getLaunchpads } from './registry.js'
 
 const bucketId = (chainId: number, account: string, asset: string, tokenAddr: string) =>
     `${chainId}-${account}-${asset}-${tokenAddr}`
@@ -105,11 +105,10 @@ async function handleClaimed({ event, context }: HandlerArgs, chainId: number) {
 
 type DynamicEvent = Parameters<typeof ponder.on>[0]
 
-for (const { chainSlug, launchpad } of enabledLaunchpads()) {
-    if (!launchpad.feeCollector) continue
-    const names = contractNames(launchpad.launchpadId, chainSlug)
-    if (!('feeCollector' in names)) continue
-    const bind = (event: string) => `${names.feeCollector}:${event}` as DynamicEvent
+for (const launchpad of getLaunchpads()) {
+    const feeCollector = launchpad.contracts.feeCollector
+    if (!feeCollector) continue
+    const bind = (event: string) => `${feeCollector}:${event}` as DynamicEvent
 
     ponder.on(bind('FeeShared'), (args) => handleFeeShared(args, launchpad.chainId))
     ponder.on(bind('Claimed'), (args) => handleClaimed(args, launchpad.chainId))

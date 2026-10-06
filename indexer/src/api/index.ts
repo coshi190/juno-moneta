@@ -4,7 +4,7 @@ import { graphql, eq, and, gte, inArray, type AnyPgColumn } from 'ponder'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { computePnl, computePoints } from '@coshi190/juno-moneta-sdk'
-import { getWrappedNativeAddress } from '../config.js'
+import { getWrappedNativeAddress } from '../registry.js'
 import {
     countsTowardStats,
     parseBondingCurveSwap,

@@ -1,13 +1,10 @@
 import { createConfig, factory } from 'ponder'
-import type { Abi } from 'viem'
 import { getAbi, getDexes } from '@coshi190/juno-moneta-sdk'
-import { getAggRouterDeployment, getChains } from './src/config.js'
-import { CONTRACT_NAMES } from './src/launchpads/index.js'
-import { LAUNCHPADS } from './src/launchpads/registry.js'
+import { getChains, getLaunchpads, getSeedPoolAddresses } from './src/registry.js'
 import { V3_STAKER_ABI } from './src/abis/v3-staker.js'
 import { V2_PAIR_ABI } from './src/abis/v2-pair.js'
 import { FEE_COLLECTOR_ABI } from './src/abis/fee-collector.js'
-import externalPools from './external-pools.json'
+import aggRouter from './agg-router.json'
 
 const CHAINS = getChains()
 
@@ -16,11 +13,6 @@ const DEFAULT_RPC_URLS: Record<number, string> = {
     [CHAINS.bitkub]: 'https://rpc.bitkubchain.io',
     [CHAINS.jbc]: 'https://rpc-l1.jibchain.net',
 }
-
-const seed = (dex: keyof typeof externalPools) =>
-    (externalPools[dex] as Array<{ pair?: string; pool?: string }>).map(
-        (p) => (p.pair ?? p.pool) as `0x${string}`
-    )
 
 function v2Factory(chainId: number, dexId: string): `0x${string}` {
     const factoryAddress = getDexes(chainId, 'v2').find((dex) => dex.dexId === dexId)?.factory
@@ -59,28 +51,40 @@ const abiEvent = <TAbi extends readonly { type: string; name?: string }[], TName
 }
 
 const PAIR_CREATED_EVENT = abiEvent(getAbi('v2Factory'), 'PairCreated')
-const DURIANFUN_TOKEN_CREATED = abiEvent(
-    LAUNCHPADS.durianfun.bitkub.abi,
-    LAUNCHPADS.durianfun.bitkub.creationEvent.name
-)
 const V3_POOL_CREATED_EVENT = abiEvent(getAbi('v3Factory'), 'PoolCreated')
-const AGG_ROUTER_BITKUB = getAggRouterDeployment(CHAINS.bitkub)!
-
-interface Entry<TAbi extends Abi> {
-    address: `0x${string}` | readonly `0x${string}`[]
-    startBlock: number
-    abi: TAbi
+const AGG_ROUTER_BITKUB = {
+    address: aggRouter.bitkub.address as `0x${string}`,
+    startBlock: aggRouter.bitkub.startBlock,
 }
 
-function curveContract<TSlug extends keyof typeof CHAINS, TAbi extends Abi>(
-    chainSlug: TSlug,
-    entry: Entry<TAbi>
-) {
-    return {
-        abi: entry.abi,
-        chain: chainSlug,
-        address: entry.address,
-        startBlock: entry.startBlock,
+const launchpadContracts: Record<string, object> = {}
+for (const launchpad of getLaunchpads()) {
+    const { abi, address, startBlock, creationEvent, contracts } = launchpad
+    const chain = launchpad.chainSlug
+    const created = abiEvent(abi, creationEvent.name)
+
+    launchpadContracts[contracts.curve] = { abi, chain, address, startBlock }
+    launchpadContracts[contracts.token] = {
+        abi: getAbi('erc20'),
+        chain,
+        address: factory({ address, event: created, parameter: creationEvent.tokenParam }),
+        startBlock,
+    }
+    if (contracts.market) {
+        launchpadContracts[contracts.market] = {
+            abi: launchpad.marketAbi,
+            chain,
+            address: factory({ address, event: created, parameter: creationEvent.marketParam! }),
+            startBlock,
+        }
+    }
+    if (contracts.feeCollector) {
+        launchpadContracts[contracts.feeCollector] = {
+            abi: FEE_COLLECTOR_ABI,
+            chain,
+            address: launchpad.feeCollector,
+            startBlock,
+        }
     }
 }
 
@@ -116,87 +120,7 @@ export default createConfig({
         },
     },
     contracts: {
-        [CONTRACT_NAMES['junoswap:kubTestnet'].curve]: curveContract(
-            'kubTestnet',
-            LAUNCHPADS.junoswap.kubTestnet
-        ),
-        [CONTRACT_NAMES['junoswap:kubTestnet'].token]: {
-            abi: getAbi('erc20'),
-            chain: 'kubTestnet',
-            address: factory({
-                address: LAUNCHPADS.junoswap.kubTestnet.address,
-                event: abiEvent(
-                    LAUNCHPADS.junoswap.kubTestnet.abi,
-                    LAUNCHPADS.junoswap.kubTestnet.creationEvent.name
-                ),
-                parameter: LAUNCHPADS.junoswap.kubTestnet.creationEvent.tokenParam,
-            }),
-            startBlock: LAUNCHPADS.junoswap.kubTestnet.startBlock,
-        },
-        [CONTRACT_NAMES['junoswap:bitkub'].curve]: curveContract(
-            'bitkub',
-            LAUNCHPADS.junoswap.bitkub
-        ),
-        [CONTRACT_NAMES['junoswap:bitkub'].token]: {
-            abi: getAbi('erc20'),
-            chain: 'bitkub',
-            address: factory({
-                address: LAUNCHPADS.junoswap.bitkub.address,
-                event: abiEvent(
-                    LAUNCHPADS.junoswap.bitkub.abi,
-                    LAUNCHPADS.junoswap.bitkub.creationEvent.name
-                ),
-                parameter: LAUNCHPADS.junoswap.bitkub.creationEvent.tokenParam,
-            }),
-            startBlock: LAUNCHPADS.junoswap.bitkub.startBlock,
-        },
-        [CONTRACT_NAMES['junoswap-v1_1:kubTestnet'].curve]: curveContract(
-            'kubTestnet',
-            LAUNCHPADS['junoswap-v1_1'].kubTestnet
-        ),
-        [CONTRACT_NAMES['junoswap-v1_1:kubTestnet'].token]: {
-            abi: getAbi('erc20'),
-            chain: 'kubTestnet',
-            address: factory({
-                address: LAUNCHPADS['junoswap-v1_1'].kubTestnet.address,
-                event: abiEvent(
-                    LAUNCHPADS['junoswap-v1_1'].kubTestnet.abi,
-                    LAUNCHPADS['junoswap-v1_1'].kubTestnet.creationEvent.name
-                ),
-                parameter: LAUNCHPADS['junoswap-v1_1'].kubTestnet.creationEvent.tokenParam,
-            }),
-            startBlock: LAUNCHPADS['junoswap-v1_1'].kubTestnet.startBlock,
-        },
-        [CONTRACT_NAMES['junoswap-v1_1:kubTestnet'].feeCollector]: {
-            abi: FEE_COLLECTOR_ABI,
-            chain: 'kubTestnet',
-            address: LAUNCHPADS['junoswap-v1_1'].kubTestnet.feeCollector,
-            startBlock: LAUNCHPADS['junoswap-v1_1'].kubTestnet.startBlock,
-        },
-        [CONTRACT_NAMES['durianfun:bitkub'].curve]: curveContract(
-            'bitkub',
-            LAUNCHPADS.durianfun.bitkub
-        ),
-        [CONTRACT_NAMES['durianfun:bitkub'].market]: {
-            abi: LAUNCHPADS.durianfun.bitkub.marketAbi,
-            chain: 'bitkub',
-            address: factory({
-                address: LAUNCHPADS.durianfun.bitkub.address,
-                event: DURIANFUN_TOKEN_CREATED,
-                parameter: 'market',
-            }),
-            startBlock: LAUNCHPADS.durianfun.bitkub.startBlock,
-        },
-        [CONTRACT_NAMES['durianfun:bitkub'].token]: {
-            abi: getAbi('erc20'),
-            chain: 'bitkub',
-            address: factory({
-                address: LAUNCHPADS.durianfun.bitkub.address,
-                event: DURIANFUN_TOKEN_CREATED,
-                parameter: LAUNCHPADS.durianfun.bitkub.creationEvent.tokenParam,
-            }),
-            startBlock: LAUNCHPADS.durianfun.bitkub.startBlock,
-        },
+        ...launchpadContracts,
         V3Factory: {
             abi: getAbi('v3Factory'),
             chain: 'kubTestnet',
@@ -290,7 +214,7 @@ export default createConfig({
         JibswapPairSeeded: {
             abi: V2_PAIR_ABI,
             chain: 'jbc',
-            address: seed('jibswap'),
+            address: getSeedPoolAddresses('jibswap'),
             startBlock: JBC_SWAP_START,
         },
         JibswapPair: {
@@ -312,7 +236,7 @@ export default createConfig({
         UdonswapPairSeeded: {
             abi: V2_PAIR_ABI,
             chain: 'bitkub',
-            address: seed('udonswap'),
+            address: getSeedPoolAddresses('udonswap'),
             startBlock: BITKUB_SWAP_START,
         },
         UdonswapPair: {
@@ -334,7 +258,7 @@ export default createConfig({
         PonderPairSeeded: {
             abi: V2_PAIR_ABI,
             chain: 'bitkub',
-            address: seed('ponder'),
+            address: getSeedPoolAddresses('ponder'),
             startBlock: BITKUB_SWAP_START,
         },
         PonderPair: {
@@ -356,7 +280,7 @@ export default createConfig({
         DiamonPairSeeded: {
             abi: V2_PAIR_ABI,
             chain: 'bitkub',
-            address: seed('diamon'),
+            address: getSeedPoolAddresses('diamon'),
             startBlock: BITKUB_SWAP_START,
         },
         DiamonPair: {
@@ -378,7 +302,7 @@ export default createConfig({
         KublerxV3PoolSeeded: {
             abi: getAbi('v3Pool'),
             chain: 'bitkub',
-            address: seed('kublerx'),
+            address: getSeedPoolAddresses('kublerx'),
             startBlock: BITKUB_SWAP_START,
         },
         KublerxV3Pool: {

@@ -1,8 +1,65 @@
-import { getChains } from '../config.js'
-import { getLaunchpads } from './registry.js'
+import type { Launchpad } from '../registry.js'
 import { junoswapV1Adapter, junoswapV1_1Adapter } from './juno-v1.js'
 import { durianfunAdapter } from './durianfun.js'
-import type { ContractRole, LaunchpadAdapter } from './types.js'
+
+export interface HandlerArgs {
+    event: any
+    context: any
+}
+
+interface NormalizedCreation {
+    tokenAddr: string
+    creator: string
+    logo: string
+    description: string
+    link1: string
+    link2: string
+    link3: string
+    createdTime: number
+    graduationTarget?: number
+    market?: string
+    name?: string
+    symbol?: string
+}
+
+export interface NormalizedSwap {
+    tokenAddr: string
+    sender: string
+    isBuy: boolean
+    amountIn: bigint
+    amountOut: bigint
+    reserveIn: bigint
+    reserveOut: bigint
+    creatorFeeNative?: bigint
+    virtualReserve?: bigint
+}
+
+interface NormalizedGraduation {
+    tokenAddr: string
+    ammPool?: string
+}
+
+type ContractRole = 'curve' | 'market'
+
+interface SwapBinding {
+    contract: ContractRole
+    event: string
+    isBuy?: boolean
+}
+
+interface LaunchpadBindings {
+    creation: { contract: ContractRole; event: string }
+    swaps: readonly SwapBinding[]
+    graduation: { contract: ContractRole; event: string }
+}
+
+export interface LaunchpadAdapter {
+    launchpadId: string
+    bindings: LaunchpadBindings
+    creation(args: HandlerArgs): Promise<NormalizedCreation>
+    swap(args: HandlerArgs, isBuy?: boolean): Promise<NormalizedSwap>
+    graduation(args: HandlerArgs): Promise<NormalizedGraduation>
+}
 
 const ADAPTERS: Record<string, LaunchpadAdapter> = {
     [junoswapV1Adapter.launchpadId]: junoswapV1Adapter,
@@ -16,53 +73,9 @@ export function getAdapter(launchpadId: string): LaunchpadAdapter {
     return adapter
 }
 
-export const CONTRACT_NAMES = {
-    'junoswap:kubTestnet': {
-        curve: 'CurveJunoswapKubTestnet',
-        token: 'LaunchTokenJunoswapKubTestnet',
-    },
-    'junoswap:bitkub': {
-        curve: 'CurveJunoswapBitkub',
-        token: 'LaunchTokenJunoswapBitkub',
-    },
-    'junoswap-v1_1:kubTestnet': {
-        curve: 'CurveJunoswapV11KubTestnet',
-        token: 'LaunchTokenJunoswapV11KubTestnet',
-        feeCollector: 'FeeCollectorJunoswapV11KubTestnet',
-    },
-    'durianfun:bitkub': {
-        curve: 'CurveDurianfunBitkub',
-        market: 'MarketDurianfunBitkub',
-        token: 'LaunchTokenDurianfunBitkub',
-    },
-} as const
-
-type ContractKey = keyof typeof CONTRACT_NAMES
-
-export function contractNames(launchpadId: string, chainSlug: string) {
-    const names = CONTRACT_NAMES[`${launchpadId}:${chainSlug}` as ContractKey]
-    if (!names) {
-        throw new Error(
-            `No ponder contract names for launchpad "${launchpadId}" on chain "${chainSlug}" — ` +
-                `add them to CONTRACT_NAMES and to ponder.config.ts`
-        )
-    }
-    return names
-}
-
-export function contractNameFor(
-    names: ReturnType<typeof contractNames>,
-    role: ContractRole
-): string {
-    const name = role === 'market' && 'market' in names ? names.market : names.curve
-    if (role === 'market' && !('market' in names)) {
-        throw new Error(`No "market" contract registered for ${names.curve}`)
-    }
-    return name
-}
-
-export function enabledLaunchpads() {
-    return Object.entries(getChains()).flatMap(([chainSlug, chainId]) =>
-        getLaunchpads(chainId).map((launchpad) => ({ chainSlug, launchpad }))
-    )
+export function contractNameFor(launchpad: Launchpad, role: ContractRole): string {
+    if (role === 'curve') return launchpad.contracts.curve
+    const market = launchpad.contracts.market
+    if (!market) throw new Error(`No "market" contract registered for ${launchpad.contracts.curve}`)
+    return market
 }

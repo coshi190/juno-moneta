@@ -1,8 +1,7 @@
 import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
 import { readTrackingTag } from '@coshi190/juno-moneta-sdk'
-import { getChains } from './config.js'
-import { getSeedV3Pool } from './seed.js'
+import { getChains, getSeedV3Pool } from './registry.js'
 import { upsertToken, recordV3SwapEvent, refreshV3TokenPrice } from './v3-pools.js'
 
 type DynamicEvent = Parameters<typeof ponder.on>[0]

@@ -1,4 +1,4 @@
-import type { LaunchpadAdapter } from './types.js'
+import type { LaunchpadAdapter } from './index.js'
 
 export const junoswapV1Adapter: LaunchpadAdapter = {
     launchpadId: 'junoswap',

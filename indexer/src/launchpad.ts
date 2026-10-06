@@ -10,16 +10,15 @@ import { foldTokenCandle } from './candles.js'
 import { countsTowardStats } from './parse-swaps.js'
 import {
     contractNameFor,
-    contractNames,
-    enabledLaunchpads,
     getAdapter,
+    type HandlerArgs,
+    type LaunchpadAdapter,
 } from './launchpads/index.js'
-import type { HandlerArgs, LaunchpadAdapter } from './launchpads/types.js'
-import type { Launchpad } from './launchpads/registry.js'
+import { getLaunchpads, type Launchpad } from './registry.js'
 
 const INFRA_ADDRESSES: Record<number, ReadonlySet<string>> = (() => {
     const byChain: Record<number, Set<string>> = {}
-    for (const { launchpad } of enabledLaunchpads()) {
+    for (const launchpad of getLaunchpads()) {
         const addresses = Array.isArray(launchpad.address) ? launchpad.address : [launchpad.address]
         const set = (byChain[launchpad.chainId] ??= new Set())
         for (const address of [...addresses, launchpad.feeCollector, launchpad.lpLocker]) {
@@ -355,22 +354,23 @@ async function applyHolderDelta(
 
 type DynamicEvent = Parameters<typeof ponder.on>[0]
 
-for (const { chainSlug, launchpad } of enabledLaunchpads()) {
+for (const launchpad of getLaunchpads()) {
     const adapter = getAdapter(launchpad.launchpadId)
-    const names = contractNames(launchpad.launchpadId, chainSlug)
     const { creation, swaps, graduation } = adapter.bindings
     const bind = (contract: string, event: string) => `${contract}:${event}` as DynamicEvent
 
-    ponder.on(bind(contractNameFor(names, creation.contract), creation.event), (args) =>
+    ponder.on(bind(contractNameFor(launchpad, creation.contract), creation.event), (args) =>
         handleCreation(args, launchpad, adapter)
     )
     for (const swap of swaps) {
-        ponder.on(bind(contractNameFor(names, swap.contract), swap.event), (args) =>
+        ponder.on(bind(contractNameFor(launchpad, swap.contract), swap.event), (args) =>
             handleSwap(args, launchpad, adapter, swap.isBuy)
         )
     }
-    ponder.on(bind(contractNameFor(names, graduation.contract), graduation.event), (args) =>
+    ponder.on(bind(contractNameFor(launchpad, graduation.contract), graduation.event), (args) =>
         handleGraduation(args, adapter)
     )
-    ponder.on(bind(names.token, 'Transfer'), (args) => handleTransfer(args, launchpad.chainId))
+    ponder.on(bind(launchpad.contracts.token, 'Transfer'), (args) =>
+        handleTransfer(args, launchpad.chainId)
+    )
 }
