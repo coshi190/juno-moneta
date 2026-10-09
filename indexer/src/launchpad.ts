@@ -2,9 +2,8 @@ import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
 import { formatEther, parseEther, zeroAddress } from 'viem'
 import { readTrackingTag } from '@coshi190/juno-moneta-sdk'
-import { readERC20Metadata } from './erc20-read.js'
+import { readERC20Metadata } from './v3-pools.js'
 import { sanitizeUsdPrice, MAX_TOKEN_USD_PRICE } from './price-history.js'
-import { computePriceFromReserves, computeMarketCapFromReserves } from './curve-math.js'
 import { applyPnlTransfer, recordUserSwap } from './user-pnl.js'
 import { foldTokenCandle } from './candles.js'
 import { countsTowardStats } from './parse-swaps.js'
@@ -14,7 +13,9 @@ import {
     type HandlerArgs,
     type LaunchpadAdapter,
 } from './launchpads/index.js'
-import { getLaunchpads, type Launchpad } from './registry.js'
+import { getLaunchpads, type CurveParams, type Launchpad } from './registry.js'
+
+const WAD = 10n ** 18n
 
 const INFRA_ADDRESSES: Record<number, ReadonlySet<string>> = (() => {
     const byChain: Record<number, Set<string>> = {}
@@ -51,6 +52,35 @@ function defaultSnapshot(tokenAddr: string, chainId: number, launchpadId: string
         priceChange1dPct: null as string | null,
         updatedAt: 0,
     }
+}
+
+function effectiveNative(
+    nativeReserve: bigint,
+    tokenReserve: bigint,
+    curve: CurveParams
+): bigint | null {
+    if (nativeReserve < 0n || tokenReserve <= 0n) return null
+    return nativeReserve + curve.virtualReserve
+}
+
+function computePriceFromReserves(
+    nativeReserve: bigint,
+    tokenReserve: bigint,
+    curve: CurveParams
+): number {
+    const native = effectiveNative(nativeReserve, tokenReserve, curve)
+    if (native === null) return 0
+    return Number((native * WAD) / tokenReserve) / 1e18
+}
+
+function computeMarketCapFromReserves(
+    nativeReserve: bigint,
+    tokenReserve: bigint,
+    curve: CurveParams
+): bigint {
+    const native = effectiveNative(nativeReserve, tokenReserve, curve)
+    if (native === null) return 0n
+    return (native * curve.totalSupply) / tokenReserve
 }
 
 async function handleCreation(args: HandlerArgs, launchpad: Launchpad, adapter: LaunchpadAdapter) {

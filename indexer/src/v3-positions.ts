@@ -1,6 +1,6 @@
 import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
-import { readPosition } from './erc20-read.js'
+import { getAbi, getDexes } from '@coshi190/juno-moneta-sdk'
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 
@@ -11,6 +11,39 @@ function addLiquidity(current: string, delta: bigint): string {
 function subLiquidity(current: string, delta: bigint): string {
     const next = BigInt(current) - delta
     return (next < 0n ? 0n : next).toString()
+}
+
+async function readPosition(
+    client: any,
+    chainId: number,
+    tokenId: bigint
+): Promise<{
+    token0: string
+    token1: string
+    fee: number
+    tickLower: number
+    tickUpper: number
+} | null> {
+    const manager = getDexes(chainId, 'v3').find((dex) => dex.dexId === 'junoswap')?.positionManager
+    if (!manager) return null
+    try {
+        const pos = (await client.readContract({
+            abi: getAbi('positionManager'),
+            functionName: 'positions',
+            address: manager,
+            args: [tokenId],
+            cache: 'immutable',
+        })) as readonly [bigint, string, string, string, number, number, number, ...unknown[]]
+        return {
+            token0: pos[2],
+            token1: pos[3],
+            fee: Number(pos[4]),
+            tickLower: Number(pos[5]),
+            tickUpper: Number(pos[6]),
+        }
+    } catch {
+        return null
+    }
 }
 
 async function ensurePosition(

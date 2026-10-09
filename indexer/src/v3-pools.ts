@@ -1,9 +1,8 @@
 import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
 import { formatEther } from 'viem'
-import { readERC20Metadata } from './erc20-read.js'
 import { foldTokenCandle } from './candles.js'
-import { readTrackingTag } from '@coshi190/juno-moneta-sdk'
+import { getAbi, readTrackingTag } from '@coshi190/juno-moneta-sdk'
 import { getChains, getStablecoins, getWrappedNativeAddress } from './registry.js'
 import { abs, countsTowardStats, parseV3Swap } from './parse-swaps.js'
 import {
@@ -20,6 +19,30 @@ type Side = { tokenAddr: string; tokenIsToken0: boolean } | null
 
 const GRADUATED_FEE_TIER = 10000
 const SECONDS_PER_DAY = 86400
+
+export async function readERC20Metadata(
+    client: any,
+    address: string
+): Promise<{ name: string; symbol: string; decimals: number }> {
+    const read = (functionName: string, retryEmptyResponse: boolean) =>
+        client.readContract({
+            abi: getAbi('erc20'),
+            functionName,
+            address: address as `0x${string}`,
+            cache: 'immutable',
+            retryEmptyResponse,
+        })
+    const [name, symbol, decimals] = await Promise.allSettled([
+        read('name', false),
+        read('symbol', false),
+        read('decimals', true),
+    ])
+    return {
+        name: name.status === 'fulfilled' ? (name.value as string) : '',
+        symbol: symbol.status === 'fulfilled' ? (symbol.value as string) : '',
+        decimals: decimals.status === 'fulfilled' ? Number(decimals.value) : 18,
+    }
+}
 
 export async function upsertToken(
     context: any,
